@@ -8,6 +8,8 @@ from ..base_client.async_app import AsyncOAuth2Mixin
 from ..base_client.async_openid import AsyncOpenIDMixin
 from ..httpx_client import AsyncOAuth1Client
 from ..httpx_client import AsyncOAuth2Client
+from ...jose import JsonWebToken, JsonWebKey
+from ...oauth2.rfc9068.claims import JWTAccessTokenClaims
 
 
 class StarletteAppMixin:
@@ -97,3 +99,35 @@ class StarletteOAuth2App(
             )
             token["userinfo"] = userinfo
         return token
+
+    async def decode_access_token(self, token, alg_values=None, **kwargs):
+        claims_options = kwargs.pop("claims_options", None)
+        if claims_options is None:
+            metadata = await self.load_server_metadata()
+            # RFC9068 Section 2.2 and 4
+            claims_options = {
+                "iss": {"essential": True, "value": metadata["issuer"]},
+                "exp": {"essential": True},
+                "aud": {"essential": True, "value": self.client_id},
+                # As far as I know, there's no way to verify what the value of sub should be without being
+                # responsible for requesting the access token to begin with
+                "sub": {"essential": True},
+                "client_id": {"essential": True},
+                "iat": {"essential": True},
+                "jti": {"essential": True},
+            }
+
+        # RFC9068: authorization servers and resource servers must support RS256
+        if alg_values is None:
+            alg_values = ["RS256"]
+        jwt = JsonWebToken(alg_values)
+        jwk_set = await self.fetch_jwk_set()
+
+        claims_cls = kwargs.pop("claims_cls", JWTAccessTokenClaims)
+        return jwt.decode(
+            token,
+            key=JsonWebKey.import_key_set(jwk_set),
+            claims_cls=claims_cls,
+            claims_options=claims_options,
+            **kwargs
+        )
