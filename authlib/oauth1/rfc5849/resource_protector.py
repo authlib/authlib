@@ -1,10 +1,8 @@
 from .base_server import BaseServer
+from .errors import InvalidClientError
+from .errors import InvalidTokenError
+from .errors import MissingRequiredParameterError
 from .wrapper import OAuth1Request
-from .errors import (
-    MissingRequiredParameterError,
-    InvalidClientError,
-    InvalidTokenError,
-)
 
 
 class ResourceProtector(BaseServer):
@@ -12,7 +10,7 @@ class ResourceProtector(BaseServer):
         request = OAuth1Request(method, uri, body, headers)
 
         if not request.client_id:
-            raise MissingRequiredParameterError('oauth_consumer_key')
+            raise MissingRequiredParameterError("oauth_consumer_key")
 
         client = self.get_client_by_id(request.client_id)
         if not client:
@@ -20,7 +18,7 @@ class ResourceProtector(BaseServer):
         request.client = client
 
         if not request.token:
-            raise MissingRequiredParameterError('oauth_token')
+            raise MissingRequiredParameterError("oauth_token")
 
         token = self.get_token_credential(request)
         if not token:

@@ -1,24 +1,19 @@
 import time
-from .signature import (
-    SIGNATURE_HMAC_SHA1,
-    SIGNATURE_PLAINTEXT,
-    SIGNATURE_RSA_SHA1,
-)
-from .signature import (
-    verify_hmac_sha1,
-    verify_plaintext,
-    verify_rsa_sha1,
-)
-from .errors import (
-    InvalidRequestError,
-    MissingRequiredParameterError,
-    UnsupportedSignatureMethodError,
-    InvalidNonceError,
-    InvalidSignatureError,
-)
+
+from .errors import InvalidNonceError
+from .errors import InvalidRequestError
+from .errors import InvalidSignatureError
+from .errors import MissingRequiredParameterError
+from .errors import UnsupportedSignatureMethodError
+from .signature import SIGNATURE_HMAC_SHA1
+from .signature import SIGNATURE_PLAINTEXT
+from .signature import SIGNATURE_RSA_SHA1
+from .signature import verify_hmac_sha1
+from .signature import verify_plaintext
+from .signature import verify_rsa_sha1
 
 
-class BaseServer(object):
+class BaseServer:
     SIGNATURE_METHODS = {
         SIGNATURE_HMAC_SHA1: verify_hmac_sha1,
         SIGNATURE_RSA_SHA1: verify_rsa_sha1,
@@ -40,7 +35,8 @@ class BaseServer(object):
                 # verify this request, return True or False
                 return True
 
-            Server.register_signature_method('custom-name', verify_custom_method)
+
+            Server.register_signature_method("custom-name", verify_custom_method)
         """
         cls.SIGNATURE_METHODS[name] = verify
 
@@ -49,8 +45,8 @@ class BaseServer(object):
 
         :param request: OAuth1Request instance
         """
-        timestamp = request.oauth_params.get('oauth_timestamp')
-        nonce = request.oauth_params.get('oauth_nonce')
+        timestamp = request.oauth_params.get("oauth_timestamp")
+        nonce = request.oauth_params.get("oauth_nonce")
 
         if request.signature_method == SIGNATURE_PLAINTEXT:
             # The parameters MAY be omitted when using the "PLAINTEXT"
@@ -59,7 +55,7 @@ class BaseServer(object):
                 return
 
         if not timestamp:
-            raise MissingRequiredParameterError('oauth_timestamp')
+            raise MissingRequiredParameterError("oauth_timestamp")
 
         try:
             # The timestamp value MUST be a positive integer
@@ -69,11 +65,11 @@ class BaseServer(object):
 
             if self.EXPIRY_TIME and time.time() - timestamp > self.EXPIRY_TIME:
                 raise InvalidRequestError('Invalid "oauth_timestamp" value')
-        except (ValueError, TypeError):
-            raise InvalidRequestError('Invalid "oauth_timestamp" value')
+        except (ValueError, TypeError) as exc:
+            raise InvalidRequestError('Invalid "oauth_timestamp" value') from exc
 
         if not nonce:
-            raise MissingRequiredParameterError('oauth_nonce')
+            raise MissingRequiredParameterError("oauth_nonce")
 
         if self.exists_nonce(nonce, request):
             raise InvalidNonceError()
@@ -85,13 +81,13 @@ class BaseServer(object):
         """
         method = request.signature_method
         if not method:
-            raise MissingRequiredParameterError('oauth_signature_method')
+            raise MissingRequiredParameterError("oauth_signature_method")
 
         if method not in self.SUPPORTED_SIGNATURE_METHODS:
             raise UnsupportedSignatureMethodError()
 
         if not request.signature:
-            raise MissingRequiredParameterError('oauth_signature')
+            raise MissingRequiredParameterError("oauth_signature")
 
         verify = self.SIGNATURE_METHODS.get(method)
         if not verify:

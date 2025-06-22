@@ -1,5 +1,4 @@
-
-class ClientMixin(object):
+class ClientMixin:
     def get_default_redirect_uri(self):
         """A method to get client default redirect_uri. For instance, the
         database table for client has a column called ``default_redirect_uri``::
@@ -30,7 +29,7 @@ class ClientMixin(object):
         raise NotImplementedError()
 
 
-class TokenCredentialMixin(object):
+class TokenCredentialMixin:
     def get_oauth_token(self):
         """A method to get the value of ``oauth_token``. For instance, the
         database table has a column called ``oauth_token``::
@@ -91,19 +90,19 @@ class TemporaryCredentialMixin(TokenCredentialMixin):
 
 class TemporaryCredential(dict, TemporaryCredentialMixin):
     def get_client_id(self):
-        return self.get('client_id')
+        return self.get("client_id")
 
     def get_user_id(self):
-        return self.get('user_id')
+        return self.get("user_id")
 
     def get_redirect_uri(self):
-        return self.get('oauth_callback')
+        return self.get("oauth_callback")
 
     def check_verifier(self, verifier):
-        return self.get('oauth_verifier') == verifier
+        return self.get("oauth_verifier") == verifier
 
     def get_oauth_token(self):
-        return self.get('oauth_token')
+        return self.get("oauth_token")
 
     def get_oauth_token_secret(self):
-        return self.get('oauth_token_secret')
+        return self.get("oauth_token_secret")

@@ -151,7 +151,7 @@ Scope is a very important concept in OAuth 2.0. An access token is usually issue
 with limited scopes.
 
 For instance, your "source code analyzer" application MAY only have access to the
-public repositories of a GiHub user.
+public repositories of a GitHub user.
 
 Endpoints
 ---------

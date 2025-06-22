@@ -1,18 +1,18 @@
-import time
 import logging
+import time
+
+from authlib.common.security import generate_token
 from authlib.common.urls import urlparse
 from authlib.consts import default_user_agent
-from authlib.common.security import generate_token
-from .errors import (
-    MismatchingStateError,
-    MissingRequestTokenError,
-    MissingTokenError,
-)
+
+from .errors import MismatchingStateError
+from .errors import MissingRequestTokenError
+from .errors import MissingTokenError
 
 log = logging.getLogger(__name__)
 
 
-class BaseApp(object):
+class BaseApp:
     client_cls = None
     OAUTH_APP_CONFIG = None
 
@@ -24,45 +24,45 @@ class BaseApp(object):
 
         If ``api_base_url`` configured, shortcut is available::
 
-            client.get('users/lepture')
+            client.get("users/lepture")
         """
-        return self.request('GET', url, **kwargs)
+        return self.request("GET", url, **kwargs)
 
     def post(self, url, **kwargs):
         """Invoke POST http request.
 
         If ``api_base_url`` configured, shortcut is available::
 
-            client.post('timeline', json={'text': 'Hi'})
+            client.post("timeline", json={"text": "Hi"})
         """
-        return self.request('POST', url, **kwargs)
+        return self.request("POST", url, **kwargs)
 
     def patch(self, url, **kwargs):
         """Invoke PATCH http request.
 
         If ``api_base_url`` configured, shortcut is available::
 
-            client.patch('profile', json={'name': 'Hsiaoming Yang'})
+            client.patch("profile", json={"name": "Hsiaoming Yang"})
         """
-        return self.request('PATCH', url, **kwargs)
+        return self.request("PATCH", url, **kwargs)
 
     def put(self, url, **kwargs):
         """Invoke PUT http request.
 
         If ``api_base_url`` configured, shortcut is available::
 
-            client.put('profile', json={'name': 'Hsiaoming Yang'})
+            client.put("profile", json={"name": "Hsiaoming Yang"})
         """
-        return self.request('PUT', url, **kwargs)
+        return self.request("PUT", url, **kwargs)
 
     def delete(self, url, **kwargs):
         """Invoke DELETE http request.
 
         If ``api_base_url`` configured, shortcut is available::
 
-            client.delete('posts/123')
+            client.delete("posts/123")
         """
-        return self.request('DELETE', url, **kwargs)
+        return self.request("DELETE", url, **kwargs)
 
 
 class _RequestMixin:
@@ -71,9 +71,9 @@ class _RequestMixin:
             return self._fetch_token(request)
 
     def _send_token_request(self, session, method, url, token, kwargs):
-        request = kwargs.pop('request', None)
-        withhold_token = kwargs.get('withhold_token')
-        if self.api_base_url and not url.startswith(('https://', 'http://')):
+        request = kwargs.pop("request", None)
+        withhold_token = kwargs.get("withhold_token")
+        if self.api_base_url and not url.startswith(("https://", "http://")):
             url = urlparse.urljoin(self.api_base_url, url)
 
         if withhold_token:
@@ -89,16 +89,27 @@ class _RequestMixin:
         return session.request(method, url, **kwargs)
 
 
-class OAuth1Base(object):
+class OAuth1Base:
     client_cls = None
 
     def __init__(
-            self, framework, name=None, fetch_token=None,
-            client_id=None, client_secret=None,
-            request_token_url=None, request_token_params=None,
-            access_token_url=None, access_token_params=None,
-            authorize_url=None, authorize_params=None,
-            api_base_url=None, client_kwargs=None, user_agent=None, **kwargs):
+        self,
+        framework,
+        name=None,
+        fetch_token=None,
+        client_id=None,
+        client_secret=None,
+        request_token_url=None,
+        request_token_params=None,
+        access_token_url=None,
+        access_token_params=None,
+        authorize_url=None,
+        authorize_params=None,
+        api_base_url=None,
+        client_kwargs=None,
+        user_agent=None,
+        **kwargs,
+    ):
         self.framework = framework
         self.name = name
         self.client_id = client_id
@@ -117,8 +128,10 @@ class OAuth1Base(object):
         self._kwargs = kwargs
 
     def _get_oauth_client(self):
-        session = self.client_cls(self.client_id, self.client_secret, **self.client_kwargs)
-        session.headers['User-Agent'] = self._user_agent
+        session = self.client_cls(
+            self.client_id, self.client_secret, **self.client_kwargs
+        )
+        session.headers["User-Agent"] = self._user_agent
         return session
 
 
@@ -144,10 +157,10 @@ class OAuth1Mixin(_RequestMixin, OAuth1Base):
             client.redirect_uri = redirect_uri
             params = self.request_token_params or {}
             request_token = client.fetch_request_token(self.request_token_url, **params)
-            log.debug('Fetch request token: {!r}'.format(request_token))
+            log.debug(f"Fetch request token: {request_token!r}")
             url = client.create_authorization_url(self.authorize_url, **kwargs)
-            state = request_token['oauth_token']
-        return {'url': url, 'request_token': request_token, 'state': state}
+            state = request_token["oauth_token"]
+        return {"url": url, "request_token": request_token, "state": state}
 
     def fetch_access_token(self, request_token=None, **kwargs):
         """Fetch access token in one step.
@@ -169,16 +182,29 @@ class OAuth1Mixin(_RequestMixin, OAuth1Base):
         return token
 
 
-class OAuth2Base(object):
+class OAuth2Base:
     client_cls = None
 
     def __init__(
-            self, framework, name=None, fetch_token=None, update_token=None,
-            client_id=None, client_secret=None,
-            access_token_url=None, access_token_params=None,
-            authorize_url=None, authorize_params=None,
-            api_base_url=None, client_kwargs=None, server_metadata_url=None,
-            compliance_fix=None, client_auth_methods=None, user_agent=None, **kwargs):
+        self,
+        framework,
+        name=None,
+        fetch_token=None,
+        update_token=None,
+        client_id=None,
+        client_secret=None,
+        access_token_url=None,
+        access_token_params=None,
+        authorize_url=None,
+        authorize_params=None,
+        api_base_url=None,
+        client_kwargs=None,
+        server_metadata_url=None,
+        compliance_fix=None,
+        client_auth_methods=None,
+        user_agent=None,
+        **kwargs,
+    ):
         self.framework = framework
         self.name = name
         self.client_id = client_id
@@ -208,15 +234,15 @@ class OAuth2Base(object):
         client_kwargs.update(metadata)
 
         if self.authorize_url:
-            client_kwargs['authorization_endpoint'] = self.authorize_url
+            client_kwargs["authorization_endpoint"] = self.authorize_url
         if self.access_token_url:
-            client_kwargs['token_endpoint'] = self.access_token_url
+            client_kwargs["token_endpoint"] = self.access_token_url
 
         session = self.client_cls(
             client_id=self.client_id,
             client_secret=self.client_secret,
             update_token=self._on_update_token,
-            **client_kwargs
+            **client_kwargs,
         )
         if self.client_auth_methods:
             for f in self.client_auth_methods:
@@ -225,7 +251,7 @@ class OAuth2Base(object):
         if self.compliance_fix:
             self.compliance_fix(session)
 
-        session.headers['User-Agent'] = self._user_agent
+        session.headers["User-Agent"] = self._user_agent
         return session
 
     @staticmethod
@@ -233,39 +259,43 @@ class OAuth2Base(object):
         if state_data is None:
             raise MismatchingStateError()
 
-        code_verifier = state_data.get('code_verifier')
+        code_verifier = state_data.get("code_verifier")
         if code_verifier:
-            params['code_verifier'] = code_verifier
+            params["code_verifier"] = code_verifier
 
-        redirect_uri = state_data.get('redirect_uri')
+        redirect_uri = state_data.get("redirect_uri")
         if redirect_uri:
-            params['redirect_uri'] = redirect_uri
+            params["redirect_uri"] = redirect_uri
         return params
 
     @staticmethod
     def _create_oauth2_authorization_url(client, authorization_endpoint, **kwargs):
         rv = {}
         if client.code_challenge_method:
-            code_verifier = kwargs.get('code_verifier')
+            code_verifier = kwargs.get("code_verifier")
             if not code_verifier:
                 code_verifier = generate_token(48)
-                kwargs['code_verifier'] = code_verifier
-            rv['code_verifier'] = code_verifier
-            log.debug('Using code_verifier: {!r}'.format(code_verifier))
+                kwargs["code_verifier"] = code_verifier
+            rv["code_verifier"] = code_verifier
+            log.debug(f"Using code_verifier: {code_verifier!r}")
 
-        scope = kwargs.get('scope', client.scope)
-        if scope and 'openid' in scope.split():
+        scope = kwargs.get("scope", client.scope)
+        scope = (
+            (scope if isinstance(scope, (list, tuple)) else scope.split())
+            if scope
+            else None
+        )
+        if scope and "openid" in scope:
             # this is an OpenID Connect service
-            nonce = kwargs.get('nonce')
+            nonce = kwargs.get("nonce")
             if not nonce:
                 nonce = generate_token(20)
-                kwargs['nonce'] = nonce
-            rv['nonce'] = nonce
+                kwargs["nonce"] = nonce
+            rv["nonce"] = nonce
 
-        url, state = client.create_authorization_url(
-            authorization_endpoint, **kwargs)
-        rv['url'] = url
-        rv['state'] = state
+        url, state = client.create_authorization_url(authorization_endpoint, **kwargs)
+        rv["url"] = url
+        rv["state"] = state
         return rv
 
 
@@ -289,13 +319,15 @@ class OAuth2Mixin(_RequestMixin, OAuth2Base):
             return self._send_token_request(session, method, url, token, kwargs)
 
     def load_server_metadata(self):
-        if self._server_metadata_url and '_loaded_at' not in self.server_metadata:
+        if self._server_metadata_url and "_loaded_at" not in self.server_metadata:
             with self.client_cls(**self.client_kwargs) as session:
-                resp = session.request('GET', self._server_metadata_url, withhold_token=True)
+                resp = session.request(
+                    "GET", self._server_metadata_url, withhold_token=True
+                )
                 resp.raise_for_status()
                 metadata = resp.json()
 
-            metadata['_loaded_at'] = time.time()
+            metadata["_loaded_at"] = time.time()
             self.server_metadata.update(metadata)
         return self.server_metadata
 
@@ -307,7 +339,9 @@ class OAuth2Mixin(_RequestMixin, OAuth2Base):
         :return: dict
         """
         metadata = self.load_server_metadata()
-        authorization_endpoint = self.authorize_url or metadata.get('authorization_endpoint')
+        authorization_endpoint = self.authorize_url or metadata.get(
+            "authorization_endpoint"
+        )
 
         if not authorization_endpoint:
             raise RuntimeError('Missing "authorize_url" value')
@@ -315,12 +349,12 @@ class OAuth2Mixin(_RequestMixin, OAuth2Base):
         if self.authorize_params:
             kwargs.update(self.authorize_params)
 
-
         with self._get_oauth_client(**metadata) as client:
             if redirect_uri is not None:
                 client.redirect_uri = redirect_uri
             return self._create_oauth2_authorization_url(
-                client, authorization_endpoint, **kwargs)
+                client, authorization_endpoint, **kwargs
+            )
 
     def fetch_access_token(self, redirect_uri=None, **kwargs):
         """Fetch access token in the final step.
@@ -331,7 +365,7 @@ class OAuth2Mixin(_RequestMixin, OAuth2Base):
         :return: A token dict.
         """
         metadata = self.load_server_metadata()
-        token_endpoint = self.access_token_url or metadata.get('token_endpoint')
+        token_endpoint = self.access_token_url or metadata.get("token_endpoint")
         with self._get_oauth_client(**metadata) as client:
             if redirect_uri is not None:
                 client.redirect_uri = redirect_uri

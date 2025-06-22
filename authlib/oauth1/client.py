@@ -1,40 +1,48 @@
-# -*- coding: utf-8 -*-
-from authlib.common.urls import (
-    url_decode,
-    add_params_to_uri,
-    urlparse,
-)
 from authlib.common.encoding import json_loads
-from .rfc5849 import (
-    SIGNATURE_HMAC_SHA1,
-    SIGNATURE_TYPE_HEADER,
-    ClientAuth,
-)
+from authlib.common.urls import add_params_to_uri
+from authlib.common.urls import url_decode
+from authlib.common.urls import urlparse
+
+from .rfc5849 import SIGNATURE_HMAC_SHA1
+from .rfc5849 import SIGNATURE_TYPE_HEADER
+from .rfc5849 import ClientAuth
 
 
-class OAuth1Client(object):
+class OAuth1Client:
     auth_class = ClientAuth
 
-    def __init__(self, session, client_id, client_secret=None,
-                 token=None, token_secret=None,
-                 redirect_uri=None, rsa_key=None, verifier=None,
-                 signature_method=SIGNATURE_HMAC_SHA1,
-                 signature_type=SIGNATURE_TYPE_HEADER,
-                 force_include_body=False, realm=None, **kwargs):
+    def __init__(
+        self,
+        session,
+        client_id,
+        client_secret=None,
+        token=None,
+        token_secret=None,
+        redirect_uri=None,
+        rsa_key=None,
+        verifier=None,
+        signature_method=SIGNATURE_HMAC_SHA1,
+        signature_type=SIGNATURE_TYPE_HEADER,
+        force_include_body=False,
+        realm=None,
+        **kwargs,
+    ):
         if not client_id:
             raise ValueError('Missing "client_id"')
 
         self.session = session
         self.auth = self.auth_class(
-            client_id, client_secret=client_secret,
-            token=token, token_secret=token_secret,
+            client_id,
+            client_secret=client_secret,
+            token=token,
+            token_secret=token_secret,
             redirect_uri=redirect_uri,
             signature_method=signature_method,
             signature_type=signature_type,
             rsa_key=rsa_key,
             verifier=verifier,
             realm=realm,
-            force_include_body=force_include_body
+            force_include_body=force_include_body,
         )
         self._kwargs = kwargs
 
@@ -51,7 +59,7 @@ class OAuth1Client(object):
         return dict(
             oauth_token=self.auth.token,
             oauth_token_secret=self.auth.token_secret,
-            oauth_verifier=self.auth.verifier
+            oauth_verifier=self.auth.verifier,
         )
 
     @token.setter
@@ -64,15 +72,15 @@ class OAuth1Client(object):
             self.auth.token = None
             self.auth.token_secret = None
             self.auth.verifier = None
-        elif 'oauth_token' in token:
-            self.auth.token = token['oauth_token']
-            if 'oauth_token_secret' in token:
-                self.auth.token_secret = token['oauth_token_secret']
-            if 'oauth_verifier' in token:
-                self.auth.verifier = token['oauth_verifier']
+        elif "oauth_token" in token:
+            self.auth.token = token["oauth_token"]
+            if "oauth_token_secret" in token:
+                self.auth.token_secret = token["oauth_token_secret"]
+            if "oauth_verifier" in token:
+                self.auth.verifier = token["oauth_verifier"]
         else:
-            message = 'oauth_token is missing: {!r}'.format(token)
-            self.handle_error('missing_token', message)
+            message = f"oauth_token is missing: {token!r}"
+            self.handle_error("missing_token", message)
 
     def create_authorization_url(self, url, request_token=None, **kwargs):
         """Create an authorization URL by appending request_token and optional
@@ -88,9 +96,9 @@ class OAuth1Client(object):
         :param kwargs: Optional parameters to append to the URL.
         :returns: The authorization URL with new parameters embedded.
         """
-        kwargs['oauth_token'] = request_token or self.auth.token
+        kwargs["oauth_token"] = request_token or self.auth.token
         if self.auth.redirect_uri:
-            kwargs['oauth_callback'] = self.auth.redirect_uri
+            kwargs["oauth_callback"] = self.auth.redirect_uri
         return add_params_to_uri(url, kwargs.items())
 
     def fetch_request_token(self, url, **kwargs):
@@ -122,7 +130,7 @@ class OAuth1Client(object):
         if verifier:
             self.auth.verifier = verifier
         if not self.auth.verifier:
-            self.handle_error('missing_verifier', 'Missing "verifier" value')
+            self.handle_error("missing_verifier", 'Missing "verifier" value')
         return self._fetch_token(url, **kwargs)
 
     def parse_authorization_response(self, url):
@@ -147,14 +155,13 @@ class OAuth1Client(object):
     def parse_response_token(self, status_code, text):
         if status_code >= 400:
             message = (
-                "Token request failed with code {}, "
-                "response was '{}'."
-            ).format(status_code, text)
-            self.handle_error('fetch_token_denied', message)
+                f"Token request failed with code {status_code}, response was '{text}'."
+            )
+            self.handle_error("fetch_token_denied", message)
 
         try:
             text = text.strip()
-            if text.startswith('{'):
+            if text.startswith("{"):
                 token = json_loads(text)
             else:
                 token = dict(url_decode(text))
@@ -163,11 +170,17 @@ class OAuth1Client(object):
                 "Unable to decode token from token response. "
                 "This is commonly caused by an unsuccessful request where"
                 " a non urlencoded error message is returned. "
-                "The decoding error was {}"
-            ).format(e)
-            raise ValueError(error)
+                f"The decoding error was {e}"
+            )
+            raise ValueError(error) from e
         return token
 
     @staticmethod
     def handle_error(error_type, error_description):
-        raise ValueError('{}: {}'.format(error_type, error_description))
+        raise ValueError(f"{error_type}: {error_description}")
+
+    def __del__(self):
+        try:
+            del self.session
+        except AttributeError:
+            pass

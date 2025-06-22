@@ -1,16 +1,16 @@
+from django.conf import settings
 from django.http import HttpResponse
 from django.utils.module_loading import import_string
-from django.conf import settings
-from authlib.oauth2 import (
-    OAuth2Request,
-    HttpRequest,
-    AuthorizationServer as _AuthorizationServer,
-)
-from authlib.oauth2.rfc6750 import BearerTokenGenerator
-from authlib.common.security import generate_token as _generate_token
+
 from authlib.common.encoding import json_dumps
-from .signals import client_authenticated, token_revoked
-from ..django_helpers import create_oauth_request
+from authlib.common.security import generate_token as _generate_token
+from authlib.oauth2 import AuthorizationServer as _AuthorizationServer
+from authlib.oauth2.rfc6750 import BearerTokenGenerator
+
+from .requests import DjangoJsonRequest
+from .requests import DjangoOAuth2Request
+from .signals import client_authenticated
+from .signals import token_revoked
 
 
 class AuthorizationServer(_AuthorizationServer):
@@ -24,13 +24,13 @@ class AuthorizationServer(_AuthorizationServer):
     """
 
     def __init__(self, client_model, token_model):
-        self.config = getattr(settings, 'AUTHLIB_OAUTH2_PROVIDER', {})
+        self.config = getattr(settings, "AUTHLIB_OAUTH2_PROVIDER", {})
         self.client_model = client_model
         self.token_model = token_model
-        scopes_supported = self.config.get('scopes_supported')
-        super(AuthorizationServer, self).__init__(scopes_supported=scopes_supported)
+        scopes_supported = self.config.get("scopes_supported")
+        super().__init__(scopes_supported=scopes_supported)
         # add default token generator
-        self.register_token_generator('default', self.create_bearer_token_generator())
+        self.register_token_generator("default", self.create_bearer_token_generator())
 
     def query_client(self, client_id):
         """Default method for ``AuthorizationServer.query_client``. Developers MAY
@@ -50,21 +50,15 @@ class AuthorizationServer(_AuthorizationServer):
             user_id = request.user.pk
         else:
             user_id = client.user_id
-        item = self.token_model(
-            client_id=client.client_id,
-            user_id=user_id,
-            **token
-        )
+        item = self.token_model(client_id=client.client_id, user_id=user_id, **token)
         item.save()
         return item
 
     def create_oauth2_request(self, request):
-        return create_oauth_request(request, OAuth2Request)
+        return DjangoOAuth2Request(request)
 
     def create_json_request(self, request):
-        req = create_oauth_request(request, HttpRequest, True)
-        req.user = request.user
-        return req
+        return DjangoJsonRequest(request)
 
     def handle_response(self, status_code, payload, headers):
         if isinstance(payload, dict):
@@ -75,20 +69,20 @@ class AuthorizationServer(_AuthorizationServer):
         return resp
 
     def send_signal(self, name, *args, **kwargs):
-        if name == 'after_authenticate_client':
-            client_authenticated.send(sender=self.__class__, *args, **kwargs)
-        elif name == 'after_revoke_token':
-            token_revoked.send(sender=self.__class__, *args, **kwargs)
+        if name == "after_authenticate_client":
+            client_authenticated.send(*args, sender=self.__class__, **kwargs)
+        elif name == "after_revoke_token":
+            token_revoked.send(*args, sender=self.__class__, **kwargs)
 
     def create_bearer_token_generator(self):
         """Default method to create BearerToken generator."""
-        conf = self.config.get('access_token_generator', True)
+        conf = self.config.get("access_token_generator", True)
         access_token_generator = create_token_generator(conf, 42)
 
-        conf = self.config.get('refresh_token_generator', False)
+        conf = self.config.get("refresh_token_generator", False)
         refresh_token_generator = create_token_generator(conf, 48)
 
-        conf = self.config.get('token_expires_in')
+        conf = self.config.get("token_expires_in")
         expires_generator = create_token_expires_in_generator(conf)
 
         return BearerTokenGenerator(
@@ -105,8 +99,10 @@ def create_token_generator(token_generator_conf, length=42):
     if isinstance(token_generator_conf, str):
         return import_string(token_generator_conf)
     elif token_generator_conf is True:
+
         def token_generator(*args, **kwargs):
             return _generate_token(length)
+
         return token_generator
 
 

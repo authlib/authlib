@@ -29,7 +29,7 @@ Insiders
 Insiders are people who have access to our private repositories, you can become
 an insider with:
 
-1. purchasing a paid license at https://authlib.org/plans
+1. Purchasing a paid license at https://authlib.org/plans
 2. Become a sponsor with tiers including "Access to our private repos" benefit
 
 PyPI
@@ -49,15 +49,15 @@ we are going to add.
 Funding Goal: $500/month
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-* :badge:`done` setup a private PyPI
-* :badge:`todo` A running demo of loginpass services
-* :badge:`todo` Starlette integration of loginpass
+* :bdg-success:`done` setup a private PyPI
+* :bdg-warning:`todo` A running demo of loginpass services
+* :bdg-warning:`todo` Starlette integration of loginpass
 
 
 Funding Goal: $2000/month
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-* :badge:`todo` A simple running demo of OIDC provider in Flask
+* :bdg-warning:`todo` A simple running demo of OIDC provider in Flask
 
 When the demo is complete, source code of the demo will only be available to our insiders.
 
@@ -66,19 +66,19 @@ Funding Goal: $5000/month
 
 In Authlib v2.0, we will start working on async provider integrations.
 
-* :badge:`todo` Starlette (FastAPI) OAuth 1.0 provider integration
-* :badge:`todo` Starlette (FastAPI) OAuth 2.0 provider integration
-* :badge:`todo` Starlette (FastAPI) OIDC provider integration
+* :bdg-warning:`todo` Starlette (FastAPI) OAuth 1.0 provider integration
+* :bdg-warning:`todo` Starlette (FastAPI) OAuth 2.0 provider integration
+* :bdg-warning:`todo` Starlette (FastAPI) OIDC provider integration
 
 Funding Goal: $9000/month
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In Authlib v3.0, we will add built-in support for SAML.
 
-* :badge:`todo` SAML 2.0 implementation
-* :badge:`todo` RFC7522 (SAML) 2.0 Profile for OAuth 2.0 Client Authentication and Authorization Grants
-* :badge:`todo` CBOR Object Signing and Encryption
-* :badge:`todo` A complex running demo of OIDC provider
+* :bdg-warning:`todo` SAML 2.0 implementation
+* :bdg-warning:`todo` RFC7522 (SAML) 2.0 Profile for OAuth 2.0 Client Authentication and Authorization Grants
+* :bdg-warning:`todo` CBOR Object Signing and Encryption
+* :bdg-warning:`todo` A complex running demo of OIDC provider
 
 Our Sponsors
 ------------

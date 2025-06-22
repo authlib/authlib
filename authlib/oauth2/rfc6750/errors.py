@@ -1,21 +1,19 @@
+"""authlib.rfc6750.errors.
+~~~~~~~~~~~~~~~~~~~~~~
+
+OAuth Extensions Error Registration. When a request fails,
+the resource server responds using the appropriate HTTP
+status code and includes one of the following error codes
+in the response.
+
+https://tools.ietf.org/html/rfc6750#section-6.2
+
+:copyright: (c) 2017 by Hsiaoming Yang.
 """
-    authlib.rfc6750.errors
-    ~~~~~~~~~~~~~~~~~~~~~~
 
-    OAuth Extensions Error Registration. When a request fails,
-    the resource server responds using the appropriate HTTP
-    status code and includes one of the following error codes
-    in the response.
-
-    https://tools.ietf.org/html/rfc6750#section-6.2
-
-    :copyright: (c) 2017 by Hsiaoming Yang.
-"""
 from ..base import OAuth2Error
 
-__all__ = [
-    'InvalidTokenError', 'InsufficientScopeError'
-]
+__all__ = ["InvalidTokenError", "InsufficientScopeError"]
 
 
 class InvalidTokenError(OAuth2Error):
@@ -27,17 +25,24 @@ class InvalidTokenError(OAuth2Error):
 
     https://tools.ietf.org/html/rfc6750#section-3.1
     """
-    error = 'invalid_token'
+
+    error = "invalid_token"
     description = (
-        'The access token provided is expired, revoked, malformed, '
-        'or invalid for other reasons.'
+        "The access token provided is expired, revoked, malformed, "
+        "or invalid for other reasons."
     )
     status_code = 401
 
-    def __init__(self, description=None, uri=None, status_code=None,
-                 state=None, realm=None, **extra_attributes):
-        super(InvalidTokenError, self).__init__(
-            description, uri, status_code, state)
+    def __init__(
+        self,
+        description=None,
+        uri=None,
+        status_code=None,
+        state=None,
+        realm=None,
+        **extra_attributes,
+    ):
+        super().__init__(description, uri, status_code, state)
         self.realm = realm
         self.extra_attributes = extra_attributes
 
@@ -50,19 +55,19 @@ class InvalidTokenError(OAuth2Error):
 
         https://tools.ietf.org/html/rfc6750#section-3
         """
-        headers = super(InvalidTokenError, self).get_headers()
+        headers = super().get_headers()
 
         extras = []
         if self.realm:
             extras.append(f'realm="{self.realm}"')
         if self.extra_attributes:
-            extras.extend([f'{k}="{self.extra_attributes[k]}"' for k in self.extra_attributes])
+            extras.extend(
+                [f'{k}="{self.extra_attributes[k]}"' for k in self.extra_attributes]
+            )
         extras.append(f'error="{self.error}"')
         error_description = self.get_error_description()
         extras.append(f'error_description="{error_description}"')
-        headers.append(
-            ('WWW-Authenticate', 'Bearer ' + ', '.join(extras))
-        )
+        headers.append(("WWW-Authenticate", "Bearer " + ", ".join(extras)))
         return headers
 
 
@@ -75,6 +80,9 @@ class InsufficientScopeError(OAuth2Error):
 
     https://tools.ietf.org/html/rfc6750#section-3.1
     """
-    error = 'insufficient_scope'
-    description = 'The request requires higher privileges than provided by the access token.'
+
+    error = "insufficient_scope"
+    description = (
+        "The request requires higher privileges than provided by the access token."
+    )
     status_code = 403

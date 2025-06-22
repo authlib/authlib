@@ -1,9 +1,8 @@
 from authlib.consts import default_json_headers
-from ..rfc6749 import (
-    TokenEndpoint,
-    InvalidRequestError,
-    UnsupportedTokenTypeError,
-)
+
+from ..rfc6749 import InvalidRequestError
+from ..rfc6749 import TokenEndpoint
+from ..rfc6749 import UnsupportedTokenTypeError
 
 
 class IntrospectionEndpoint(TokenEndpoint):
@@ -12,8 +11,9 @@ class IntrospectionEndpoint(TokenEndpoint):
 
     .. _RFC7662: https://tools.ietf.org/html/rfc7662
     """
+
     #: Endpoint name to be registered
-    ENDPOINT_NAME = 'introspection'
+    ENDPOINT_NAME = "introspection"
 
     def authenticate_token(self, request, client):
         """The protected resource calls the introspection endpoint using an HTTP
@@ -34,17 +34,21 @@ class IntrospectionEndpoint(TokenEndpoint):
             **OPTIONAL**  A hint about the type of the token submitted for
             introspection.
         """
-        params = request.form
-        if 'token' not in params:
-            raise InvalidRequestError()
-
-        hint = params.get('token_type_hint')
-        if hint and hint not in self.SUPPORTED_TOKEN_TYPES:
-            raise UnsupportedTokenTypeError()
-
-        token = self.query_token(params['token'], hint)
+        self.check_params(request, client)
+        token = self.query_token(
+            request.form["token"], request.form.get("token_type_hint")
+        )
         if token and self.check_permission(token, client, request):
             return token
+
+    def check_params(self, request, client):
+        params = request.form
+        if "token" not in params:
+            raise InvalidRequestError()
+
+        hint = params.get("token_type_hint")
+        if hint and hint not in self.SUPPORTED_TOKEN_TYPES:
+            raise UnsupportedTokenTypeError()
 
     def create_endpoint_response(self, request):
         """Validate introspection request and create the response.
@@ -68,12 +72,12 @@ class IntrospectionEndpoint(TokenEndpoint):
         # token, then the authorization server MUST return an introspection
         # response with the "active" field set to "false"
         if not token:
-            return {'active': False}
+            return {"active": False}
         if token.is_expired() or token.is_revoked():
-            return {'active': False}
+            return {"active": False}
         payload = self.introspect_token(token)
-        if 'active' not in payload:
-            payload['active'] = True
+        if "active" not in payload:
+            payload["active"] = True
         return payload
 
     def check_permission(self, token, client, request):
@@ -82,7 +86,7 @@ class IntrospectionEndpoint(TokenEndpoint):
 
             def check_permission(self, token, client, request):
                 # only allow a special client to introspect the token
-                return client.client_id == 'introspection_client'
+                return client.client_id == "introspection_client"
 
         :return: bool
         """
@@ -93,9 +97,9 @@ class IntrospectionEndpoint(TokenEndpoint):
         Developers should implement this method::
 
             def query_token(self, token_string, token_type_hint):
-                if token_type_hint == 'access_token':
+                if token_type_hint == "access_token":
                     tok = Token.query_by_access_token(token_string)
-                elif token_type_hint == 'refresh_token':
+                elif token_type_hint == "refresh_token":
                     tok = Token.query_by_refresh_token(token_string)
                 else:
                     tok = Token.query_by_access_token(token_string)
@@ -111,16 +115,16 @@ class IntrospectionEndpoint(TokenEndpoint):
 
             def introspect_token(self, token):
                 return {
-                    'active': True,
-                    'client_id': token.client_id,
-                    'token_type': token.token_type,
-                    'username': get_token_username(token),
-                    'scope': token.get_scope(),
-                    'sub': get_token_user_sub(token),
-                    'aud': token.client_id,
-                    'iss': 'https://server.example.com/',
-                    'exp': token.expires_at,
-                    'iat': token.issued_at,
+                    "active": True,
+                    "client_id": token.client_id,
+                    "token_type": token.token_type,
+                    "username": get_token_username(token),
+                    "scope": token.get_scope(),
+                    "sub": get_token_user_sub(token),
+                    "aud": token.client_id,
+                    "iss": "https://server.example.com/",
+                    "exp": token.expires_at,
+                    "iat": token.issued_at,
                 }
 
         .. _`Section 2.2`: https://tools.ietf.org/html/rfc7662#section-2.2

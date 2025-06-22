@@ -1,16 +1,17 @@
 from requests import Session
 from requests.auth import AuthBase
+
+from authlib.oauth2.auth import ClientAuth
+from authlib.oauth2.auth import TokenAuth
 from authlib.oauth2.client import OAuth2Client
-from authlib.oauth2.auth import ClientAuth, TokenAuth
-from ..base_client import (
-    OAuthError,
-    InvalidTokenError,
-    MissingTokenError,
-    UnsupportedTokenTypeError,
-)
+
+from ..base_client import InvalidTokenError
+from ..base_client import MissingTokenError
+from ..base_client import OAuthError
+from ..base_client import UnsupportedTokenTypeError
 from .utils import update_session_configure
 
-__all__ = ['OAuth2Session', 'OAuth2Auth']
+__all__ = ["OAuth2Session", "OAuth2Auth"]
 
 
 class OAuth2Auth(AuthBase, TokenAuth):
@@ -24,16 +25,17 @@ class OAuth2Auth(AuthBase, TokenAuth):
         self.ensure_active_token()
         try:
             req.url, req.headers, req.body = self.prepare(
-                req.url, req.headers, req.body)
+                req.url, req.headers, req.body
+            )
         except KeyError as error:
-            description = 'Unsupported token_type: {}'.format(str(error))
-            raise UnsupportedTokenTypeError(description=description)
+            description = f"Unsupported token_type: {str(error)}"
+            raise UnsupportedTokenTypeError(description=description) from error
         return req
 
 
 class OAuth2ClientAuth(AuthBase, ClientAuth):
-    """Attaches OAuth Client Authentication to the given Request object.
-    """
+    """Attaches OAuth Client Authentication to the given Request object."""
+
     def __call__(self, req):
         req.url, req.headers, req.body = self.prepare(
             req.method, req.url, req.headers, req.body
@@ -64,34 +66,63 @@ class OAuth2Session(OAuth2Client, Session):
         values: "header", "body", "uri".
     :param update_token: A function for you to update token. It accept a
         :class:`OAuth2Token` as parameter.
+    :param leeway: Time window in seconds before the actual expiration of the
+        authentication token, that the token is considered expired and will
+        be refreshed.
     :param default_timeout: If settled, every requests will have a default timeout.
     """
+
     client_auth_class = OAuth2ClientAuth
     token_auth_class = OAuth2Auth
     oauth_error_class = OAuthError
     SESSION_REQUEST_PARAMS = (
-        'allow_redirects', 'timeout', 'cookies', 'files',
-        'proxies', 'hooks', 'stream', 'verify', 'cert', 'json'
+        "allow_redirects",
+        "timeout",
+        "cookies",
+        "files",
+        "proxies",
+        "hooks",
+        "stream",
+        "verify",
+        "cert",
+        "json",
     )
 
-    def __init__(self, client_id=None, client_secret=None,
-                 token_endpoint_auth_method=None,
-                 revocation_endpoint_auth_method=None,
-                 scope=None, state=None, redirect_uri=None,
-                 token=None, token_placement='header',
-                 update_token=None, default_timeout=None, **kwargs):
+    def __init__(
+        self,
+        client_id=None,
+        client_secret=None,
+        token_endpoint_auth_method=None,
+        revocation_endpoint_auth_method=None,
+        scope=None,
+        state=None,
+        redirect_uri=None,
+        token=None,
+        token_placement="header",
+        update_token=None,
+        leeway=60,
+        default_timeout=None,
+        **kwargs,
+    ):
         Session.__init__(self)
         self.default_timeout = default_timeout
         update_session_configure(self, kwargs)
 
         OAuth2Client.__init__(
-            self, session=self,
-            client_id=client_id, client_secret=client_secret,
+            self,
+            session=self,
+            client_id=client_id,
+            client_secret=client_secret,
             token_endpoint_auth_method=token_endpoint_auth_method,
             revocation_endpoint_auth_method=revocation_endpoint_auth_method,
-            scope=scope, state=state, redirect_uri=redirect_uri,
-            token=token, token_placement=token_placement,
-            update_token=update_token, **kwargs
+            scope=scope,
+            state=state,
+            redirect_uri=redirect_uri,
+            token=token,
+            token_placement=token_placement,
+            update_token=update_token,
+            leeway=leeway,
+            **kwargs,
         )
 
     def fetch_access_token(self, url=None, **kwargs):
@@ -101,10 +132,9 @@ class OAuth2Session(OAuth2Client, Session):
     def request(self, method, url, withhold_token=False, auth=None, **kwargs):
         """Send request with auto refresh token feature (if available)."""
         if self.default_timeout:
-            kwargs.setdefault('timeout', self.default_timeout)
+            kwargs.setdefault("timeout", self.default_timeout)
         if not withhold_token and auth is None:
             if not self.token:
                 raise MissingTokenError()
             auth = self.token_auth
-        return super(OAuth2Session, self).request(
-            method, url, auth=auth, **kwargs)
+        return super().request(method, url, auth=auth, **kwargs)

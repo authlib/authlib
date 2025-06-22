@@ -3,10 +3,12 @@
 JSON Web Key (JWK)
 ==================
 
-.. versionchanged:: v0.15
+.. important::
 
-    This documentation is updated for v0.15. Please check "v0.14" documentation for
-    Authlib v0.14.
+    We are splitting the ``jose`` module into a separated package. You may be
+    interested in joserfc_.
+
+.. _joserfc: https://jose.authlib.org/en/dev/guide/jwk/
 
 .. module:: authlib.jose
     :noindex:

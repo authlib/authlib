@@ -3,8 +3,8 @@ import binascii
 
 def encode_int(num, bits):
     length = ((bits + 7) // 8) * 2
-    padded_hex = '%0*x' % (length, num)
-    big_endian = binascii.a2b_hex(padded_hex.encode('ascii'))
+    padded_hex = f"{num:0{length}x}"
+    big_endian = binascii.a2b_hex(padded_hex.encode("ascii"))
     return big_endian
 
 

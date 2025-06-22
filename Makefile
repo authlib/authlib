@@ -27,5 +27,5 @@ clean-docs:
 clean-tox:
 	@rm -rf .tox/
 
-docs:
-	@$(MAKE) -C docs html
+build-docs:
+	@sphinx-build docs build/_html -a

@@ -1,0 +1,25 @@
+name: docs
+
+on:
+  push:
+    branches-ignore:
+    - 'wip-*'
+  pull_request:
+    branches-ignore:
+    - 'wip-*'
+
+env:
+  FORCE_COLOR: '1'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: |
+          uv sync --all-groups
+          uv run sphinx-build docs build/sphinx/html --fail-on-warning

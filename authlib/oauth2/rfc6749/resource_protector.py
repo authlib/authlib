@@ -1,20 +1,22 @@
-"""
-    authlib.oauth2.rfc6749.resource_protector
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+"""authlib.oauth2.rfc6749.resource_protector.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    Implementation of Accessing Protected Resources per `Section 7`_.
+Implementation of Accessing Protected Resources per `Section 7`_.
 
-    .. _`Section 7`: https://tools.ietf.org/html/rfc6749#section-7
+.. _`Section 7`: https://tools.ietf.org/html/rfc6749#section-7
 """
+
+from .errors import MissingAuthorizationError
+from .errors import UnsupportedTokenTypeError
 from .util import scope_to_list
-from .errors import MissingAuthorizationError, UnsupportedTokenTypeError
 
 
-class TokenValidator(object):
+class TokenValidator:
     """Base token validator class. Subclass this validator to register
     into ResourceProtector instance.
     """
-    TOKEN_TYPE = 'bearer'
+
+    TOKEN_TYPE = "bearer"
 
     def __init__(self, realm=None, **extra_attributes):
         self.realm = realm
@@ -55,7 +57,7 @@ class TokenValidator(object):
         "X-Device-Version" in the header::
 
             def validate_request(self, request):
-                if 'X-Device-Version' not in request.headers:
+                if "X-Device-Version" not in request.headers:
                     raise InvalidRequestError()
 
         Usually, you don't have to detect if the request is valid or not. If you have
@@ -81,7 +83,7 @@ class TokenValidator(object):
         raise NotImplementedError()
 
 
-class ResourceProtector(object):
+class ResourceProtector:
     def __init__(self):
         self._token_validators = {}
         self._default_realm = None
@@ -102,7 +104,9 @@ class ResourceProtector(object):
         """Get token validator from registry for the given token type."""
         validator = self._token_validators.get(token_type.lower())
         if not validator:
-            raise UnsupportedTokenTypeError(self._default_auth_type, self._default_realm)
+            raise UnsupportedTokenTypeError(
+                self._default_auth_type, self._default_realm
+            )
         return validator
 
     def parse_request_authorization(self, request):
@@ -118,23 +122,27 @@ class ResourceProtector(object):
         :raise: MissingAuthorizationError
         :raise: UnsupportedTokenTypeError
         """
-        auth = request.headers.get('Authorization')
+        auth = request.headers.get("Authorization")
         if not auth:
-            raise MissingAuthorizationError(self._default_auth_type, self._default_realm)
+            raise MissingAuthorizationError(
+                self._default_auth_type, self._default_realm
+            )
 
         # https://tools.ietf.org/html/rfc6749#section-7.1
         token_parts = auth.split(None, 1)
         if len(token_parts) != 2:
-            raise UnsupportedTokenTypeError(self._default_auth_type, self._default_realm)
+            raise UnsupportedTokenTypeError(
+                self._default_auth_type, self._default_realm
+            )
 
         token_type, token_string = token_parts
         validator = self.get_token_validator(token_type)
         return validator, token_string
 
-    def validate_request(self, scopes, request):
+    def validate_request(self, scopes, request, **kwargs):
         """Validate the request and return a token."""
         validator, token_string = self.parse_request_authorization(request)
         validator.validate_request(request)
         token = validator.authenticate_token(token_string)
-        validator.validate_token(token, scopes, request)
+        validator.validate_token(token, scopes, request, **kwargs)
         return token

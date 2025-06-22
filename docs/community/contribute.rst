@@ -41,7 +41,7 @@ Thank you. Now that you have a fix for Authlib, please describe it clearly in
 your pull request. There are some requirements for a pull request to be
 accepted:
 
-* Follow PEP8 code style. You can use flake8 to check your code style.
+* You can use ruff to check your code style.
 * Tests for the code changes are required.
 * Please add documentation for it, if it requires.
 

@@ -1,28 +1,30 @@
 import hashlib
 from collections import OrderedDict
-from authlib.common.encoding import (
-    json_dumps,
-    to_bytes,
-    to_unicode,
-    urlsafe_b64encode,
-)
+
+from authlib.common.encoding import json_dumps
+from authlib.common.encoding import to_bytes
+from authlib.common.encoding import to_unicode
+from authlib.common.encoding import urlsafe_b64encode
+
 from ..errors import InvalidUseError
 
 
-class Key(object):
+class Key:
     """This is the base class for a JSON Web Key."""
-    kty = '_'
 
-    ALLOWED_PARAMS = [
-        'use', 'key_ops', 'alg', 'kid',
-        'x5u', 'x5c', 'x5t', 'x5t#S256'
-    ]
+    kty = "_"
+
+    ALLOWED_PARAMS = ["use", "key_ops", "alg", "kid", "x5u", "x5c", "x5t", "x5t#S256"]
 
     PRIVATE_KEY_OPS = [
-        'sign', 'decrypt', 'unwrapKey',
+        "sign",
+        "decrypt",
+        "unwrapKey",
     ]
     PUBLIC_KEY_OPS = [
-        'verify', 'encrypt', 'wrapKey',
+        "verify",
+        "encrypt",
+        "wrapKey",
     ]
 
     REQUIRED_JSON_FIELDS = []
@@ -37,7 +39,7 @@ class Key(object):
             self.load_dict_key()
 
         rv = dict(self._dict_data)
-        rv['kty'] = self.kty
+        rv["kty"] = self.kty
         for k in self.ALLOWED_PARAMS:
             if k not in rv and k in self.options:
                 rv[k] = self.options[k]
@@ -45,7 +47,7 @@ class Key(object):
 
     @property
     def kid(self):
-        return self.tokens.get('kid')
+        return self.tokens.get("kid")
 
     def keys(self):
         return self.tokens.keys()
@@ -69,20 +71,20 @@ class Key(object):
         :param operation: key operation value, such as "sign", "encrypt".
         :raise: ValueError
         """
-        key_ops = self.tokens.get('key_ops')
+        key_ops = self.tokens.get("key_ops")
         if key_ops is not None and operation not in key_ops:
-            raise ValueError('Unsupported key_op "{}"'.format(operation))
+            raise ValueError(f'Unsupported key_op "{operation}"')
 
         if operation in self.PRIVATE_KEY_OPS and self.public_only:
-            raise ValueError('Invalid key_op "{}" for public key'.format(operation))
+            raise ValueError(f'Invalid key_op "{operation}" for public key')
 
-        use = self.tokens.get('use')
+        use = self.tokens.get("use")
         if use:
-            if operation in ['sign', 'verify']:
-                if use != 'sig':
+            if operation in ["sign", "verify"]:
+                if use != "sig":
                     raise InvalidUseError()
-            elif operation in ['decrypt', 'encrypt', 'wrapKey', 'unwrapKey']:
-                if use != 'enc':
+            elif operation in ["decrypt", "encrypt", "wrapKey", "unwrapKey"]:
+                if use != "enc":
                     raise InvalidUseError()
 
     def as_dict(self, is_private=False, **params):
@@ -96,7 +98,7 @@ class Key(object):
     def thumbprint(self):
         """Implementation of RFC7638 JSON Web Key (JWK) Thumbprint."""
         fields = list(self.REQUIRED_JSON_FIELDS)
-        fields.append('kty')
+        fields.append("kty")
         fields.sort()
         data = OrderedDict()
 
@@ -111,7 +113,7 @@ class Key(object):
     def check_required_fields(cls, data):
         for k in cls.REQUIRED_JSON_FIELDS:
             if k not in data:
-                raise ValueError('Missing required field: "{}"'.format(k))
+                raise ValueError(f'Missing required field: "{k}"')
 
     @classmethod
     def validate_raw_key(cls, key):

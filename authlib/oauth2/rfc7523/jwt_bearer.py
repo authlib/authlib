@@ -1,16 +1,18 @@
 import logging
-from authlib.jose import jwt, JoseError
-from ..rfc6749 import BaseGrant, TokenEndpointMixin
-from ..rfc6749 import (
-    UnauthorizedClientError,
-    InvalidRequestError,
-    InvalidGrantError,
-    InvalidClientError,
-)
+
+from authlib.jose import JoseError
+from authlib.jose import jwt
+
+from ..rfc6749 import BaseGrant
+from ..rfc6749 import InvalidClientError
+from ..rfc6749 import InvalidGrantError
+from ..rfc6749 import InvalidRequestError
+from ..rfc6749 import TokenEndpointMixin
+from ..rfc6749 import UnauthorizedClientError
 from .assertion import sign_jwt_bearer_assertion
 
 log = logging.getLogger(__name__)
-JWT_BEARER_GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:jwt-bearer'
+JWT_BEARER_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:jwt-bearer"
 
 
 class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
@@ -19,17 +21,29 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
     #: Options for verifying JWT payload claims. Developers MAY
     #: overwrite this constant to create a more strict options.
     CLAIMS_OPTIONS = {
-        'iss': {'essential': True},
-        'aud': {'essential': True},
-        'exp': {'essential': True},
+        "iss": {"essential": True},
+        "aud": {"essential": True},
+        "exp": {"essential": True},
     }
 
+    # A small allowance of time, typically no more than a few minutes,
+    # to account for clock skew. The default is 60 seconds.
+    LEEWAY = 60
+
     @staticmethod
-    def sign(key, issuer, audience, subject=None,
-             issued_at=None, expires_at=None, claims=None, **kwargs):
+    def sign(
+        key,
+        issuer,
+        audience,
+        subject=None,
+        issued_at=None,
+        expires_at=None,
+        claims=None,
+        **kwargs,
+    ):
         return sign_jwt_bearer_assertion(
-            key, issuer, audience, subject, issued_at,
-            expires_at, claims, **kwargs)
+            key, issuer, audience, subject, issued_at, expires_at, claims, **kwargs
+        )
 
     def process_assertion_claims(self, assertion):
         """Extract JWT payload claims from request "assertion", per
@@ -43,16 +57,16 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
         """
         try:
             claims = jwt.decode(
-                assertion, self.resolve_public_key,
-                claims_options=self.CLAIMS_OPTIONS)
-            claims.validate()
+                assertion, self.resolve_public_key, claims_options=self.CLAIMS_OPTIONS
+            )
+            claims.validate(leeway=self.LEEWAY)
         except JoseError as e:
-            log.debug('Assertion Error: %r', e)
-            raise InvalidGrantError(description=e.description)
+            log.debug("Assertion Error: %r", e)
+            raise InvalidGrantError(description=e.description) from e
         return claims
 
     def resolve_public_key(self, headers, payload):
-        client = self.resolve_issuer_client(payload['iss'])
+        client = self.resolve_issuer_client(payload["iss"])
         return self.resolve_client_key(client, headers, payload)
 
     def validate_token_request(self):
@@ -86,30 +100,33 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
 
         .. _`Section 2.1`: https://tools.ietf.org/html/rfc7523#section-2.1
         """
-        assertion = self.request.form.get('assertion')
+        assertion = self.request.form.get("assertion")
         if not assertion:
-            raise InvalidRequestError('Missing "assertion" in request')
+            raise InvalidRequestError("Missing 'assertion' in request")
 
         claims = self.process_assertion_claims(assertion)
-        client = self.resolve_issuer_client(claims['iss'])
-        log.debug('Validate token request of %s', client)
+        client = self.resolve_issuer_client(claims["iss"])
+        log.debug("Validate token request of %s", client)
 
         if not client.check_grant_type(self.GRANT_TYPE):
-            raise UnauthorizedClientError()
+            raise UnauthorizedClientError(
+                f"The client is not authorized to use 'grant_type={self.GRANT_TYPE}'"
+            )
 
         self.request.client = client
         self.validate_requested_scope()
 
-        subject = claims.get('sub')
+        subject = claims.get("sub")
         if subject:
             user = self.authenticate_user(subject)
             if not user:
-                raise InvalidGrantError(description='Invalid "sub" value in assertion')
+                raise InvalidGrantError(description="Invalid 'sub' value in assertion")
 
-            log.debug('Check client(%s) permission to User(%s)', client, user)
+            log.debug("Check client(%s) permission to User(%s)", client, user)
             if not self.has_granted_permission(client, user):
                 raise InvalidClientError(
-                    description='Client has no permission to access user data')
+                    description="Client has no permission to access user data"
+                )
             self.request.user = user
 
     def create_token_response(self):
@@ -117,11 +134,11 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
         token.
         """
         token = self.generate_token(
-            scope=self.request.scope,
+            scope=self.request.payload.scope,
             user=self.request.user,
             include_refresh_token=False,
         )
-        log.debug('Issue token %r to %r', token, self.request.client)
+        log.debug("Issue token %r to %r", token, self.request.client)
         self.save_token(token)
         return 200, token, self.TOKEN_RESPONSE_HEADER
 
@@ -146,7 +163,7 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
                 # from authlib.jose import JsonWebKey
 
                 key_set = JsonWebKey.import_key_set(client.jwks)
-                return key_set.find_by_kid(headers['kid'])
+                return key_set.find_by_kid(headers["kid"])
 
         :param client: instance of OAuth client model
         :param headers: headers part of the JWT

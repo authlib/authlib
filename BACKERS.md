@@ -103,5 +103,11 @@ Jeff Heaton
 </a><br>
 Birk Jernström
 </td>
+<td align="center">
+<a href="https://github.com/yaal-coop">
+<img src="https://avatars.githubusercontent.com/u/7792703?v=4" alt="Yaal Coop" width="48" height="48">
+</a><br>
+Yaal Coop
+</td>
 </tr>
 </table>

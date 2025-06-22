@@ -55,6 +55,12 @@ Before register the endpoint, developers MUST implement the missing methods::
             client.save()
             return client
 
+        def generate_client_registration_info(self, client, request):
+            return {
+                'registration_client_uri': url_for("client_management_endpoint", client_id=client.client_id),
+                'registration_access_token': create_management_access_token_for_client(client),
+            }
+
 If developers want to support ``software_statement``, additional methods
 should be implemented::
 

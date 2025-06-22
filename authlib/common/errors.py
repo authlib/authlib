@@ -1,4 +1,3 @@
-#: coding: utf-8
 from authlib.consts import default_json_headers
 
 
@@ -8,7 +7,7 @@ class AuthlibBaseError(Exception):
     #: short-string error code
     error = None
     #: long-string to describe this error
-    description = ''
+    description = ""
     #: web page that describes this error
     uri = None
 
@@ -20,20 +19,19 @@ class AuthlibBaseError(Exception):
         if uri is not None:
             self.uri = uri
 
-        message = '{}: {}'.format(self.error, self.description)
-        super(AuthlibBaseError, self).__init__(message)
+        message = f"{self.error}: {self.description}"
+        super().__init__(message)
 
     def __repr__(self):
-        return '<{} "{}">'.format(self.__class__.__name__, self.error)
+        return f'<{self.__class__.__name__} "{self.error}">'
 
 
 class AuthlibHTTPError(AuthlibBaseError):
     #: HTTP status code
     status_code = 400
 
-    def __init__(self, error=None, description=None, uri=None,
-                 status_code=None):
-        super(AuthlibHTTPError, self).__init__(error, description, uri)
+    def __init__(self, error=None, description=None, uri=None, status_code=None):
+        super().__init__(error, description, uri)
         if status_code is not None:
             self.status_code = status_code
 
@@ -41,13 +39,13 @@ class AuthlibHTTPError(AuthlibBaseError):
         return self.description
 
     def get_body(self):
-        error = [('error', self.error)]
+        error = [("error", self.error)]
 
         if self.description:
-            error.append(('error_description', self.description))
+            error.append(("error_description", self.description))
 
         if self.uri:
-            error.append(('error_uri', self.uri))
+            error.append(("error_uri", self.uri))
         return error
 
     def get_headers(self):
@@ -58,3 +56,7 @@ class AuthlibHTTPError(AuthlibBaseError):
         body = dict(self.get_body())
         headers = self.get_headers()
         return self.status_code, body, headers
+
+
+class ContinueIteration(AuthlibBaseError):
+    pass

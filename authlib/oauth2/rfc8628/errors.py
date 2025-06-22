@@ -7,7 +7,8 @@ class AuthorizationPendingError(OAuth2Error):
     """The authorization request is still pending as the end user hasn't
     yet completed the user-interaction steps (Section 3.3).
     """
-    error = 'authorization_pending'
+
+    error = "authorization_pending"
 
 
 class SlowDownError(OAuth2Error):
@@ -15,7 +16,8 @@ class SlowDownError(OAuth2Error):
     still pending and polling should continue, but the interval MUST
     be increased by 5 seconds for this and all subsequent requests.
     """
-    error = 'slow_down'
+
+    error = "slow_down"
 
 
 class ExpiredTokenError(OAuth2Error):
@@ -24,4 +26,5 @@ class ExpiredTokenError(OAuth2Error):
     authorization request but SHOULD wait for user interaction before
     restarting to avoid unnecessary polling.
     """
-    error = 'expired_token'
+
+    error = "expired_token"

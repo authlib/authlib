@@ -29,7 +29,7 @@ Here is how you would create a FastAPI application::
 
 Since Authlib starlette requires using ``request`` instance, we need to
 expose that ``request`` to Authlib. According to the documentation on
-`Using the Request Directly <https://fastapi.tiangolo.com/tutorial/using-request-directly/>`_::
+`Using the Request Directly <https://fastapi.tiangolo.com/advanced/using-request-directly/>`_::
 
     from starlette.requests import Request
 

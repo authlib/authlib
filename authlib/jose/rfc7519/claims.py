@@ -1,10 +1,9 @@
 import time
-from authlib.jose.errors import (
-    MissingClaimError,
-    InvalidClaimError,
-    ExpiredTokenError,
-    InvalidTokenError,
-)
+
+from authlib.jose.errors import ExpiredTokenError
+from authlib.jose.errors import InvalidClaimError
+from authlib.jose.errors import InvalidTokenError
+from authlib.jose.errors import MissingClaimError
 
 
 class BaseClaims(dict):
@@ -35,10 +34,11 @@ class BaseClaims(dict):
     .. _`OpenID Connect Claims`:
         http://openid.net/specs/openid-connect-core-1_0.html#IndividualClaimsRequests
     """
+
     REGISTERED_CLAIMS = []
 
     def __init__(self, payload, header, options=None, params=None):
-        super(BaseClaims, self).__init__(payload)
+        super().__init__(payload)
         self.header = header
         self.options = options or {}
         self.params = params or {}
@@ -53,7 +53,7 @@ class BaseClaims(dict):
 
     def _validate_essential_claims(self):
         for k in self.options:
-            if self.options[k].get('essential'):
+            if self.options[k].get("essential"):
                 if k not in self:
                     raise MissingClaimError(k)
                 elif not self.get(k):
@@ -65,15 +65,15 @@ class BaseClaims(dict):
             return
 
         value = self.get(claim_name)
-        option_value = option.get('value')
+        option_value = option.get("value")
         if option_value and value != option_value:
             raise InvalidClaimError(claim_name)
 
-        option_values = option.get('values')
+        option_values = option.get("values")
         if option_values and value not in option_values:
             raise InvalidClaimError(claim_name)
 
-        validate = option.get('validate')
+        validate = option.get("validate")
         if validate and not validate(self, value):
             raise InvalidClaimError(claim_name)
 
@@ -86,7 +86,7 @@ class BaseClaims(dict):
 
 
 class JWTClaims(BaseClaims):
-    REGISTERED_CLAIMS = ['iss', 'sub', 'aud', 'exp', 'nbf', 'iat', 'jti']
+    REGISTERED_CLAIMS = ["iss", "sub", "aud", "exp", "nbf", "iat", "jti"]
 
     def validate(self, now=None, leeway=0):
         """Validate everything in claims payload."""
@@ -114,7 +114,7 @@ class JWTClaims(BaseClaims):
         The "iss" value is a case-sensitive string containing a StringOrURI
         value.  Use of this claim is OPTIONAL.
         """
-        self._validate_claim_value('iss')
+        self._validate_claim_value("iss")
 
     def validate_sub(self):
         """The "sub" (subject) claim identifies the principal that is the
@@ -125,7 +125,7 @@ class JWTClaims(BaseClaims):
         "sub" value is a case-sensitive string containing a StringOrURI
         value.  Use of this claim is OPTIONAL.
         """
-        self._validate_claim_value('sub')
+        self._validate_claim_value("sub")
 
     def validate_aud(self):
         """The "aud" (audience) claim identifies the recipients that the JWT is
@@ -140,27 +140,27 @@ class JWTClaims(BaseClaims):
         interpretation of audience values is generally application specific.
         Use of this claim is OPTIONAL.
         """
-        aud_option = self.options.get('aud')
-        aud = self.get('aud')
+        aud_option = self.options.get("aud")
+        aud = self.get("aud")
         if not aud_option or not aud:
             return
 
-        aud_values = aud_option.get('values')
+        aud_values = aud_option.get("values")
         if not aud_values:
-            aud_value = aud_option.get('value')
+            aud_value = aud_option.get("value")
             if aud_value:
                 aud_values = [aud_value]
 
         if not aud_values:
             return
 
-        if isinstance(self['aud'], list):
-            aud_list = self['aud']
+        if isinstance(self["aud"], list):
+            aud_list = self["aud"]
         else:
-            aud_list = [self['aud']]
+            aud_list = [self["aud"]]
 
         if not any([v in aud_list for v in aud_values]):
-            raise InvalidClaimError('aud')
+            raise InvalidClaimError("aud")
 
     def validate_exp(self, now, leeway):
         """The "exp" (expiration time) claim identifies the expiration time on
@@ -171,10 +171,10 @@ class JWTClaims(BaseClaims):
         a few minutes, to account for clock skew.  Its value MUST be a number
         containing a NumericDate value.  Use of this claim is OPTIONAL.
         """
-        if 'exp' in self:
-            exp = self['exp']
+        if "exp" in self:
+            exp = self["exp"]
             if not _validate_numeric_time(exp):
-                raise InvalidClaimError('exp')
+                raise InvalidClaimError("exp")
             if exp < (now - leeway):
                 raise ExpiredTokenError()
 
@@ -187,23 +187,28 @@ class JWTClaims(BaseClaims):
         account for clock skew.  Its value MUST be a number containing a
         NumericDate value.  Use of this claim is OPTIONAL.
         """
-        if 'nbf' in self:
-            nbf = self['nbf']
+        if "nbf" in self:
+            nbf = self["nbf"]
             if not _validate_numeric_time(nbf):
-                raise InvalidClaimError('nbf')
+                raise InvalidClaimError("nbf")
             if nbf > (now + leeway):
                 raise InvalidTokenError()
 
     def validate_iat(self, now, leeway):
         """The "iat" (issued at) claim identifies the time at which the JWT was
-        issued.  This claim can be used to determine the age of the JWT.  Its
-        value MUST be a number containing a NumericDate value.  Use of this
-        claim is OPTIONAL.
+        issued.  This claim can be used to determine the age of the JWT.
+        Implementers MAY provide for some small leeway, usually no more
+        than a few minutes, to account for clock skew. Its value MUST be a
+        number containing a NumericDate value.  Use of this claim is OPTIONAL.
         """
-        if 'iat' in self:
-            iat = self['iat']
+        if "iat" in self:
+            iat = self["iat"]
             if not _validate_numeric_time(iat):
-                raise InvalidClaimError('iat')
+                raise InvalidClaimError("iat")
+            if iat > (now + leeway):
+                raise InvalidTokenError(
+                    description="The token is not valid as it was issued in the future"
+                )
 
     def validate_jti(self):
         """The "jti" (JWT ID) claim provides a unique identifier for the JWT.
@@ -215,7 +220,7 @@ class JWTClaims(BaseClaims):
         to prevent the JWT from being replayed.  The "jti" value is a case-
         sensitive string.  Use of this claim is OPTIONAL.
         """
-        self._validate_claim_value('jti')
+        self._validate_claim_value("jti")
 
 
 def _validate_numeric_time(s):

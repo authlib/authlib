@@ -1,9 +1,11 @@
 import hashlib
-from authlib.common.encoding import to_bytes, urlsafe_b64encode
+
+from authlib.common.encoding import to_bytes
+from authlib.common.encoding import urlsafe_b64encode
 
 
 def create_half_hash(s, alg):
-    hash_type = 'sha{}'.format(alg[2:])
+    hash_type = f"sha{alg[2:]}"
     hash_alg = getattr(hashlib, hash_type, None)
     if not hash_alg:
         return None

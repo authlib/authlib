@@ -1,9 +1,13 @@
 import time
+
 from flask import json
-from authlib.oauth2.rfc6749.grants import (
-    RefreshTokenGrant as _RefreshTokenGrant,
-)
-from .models import db, User, Client, Token
+
+from authlib.oauth2.rfc6749.grants import RefreshTokenGrant as _RefreshTokenGrant
+
+from .models import Client
+from .models import Token
+from .models import User
+from .models import db
 from .oauth2_server import TestCase
 from .oauth2_server import create_authorization_server
 
@@ -15,7 +19,7 @@ class RefreshTokenGrant(_RefreshTokenGrant):
             return item
 
     def authenticate_user(self, credential):
-        return User.query.get(credential.user_id)
+        return db.session.get(User, credential.user_id)
 
     def revoke_old_credential(self, credential):
         now = int(time.time())
@@ -26,33 +30,35 @@ class RefreshTokenGrant(_RefreshTokenGrant):
 
 
 class RefreshTokenTest(TestCase):
-    def prepare_data(self, grant_type='refresh_token'):
+    def prepare_data(self, grant_type="refresh_token"):
         server = create_authorization_server(self.app)
         server.register_grant(RefreshTokenGrant)
 
-        user = User(username='foo')
+        user = User(username="foo")
         db.session.add(user)
         db.session.commit()
         client = Client(
             user_id=user.id,
-            client_id='refresh-client',
-            client_secret='refresh-secret',
+            client_id="refresh-client",
+            client_secret="refresh-secret",
         )
-        client.set_client_metadata({
-            'scope': 'profile',
-            'grant_types': [grant_type],
-            'redirect_uris': ['http://localhost/authorized'],
-        })
+        client.set_client_metadata(
+            {
+                "scope": "profile",
+                "grant_types": [grant_type],
+                "redirect_uris": ["http://localhost/authorized"],
+            }
+        )
         db.session.add(client)
         db.session.commit()
 
-    def create_token(self, scope='profile', user_id=1):
+    def create_token(self, scope="profile", user_id=1):
         token = Token(
             user_id=user_id,
-            client_id='refresh-client',
-            token_type='bearer',
-            access_token='a1',
-            refresh_token='r1',
+            client_id="refresh-client",
+            token_type="bearer",
+            access_token="a1",
+            refresh_token="r1",
             scope=scope,
             expires_in=3600,
         )
@@ -61,171 +67,204 @@ class RefreshTokenTest(TestCase):
 
     def test_invalid_client(self):
         self.prepare_data()
-        rv = self.client.post('/oauth/token', data={
-            'grant_type': 'refresh_token',
-            'refresh_token': 'foo',
-        })
-        resp = json.loads(rv.data)
-        self.assertEqual(resp['error'], 'invalid_client')
-
-        headers = self.create_basic_header(
-            'invalid-client', 'refresh-secret'
+        rv = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": "foo",
+            },
         )
-        rv = self.client.post('/oauth/token', data={
-            'grant_type': 'refresh_token',
-            'refresh_token': 'foo',
-        }, headers=headers)
         resp = json.loads(rv.data)
-        self.assertEqual(resp['error'], 'invalid_client')
+        assert resp["error"] == "invalid_client"
 
-        headers = self.create_basic_header(
-            'refresh-client', 'invalid-secret'
+        headers = self.create_basic_header("invalid-client", "refresh-secret")
+        rv = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": "foo",
+            },
+            headers=headers,
         )
-        rv = self.client.post('/oauth/token', data={
-            'grant_type': 'refresh_token',
-            'refresh_token': 'foo',
-        }, headers=headers)
         resp = json.loads(rv.data)
-        self.assertEqual(resp['error'], 'invalid_client')
+        assert resp["error"] == "invalid_client"
+
+        headers = self.create_basic_header("refresh-client", "invalid-secret")
+        rv = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": "foo",
+            },
+            headers=headers,
+        )
+        resp = json.loads(rv.data)
+        assert resp["error"] == "invalid_client"
 
     def test_invalid_refresh_token(self):
         self.prepare_data()
-        headers = self.create_basic_header(
-            'refresh-client', 'refresh-secret'
+        headers = self.create_basic_header("refresh-client", "refresh-secret")
+        rv = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "refresh_token",
+            },
+            headers=headers,
         )
-        rv = self.client.post('/oauth/token', data={
-            'grant_type': 'refresh_token',
-        }, headers=headers)
         resp = json.loads(rv.data)
-        self.assertEqual(resp['error'], 'invalid_request')
-        self.assertIn('Missing', resp['error_description'])
+        assert resp["error"] == "invalid_request"
+        assert "Missing" in resp["error_description"]
 
-        rv = self.client.post('/oauth/token', data={
-            'grant_type': 'refresh_token',
-            'refresh_token': 'foo',
-        }, headers=headers)
+        rv = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": "foo",
+            },
+            headers=headers,
+        )
         resp = json.loads(rv.data)
-        self.assertEqual(resp['error'], 'invalid_grant')
+        assert resp["error"] == "invalid_grant"
 
     def test_invalid_scope(self):
         self.prepare_data()
         self.create_token()
-        headers = self.create_basic_header(
-            'refresh-client', 'refresh-secret'
+        headers = self.create_basic_header("refresh-client", "refresh-secret")
+        rv = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": "r1",
+                "scope": "invalid",
+            },
+            headers=headers,
         )
-        rv = self.client.post('/oauth/token', data={
-            'grant_type': 'refresh_token',
-            'refresh_token': 'r1',
-            'scope': 'invalid',
-        }, headers=headers)
         resp = json.loads(rv.data)
-        self.assertEqual(resp['error'], 'invalid_scope')
+        assert resp["error"] == "invalid_scope"
 
     def test_invalid_scope_none(self):
         self.prepare_data()
         self.create_token(scope=None)
-        headers = self.create_basic_header(
-            'refresh-client', 'refresh-secret'
+        headers = self.create_basic_header("refresh-client", "refresh-secret")
+        rv = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": "r1",
+                "scope": "invalid",
+            },
+            headers=headers,
         )
-        rv = self.client.post('/oauth/token', data={
-            'grant_type': 'refresh_token',
-            'refresh_token': 'r1',
-            'scope': 'invalid',
-        }, headers=headers)
         resp = json.loads(rv.data)
-        self.assertEqual(resp['error'], 'invalid_scope')
+        assert resp["error"] == "invalid_scope"
 
     def test_invalid_user(self):
         self.prepare_data()
         self.create_token(user_id=5)
-        headers = self.create_basic_header(
-            'refresh-client', 'refresh-secret'
+        headers = self.create_basic_header("refresh-client", "refresh-secret")
+        rv = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": "r1",
+                "scope": "profile",
+            },
+            headers=headers,
         )
-        rv = self.client.post('/oauth/token', data={
-            'grant_type': 'refresh_token',
-            'refresh_token': 'r1',
-            'scope': 'profile',
-        }, headers=headers)
         resp = json.loads(rv.data)
-        self.assertEqual(resp['error'], 'invalid_request')
+        assert resp["error"] == "invalid_request"
 
     def test_invalid_grant_type(self):
-        self.prepare_data(grant_type='invalid')
+        self.prepare_data(grant_type="invalid")
         self.create_token()
-        headers = self.create_basic_header(
-            'refresh-client', 'refresh-secret'
+        headers = self.create_basic_header("refresh-client", "refresh-secret")
+        rv = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": "r1",
+                "scope": "profile",
+            },
+            headers=headers,
         )
-        rv = self.client.post('/oauth/token', data={
-            'grant_type': 'refresh_token',
-            'refresh_token': 'r1',
-            'scope': 'profile',
-        }, headers=headers)
         resp = json.loads(rv.data)
-        self.assertEqual(resp['error'], 'unauthorized_client')
+        assert resp["error"] == "unauthorized_client"
 
     def test_authorize_token_no_scope(self):
         self.prepare_data()
         self.create_token()
-        headers = self.create_basic_header(
-            'refresh-client', 'refresh-secret'
+        headers = self.create_basic_header("refresh-client", "refresh-secret")
+        rv = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": "r1",
+            },
+            headers=headers,
         )
-        rv = self.client.post('/oauth/token', data={
-            'grant_type': 'refresh_token',
-            'refresh_token': 'r1',
-        }, headers=headers)
         resp = json.loads(rv.data)
-        self.assertIn('access_token', resp)
+        assert "access_token" in resp
 
     def test_authorize_token_scope(self):
         self.prepare_data()
         self.create_token()
-        headers = self.create_basic_header(
-            'refresh-client', 'refresh-secret'
+        headers = self.create_basic_header("refresh-client", "refresh-secret")
+        rv = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": "r1",
+                "scope": "profile",
+            },
+            headers=headers,
         )
-        rv = self.client.post('/oauth/token', data={
-            'grant_type': 'refresh_token',
-            'refresh_token': 'r1',
-            'scope': 'profile',
-        }, headers=headers)
         resp = json.loads(rv.data)
-        self.assertIn('access_token', resp)
+        assert "access_token" in resp
 
     def test_revoke_old_credential(self):
         self.prepare_data()
         self.create_token()
-        headers = self.create_basic_header(
-            'refresh-client', 'refresh-secret'
+        headers = self.create_basic_header("refresh-client", "refresh-secret")
+        rv = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": "r1",
+                "scope": "profile",
+            },
+            headers=headers,
         )
-        rv = self.client.post('/oauth/token', data={
-            'grant_type': 'refresh_token',
-            'refresh_token': 'r1',
-            'scope': 'profile',
-        }, headers=headers)
         resp = json.loads(rv.data)
-        self.assertIn('access_token', resp)
+        assert "access_token" in resp
 
-        rv = self.client.post('/oauth/token', data={
-            'grant_type': 'refresh_token',
-            'refresh_token': 'r1',
-            'scope': 'profile',
-        }, headers=headers)
-        self.assertEqual(rv.status_code, 400)
+        rv = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": "r1",
+                "scope": "profile",
+            },
+            headers=headers,
+        )
+        assert rv.status_code == 400
         resp = json.loads(rv.data)
-        self.assertEqual(resp['error'], 'invalid_grant')
+        assert resp["error"] == "invalid_grant"
 
     def test_token_generator(self):
-        m = 'tests.flask.test_oauth2.oauth2_server:token_generator'
-        self.app.config.update({'OAUTH2_ACCESS_TOKEN_GENERATOR': m})
+        m = "tests.flask.test_oauth2.oauth2_server:token_generator"
+        self.app.config.update({"OAUTH2_ACCESS_TOKEN_GENERATOR": m})
 
         self.prepare_data()
         self.create_token()
-        headers = self.create_basic_header(
-            'refresh-client', 'refresh-secret'
+        headers = self.create_basic_header("refresh-client", "refresh-secret")
+        rv = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "refresh_token",
+                "refresh_token": "r1",
+            },
+            headers=headers,
         )
-        rv = self.client.post('/oauth/token', data={
-            'grant_type': 'refresh_token',
-            'refresh_token': 'r1',
-        }, headers=headers)
         resp = json.loads(rv.data)
-        self.assertIn('access_token', resp)
-        self.assertIn('r-refresh_token.1.', resp['access_token'])
+        assert "access_token" in resp
+        assert "r-refresh_token.1." in resp["access_token"]

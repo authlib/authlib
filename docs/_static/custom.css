@@ -1,0 +1,40 @@
+:root {
+  --syntax-light-pre-bg: #ecf5ff;
+  --syntax-light-cap-bg: #d6e7fb;
+  --syntax-dark-pre-bg: #1a2b3e;
+  --syntax-dark-cap-bg: #223e5e;
+}
+
+#ethical-ad-placement {
+  display: none;
+}
+
+.site-sponsors {
+  margin-bottom: 2rem;
+}
+
+.site-sponsors > .sponsor {
+  display: flex;
+  align-items: center;
+  background: var(--sy-c-bg-weak);
+  border-radius: 6px;
+  padding: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.site-sponsors .image {
+  flex-shrink: 0;
+  display: block;
+  width: 32px;
+  margin-right: 0.8rem;
+}
+
+.site-sponsors .text {
+  font-size: 0.86rem;
+  line-height: 1.2;
+}
+
+.site-sponsors .text a {
+  color: var(--sy-c-link);
+  border-color: var(--sy-c-link);
+}

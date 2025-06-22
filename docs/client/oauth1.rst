@@ -78,7 +78,7 @@ The second step is to generate the authorization URL::
     'https://api.twitter.com/oauth/authenticate?oauth_token=gA..H'
 
 Actually, the second parameter ``request_token`` can be omitted, since session
-is re-used::
+is reused::
 
     >>> client.create_authorization_url(authenticate_url)
 
@@ -141,7 +141,7 @@ session::
 Access Protected Resources
 --------------------------
 
-Now you can access the protected resources. If you re-use the session, you
+Now you can access the protected resources. If you reuse the session, you
 don't need to do anything::
 
     >>> account_url = 'https://api.twitter.com/1.1/account/verify_credentials.json'
@@ -181,7 +181,7 @@ Create an instance of OAuth1Auth with an access token::
 
     auth = OAuth1Auth(
         client_id='..',
-        client_secret=client_secret='..',
+        client_secret='..',
         token='oauth_token value',
         token_secret='oauth_token_secret value',
         ...

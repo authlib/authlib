@@ -32,26 +32,6 @@ first, let's create an :class:`OAuth` instance::
 The common use case for OAuth is authentication, e.g. let your users log in
 with Twitter, GitHub, Google etc.
 
-Configuration
--------------
-
-Starlette can load configuration from environment; Authlib implementation
-for Starlette client can use this configuration. Here is an example of how
-to do it::
-
-    from starlette.config import Config
-
-    config = Config('.env')
-    oauth = OAuth(config)
-
-Authlib will load ``client_id`` and ``client_secret`` from the configuration,
-take google as an example::
-
-    oauth.register(name='google', ...)
-
-It will load **GOOGLE_CLIENT_ID** and **GOOGLE_CLIENT_SECRET** from the
-environment.
-
 Register Remote Apps
 --------------------
 

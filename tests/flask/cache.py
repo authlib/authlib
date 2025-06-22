@@ -1,11 +1,12 @@
 import time
+
 try:
     import cPickle as pickle
 except ImportError:
     import pickle
 
 
-class SimpleCache(object):
+class SimpleCache:
     """A SimpleCache for testing. Copied from Werkzeug."""
 
     def __init__(self, threshold=500, default_timeout=300):
@@ -42,9 +43,7 @@ class SimpleCache(object):
     def set(self, key, value, timeout=None):
         expires = self._normalize_timeout(timeout)
         self._prune()
-        self._cache[key] = (
-            expires, pickle.dumps(value, pickle.HIGHEST_PROTOCOL)
-        )
+        self._cache[key] = (expires, pickle.dumps(value, pickle.HIGHEST_PROTOCOL))
         return True
 
     def delete(self, key):

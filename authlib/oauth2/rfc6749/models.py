@@ -1,13 +1,11 @@
+"""authlib.oauth2.rfc6749.models.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This module defines how to construct Client, AuthorizationCode and Token.
 """
-    authlib.oauth2.rfc6749.models
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    This module defines how to construct Client, AuthorizationCode and Token.
-"""
-from authlib.deprecate import deprecate
 
 
-class ClientMixin(object):
+class ClientMixin:
     """Implementation of OAuth 2 Client described in `Section 2`_ with
     some methods to help validation. A client has at least these information:
 
@@ -47,7 +45,7 @@ class ClientMixin(object):
 
             def get_allowed_scope(self, scope):
                 if not scope:
-                    return ''
+                    return ""
                 allowed = set(scope_to_list(self.scope))
                 return list_to_scope([s for s in scope.split() if s in allowed])
 
@@ -75,6 +73,7 @@ class ClientMixin(object):
 
             import secrets
 
+
             def check_client_secret(self, client_secret):
                 return secrets.compare_digest(self.client_secret, client_secret)
 
@@ -89,7 +88,7 @@ class ClientMixin(object):
         Developers MAY re-implement this method with::
 
             def check_endpoint_auth_method(self, method, endpoint):
-                if endpoint == 'token':
+                if endpoint == "token":
                     # if client table has ``token_endpoint_auth_method``
                     return self.token_endpoint_auth_method == method
                 return True
@@ -108,10 +107,6 @@ class ClientMixin(object):
         .. _`RFC7591`: https://tools.ietf.org/html/rfc7591
         """
         raise NotImplementedError()
-
-    def check_token_endpoint_auth_method(self, method):
-        deprecate('Please implement ``check_endpoint_auth_method`` instead.')
-        return self.check_endpoint_auth_method(method, 'token')
 
     def check_response_type(self, response_type):
         """Validate if the client can handle the given response_type. There
@@ -146,7 +141,7 @@ class ClientMixin(object):
         raise NotImplementedError()
 
 
-class AuthorizationCodeMixin(object):
+class AuthorizationCodeMixin:
     def get_redirect_uri(self):
         """A method to get authorization code's ``redirect_uri``.
         For instance, the database table for authorization code has a
@@ -171,7 +166,7 @@ class AuthorizationCodeMixin(object):
         raise NotImplementedError()
 
 
-class TokenMixin(object):
+class TokenMixin:
     def check_client(self, client):
         """A method to check if this token is issued to the given client.
         For instance, ``client_id`` is saved on token table::
@@ -224,5 +219,25 @@ class TokenMixin(object):
                 return self.revoked
 
         :return: boolean
+        """
+        raise NotImplementedError()
+
+    def get_user(self):
+        """A method to get the user object associated with this token:
+
+        .. code-block::
+
+            def get_user(self):
+                return User.get(self.user_id)
+        """
+        raise NotImplementedError()
+
+    def get_client(self) -> ClientMixin:
+        """A method to get the client object associated with this token:
+
+        .. code-block::
+
+            def get_client(self):
+                return Client.get(self.client_id)
         """
         raise NotImplementedError()

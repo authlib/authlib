@@ -1,24 +1,23 @@
 import logging
-from authlib.oauth2.rfc6749 import (
-    OAuth2Error,
-    InvalidScopeError,
-    AccessDeniedError,
-    ImplicitGrant,
-)
-from .util import (
-    is_openid_scope,
-    validate_nonce,
-    validate_request_prompt,
-    create_response_mode_response,
-    generate_id_token,
-)
+
+from authlib.oauth2.rfc6749 import AccessDeniedError
+from authlib.oauth2.rfc6749 import ImplicitGrant
+from authlib.oauth2.rfc6749 import InvalidScopeError
+from authlib.oauth2.rfc6749 import OAuth2Error
+from authlib.oauth2.rfc6749.hooks import hooked
+
+from .util import create_response_mode_response
+from .util import generate_id_token
+from .util import is_openid_scope
+from .util import validate_nonce
+from .util import validate_request_prompt
 
 log = logging.getLogger(__name__)
 
 
 class OpenIDImplicitGrant(ImplicitGrant):
-    RESPONSE_TYPES = {'id_token token', 'id_token'}
-    DEFAULT_RESPONSE_MODE = 'fragment'
+    RESPONSE_TYPES = {"id_token token", "id_token"}
+    DEFAULT_RESPONSE_MODE = "fragment"
 
     def exists_nonce(self, nonce, request):
         """Check if the given nonce is existing in your database. Developers
@@ -26,7 +25,7 @@ class OpenIDImplicitGrant(ImplicitGrant):
 
             def exists_nonce(self, nonce, request):
                 exists = AuthorizationCode.query.filter_by(
-                    client_id=request.client_id, nonce=nonce
+                    client_id=request.payload.client_id, nonce=nonce
                 ).first()
                 return bool(exists)
 
@@ -43,10 +42,10 @@ class OpenIDImplicitGrant(ImplicitGrant):
 
             def get_jwt_config(self):
                 return {
-                    'key': read_private_key_file(key_path),
-                    'alg': 'RS256',
-                    'iss': 'issuer-identity',
-                    'exp': 3600
+                    "key": read_private_key_file(key_path),
+                    "alg": "RS256",
+                    "iss": "issuer-identity",
+                    "exp": 3600,
                 }
 
         :return: dict
@@ -59,10 +58,11 @@ class OpenIDImplicitGrant(ImplicitGrant):
 
             from authlib.oidc.core import UserInfo
 
+
             def generate_user_info(self, user, scope):
                 user_info = UserInfo(sub=user.id, name=user.name)
-                if 'email' in scope:
-                    user_info['email'] = user.email
+                if "email" in scope:
+                    user_info["email"] = user.email
                 return user_info
 
         :param user: user instance
@@ -79,13 +79,13 @@ class OpenIDImplicitGrant(ImplicitGrant):
         return [client.get_client_id()]
 
     def validate_authorization_request(self):
-        if not is_openid_scope(self.request.scope):
+        if not is_openid_scope(self.request.payload.scope):
             raise InvalidScopeError(
-                'Missing "openid" scope',
-                redirect_uri=self.request.redirect_uri,
+                "Missing 'openid' scope",
+                redirect_uri=self.request.payload.redirect_uri,
                 redirect_fragment=True,
             )
-        redirect_uri = super(OpenIDImplicitGrant, self).validate_authorization_request()
+        redirect_uri = super().validate_authorization_request()
         try:
             validate_nonce(self.request, self.exists_nonce, required=True)
         except OAuth2Error as error:
@@ -94,22 +94,26 @@ class OpenIDImplicitGrant(ImplicitGrant):
             raise error
         return redirect_uri
 
+    @hooked
     def validate_consent_request(self):
         redirect_uri = self.validate_authorization_request()
         validate_request_prompt(self, redirect_uri, redirect_fragment=True)
+        return redirect_uri
 
     def create_authorization_response(self, redirect_uri, grant_user):
-        state = self.request.state
+        state = self.request.payload.state
         if grant_user:
             params = self.create_granted_params(grant_user)
             if state:
-                params.append(('state', state))
+                params.append(("state", state))
         else:
-            error = AccessDeniedError(state=state)
+            error = AccessDeniedError()
             params = error.get_body()
 
         # http://openid.net/specs/oauth-v2-multiple-response-types-1_0.html#ResponseModes
-        response_mode = self.request.data.get('response_mode', self.DEFAULT_RESPONSE_MODE)
+        response_mode = self.request.payload.data.get(
+            "response_mode", self.DEFAULT_RESPONSE_MODE
+        )
         return create_response_mode_response(
             redirect_uri=redirect_uri,
             params=params,
@@ -121,17 +125,17 @@ class OpenIDImplicitGrant(ImplicitGrant):
         client = self.request.client
         token = self.generate_token(
             user=grant_user,
-            scope=self.request.scope,
-            include_refresh_token=False
+            scope=self.request.payload.scope,
+            include_refresh_token=False,
         )
-        if self.request.response_type == 'id_token':
+        if self.request.payload.response_type == "id_token":
             token = {
-                'expires_in': token['expires_in'],
-                'scope': token['scope'],
+                "expires_in": token["expires_in"],
+                "scope": token["scope"],
             }
             token = self.process_implicit_token(token)
         else:
-            log.debug('Grant token %r to %r', token, client)
+            log.debug("Grant token %r to %r", token, client)
             self.server.save_token(token, self.request)
             token = self.process_implicit_token(token)
         params = [(k, token[k]) for k in token]
@@ -139,12 +143,12 @@ class OpenIDImplicitGrant(ImplicitGrant):
 
     def process_implicit_token(self, token, code=None):
         config = self.get_jwt_config()
-        config['aud'] = self.get_audiences(self.request)
-        config['nonce'] = self.request.data.get('nonce')
+        config["aud"] = self.get_audiences(self.request)
+        config["nonce"] = self.request.payload.data.get("nonce")
         if code is not None:
-            config['code'] = code
+            config["code"] = code
 
-        user_info = self.generate_user_info(self.request.user, token['scope'])
+        user_info = self.generate_user_info(self.request.user, token["scope"])
         id_token = generate_id_token(token, user_info, **config)
-        token['id_token'] = id_token
+        token["id_token"] = id_token
         return token

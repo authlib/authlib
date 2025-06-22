@@ -9,6 +9,13 @@ JSON Web Encryption (JWE)
 JSON Web Encryption (JWE) represents encrypted content using
 JSON-based data structures.
 
+.. important::
+
+    We are splitting the ``jose`` module into a separated package. You may be
+    interested in joserfc_.
+
+.. _joserfc: https://jose.authlib.org/en/dev/guide/jwe/
+
 There are two types of JWE Serializations:
 
 1. JWE Compact Serialization

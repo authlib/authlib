@@ -1,11 +1,8 @@
 import json
 import time
-from typing import (
-    Any,
-    Dict,
-    Hashable,
-    Optional,
-)
+from collections.abc import Hashable
+from typing import Any
+from typing import Optional
 
 from ..base_client import FrameworkIntegration
 
@@ -20,8 +17,10 @@ class StarletteIntegration(FrameworkIntegration):
         except (TypeError, ValueError):
             return None
 
-    async def get_state_data(self, session: Optional[Dict[str, Any]], state: str) -> Dict[str, Any]:
-        key = f'_state_{self.name}_{state}'
+    async def get_state_data(
+        self, session: Optional[dict[str, Any]], state: str
+    ) -> dict[str, Any]:
+        key = f"_state_{self.name}_{state}"
         if self.cache:
             value = await self._get_cache_data(key)
         elif session is not None:
@@ -30,19 +29,26 @@ class StarletteIntegration(FrameworkIntegration):
             value = None
 
         if value:
-            return value.get('data')
+            return value.get("data")
         return None
 
-    async def set_state_data(self, session: Optional[Dict[str, Any]], state: str, data: Any):
-        key = f'_state_{self.name}_{state}'
+    async def set_state_data(
+        self, session: Optional[dict[str, Any]], state: str, data: Any
+    ):
+        key_prefix = f"_state_{self.name}_"
+        key = f"{key_prefix}{state}"
         if self.cache:
-            await self.cache.set(key, json.dumps({'data': data}), self.expires_in)
+            await self.cache.set(key, json.dumps({"data": data}), self.expires_in)
         elif session is not None:
+            # clear old state data to avoid session size growing
+            for old_key in list(session.keys()):
+                if old_key.startswith(key_prefix):
+                    session.pop(old_key)
             now = time.time()
-            session[key] = {'data': data, 'exp': now + self.expires_in}
+            session[key] = {"data": data, "exp": now + self.expires_in}
 
-    async def clear_state_data(self, session: Optional[Dict[str, Any]], state: str):
-        key = f'_state_{self.name}_{state}'
+    async def clear_state_data(self, session: Optional[dict[str, Any]], state: str):
+        key = f"_state_{self.name}_{state}"
         if self.cache:
             await self.cache.delete(key)
         elif session is not None:
@@ -59,7 +65,7 @@ class StarletteIntegration(FrameworkIntegration):
 
         rv = {}
         for k in params:
-            conf_key = '{}_{}'.format(name, k).upper()
+            conf_key = f"{name}_{k}".upper()
             v = oauth.config.get(conf_key, default=None)
             if v is not None:
                 rv[k] = v

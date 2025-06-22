@@ -1,25 +1,27 @@
 import os
 import unittest
-from flask import Flask, request, jsonify
+
+from flask import Flask
+from flask import jsonify
+from flask import request
 from flask_sqlalchemy import SQLAlchemy
-from authlib.oauth1 import (
-    ClientMixin,
-    TokenCredentialMixin,
-    TemporaryCredentialMixin,
-)
+
+from authlib.common.urls import url_encode
+from authlib.integrations.flask_oauth1 import AuthorizationServer
+from authlib.integrations.flask_oauth1 import ResourceProtector
 from authlib.integrations.flask_oauth1 import (
-    AuthorizationServer, ResourceProtector, current_credential
-)
-from authlib.integrations.flask_oauth1 import (
-    register_temporary_credential_hooks,
-    register_nonce_hooks,
     create_exists_nonce_func as create_cache_exists_nonce_func,
 )
+from authlib.integrations.flask_oauth1 import current_credential
+from authlib.integrations.flask_oauth1 import register_nonce_hooks
+from authlib.integrations.flask_oauth1 import register_temporary_credential_hooks
+from authlib.oauth1 import ClientMixin
+from authlib.oauth1 import TemporaryCredentialMixin
+from authlib.oauth1 import TokenCredentialMixin
 from authlib.oauth1.errors import OAuth1Error
-from authlib.common.urls import url_encode
 from tests.util import read_file_path
-from ..cache import SimpleCache
 
+from ..cache import SimpleCache
 
 db = SQLAlchemy()
 
@@ -36,11 +38,9 @@ class Client(ClientMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     client_id = db.Column(db.String(48), index=True)
     client_secret = db.Column(db.String(120), nullable=False)
-    default_redirect_uri = db.Column(db.Text, nullable=False, default='')
-    user_id = db.Column(
-        db.Integer, db.ForeignKey('user.id', ondelete='CASCADE')
-    )
-    user = db.relationship('User')
+    default_redirect_uri = db.Column(db.Text, nullable=False, default="")
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"))
+    user = db.relationship("User")
 
     def get_default_redirect_uri(self):
         return self.default_redirect_uri
@@ -49,15 +49,13 @@ class Client(ClientMixin, db.Model):
         return self.client_secret
 
     def get_rsa_public_key(self):
-        return read_file_path('rsa_public.pem')
+        return read_file_path("rsa_public.pem")
 
 
 class TokenCredential(TokenCredentialMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(
-        db.Integer, db.ForeignKey('user.id', ondelete='CASCADE')
-    )
-    user = db.relationship('User')
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"))
+    user = db.relationship("User")
     client_id = db.Column(db.String(48), index=True)
     oauth_token = db.Column(db.String(84), unique=True, index=True)
     oauth_token_secret = db.Column(db.String(84))
@@ -71,15 +69,13 @@ class TokenCredential(TokenCredentialMixin, db.Model):
 
 class TemporaryCredential(TemporaryCredentialMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(
-        db.Integer, db.ForeignKey('user.id', ondelete='CASCADE')
-    )
-    user = db.relationship('User')
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"))
+    user = db.relationship("User")
     client_id = db.Column(db.String(48), index=True)
     oauth_token = db.Column(db.String(84), unique=True, index=True)
     oauth_token_secret = db.Column(db.String(84))
     oauth_verifier = db.Column(db.String(84))
-    oauth_callback = db.Column(db.Text, default='')
+    oauth_callback = db.Column(db.Text, default="")
 
     def get_user_id(self):
         return self.user_id
@@ -103,8 +99,7 @@ class TemporaryCredential(TemporaryCredentialMixin, db.Model):
 class TimestampNonce(db.Model):
     __table_args__ = (
         db.UniqueConstraint(
-            'client_id', 'timestamp', 'nonce', 'oauth_token',
-            name='unique_nonce'
+            "client_id", "timestamp", "nonce", "oauth_token", name="unique_nonce"
         ),
     )
     id = db.Column(db.Integer, primary_key=True)
@@ -140,8 +135,8 @@ def exists_nonce(nonce, timestamp, client_id, oauth_token):
 def create_temporary_credential(token, client_id, redirect_uri):
     item = TemporaryCredential(
         client_id=client_id,
-        oauth_token=token['oauth_token'],
-        oauth_token_secret=token['oauth_token_secret'],
+        oauth_token=token["oauth_token"],
+        oauth_token_secret=token["oauth_token_secret"],
         oauth_callback=redirect_uri,
     )
     db.session.add(item)
@@ -169,9 +164,9 @@ def create_authorization_verifier(credential, grant_user, verifier):
 
 def create_token_credential(token, temporary_credential):
     credential = TokenCredential(
-        oauth_token=token['oauth_token'],
-        oauth_token_secret=token['oauth_token_secret'],
-        client_id=temporary_credential.get_client_id()
+        oauth_token=token["oauth_token"],
+        oauth_token_secret=token["oauth_token_secret"],
+        client_id=temporary_credential.get_client_id(),
     )
     credential.user_id = temporary_credential.get_user_id()
     db.session.add(credential)
@@ -192,30 +187,32 @@ def create_authorization_server(app, use_cache=False, lazy=False):
         cache = SimpleCache()
         register_nonce_hooks(server, cache)
         register_temporary_credential_hooks(server, cache)
-        server.register_hook('create_token_credential', create_token_credential)
+        server.register_hook("create_token_credential", create_token_credential)
     else:
-        server.register_hook('exists_nonce', exists_nonce)
-        server.register_hook('create_temporary_credential', create_temporary_credential)
-        server.register_hook('get_temporary_credential', get_temporary_credential)
-        server.register_hook('delete_temporary_credential', delete_temporary_credential)
-        server.register_hook('create_authorization_verifier', create_authorization_verifier)
-        server.register_hook('create_token_credential', create_token_credential)
+        server.register_hook("exists_nonce", exists_nonce)
+        server.register_hook("create_temporary_credential", create_temporary_credential)
+        server.register_hook("get_temporary_credential", get_temporary_credential)
+        server.register_hook("delete_temporary_credential", delete_temporary_credential)
+        server.register_hook(
+            "create_authorization_verifier", create_authorization_verifier
+        )
+        server.register_hook("create_token_credential", create_token_credential)
 
-    @app.route('/oauth/initiate', methods=['GET', 'POST'])
+    @app.route("/oauth/initiate", methods=["GET", "POST"])
     def initiate():
         return server.create_temporary_credentials_response()
 
-    @app.route('/oauth/authorize', methods=['GET', 'POST'])
+    @app.route("/oauth/authorize", methods=["GET", "POST"])
     def authorize():
-        if request.method == 'GET':
+        if request.method == "GET":
             try:
                 server.check_authorization_request()
-                return 'ok'
+                return "ok"
             except OAuth1Error:
-                return 'error'
-        user_id = request.form.get('user_id')
+                return "error"
+        user_id = request.form.get("user_id")
         if user_id:
-            grant_user = User.query.get(int(user_id))
+            grant_user = db.session.get(User, int(user_id))
         else:
             grant_user = None
         try:
@@ -223,7 +220,7 @@ def create_authorization_server(app, use_cache=False, lazy=False):
         except OAuth1Error as error:
             return url_encode(error.get_body())
 
-    @app.route('/oauth/token', methods=['POST'])
+    @app.route("/oauth/token", methods=["POST"])
     def issue_token():
         return server.create_token_response()
 
@@ -235,6 +232,7 @@ def create_resource_server(app, use_cache=False, lazy=False):
         cache = SimpleCache()
         exists_nonce = create_cache_exists_nonce_func(cache)
     else:
+
         def exists_nonce(nonce, timestamp, client_id, oauth_token):
             q = db.session.query(TimestampNonce.nonce).filter_by(
                 nonce=nonce,
@@ -261,16 +259,17 @@ def create_resource_server(app, use_cache=False, lazy=False):
         return Client.query.filter_by(client_id=client_id).first()
 
     def query_token(client_id, oauth_token):
-        return TokenCredential.query.filter_by(client_id=client_id, oauth_token=oauth_token).first()
+        return TokenCredential.query.filter_by(
+            client_id=client_id, oauth_token=oauth_token
+        ).first()
 
     if lazy:
         require_oauth = ResourceProtector()
         require_oauth.init_app(app, query_client, query_token, exists_nonce)
     else:
-        require_oauth = ResourceProtector(
-            app, query_client, query_token, exists_nonce)
+        require_oauth = ResourceProtector(app, query_client, query_token, exists_nonce)
 
-    @app.route('/user')
+    @app.route("/user")
     @require_oauth()
     def user_profile():
         user = current_credential.user
@@ -281,18 +280,24 @@ def create_flask_app():
     app = Flask(__name__)
     app.debug = True
     app.testing = True
-    app.secret_key = 'testing'
-    app.config.update({
-        'OAUTH1_SUPPORTED_SIGNATURE_METHODS': ['PLAINTEXT', 'HMAC-SHA1', 'RSA-SHA1'],
-        'SQLALCHEMY_TRACK_MODIFICATIONS': False,
-        'SQLALCHEMY_DATABASE_URI': 'sqlite://'
-    })
+    app.secret_key = "testing"
+    app.config.update(
+        {
+            "OAUTH1_SUPPORTED_SIGNATURE_METHODS": [
+                "PLAINTEXT",
+                "HMAC-SHA1",
+                "RSA-SHA1",
+            ],
+            "SQLALCHEMY_TRACK_MODIFICATIONS": False,
+            "SQLALCHEMY_DATABASE_URI": "sqlite://",
+        }
+    )
     return app
 
 
 class TestCase(unittest.TestCase):
     def setUp(self):
-        os.environ['AUTHLIB_INSECURE_TRANSPORT'] = 'true'
+        os.environ["AUTHLIB_INSECURE_TRANSPORT"] = "true"
         app = create_flask_app()
 
         self._ctx = app.app_context()
@@ -307,4 +312,4 @@ class TestCase(unittest.TestCase):
     def tearDown(self):
         db.drop_all()
         self._ctx.pop()
-        os.environ.pop('AUTHLIB_INSECURE_TRANSPORT')
+        os.environ.pop("AUTHLIB_INSECURE_TRANSPORT")

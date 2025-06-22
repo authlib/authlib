@@ -1,0 +1,37 @@
+.. _specs/rfc9101:
+
+RFC9101: The OAuth 2.0 Authorization Framework: JWT-Secured Authorization Request (JAR)
+=======================================================================================
+
+This section contains the generic implementation of :rfc:`RFC9101 <9101>`.
+
+This specification describe how to pass the authorization request payload
+in a JWT (called *request object*) instead of directly instead of GET or POST params.
+
+The request object can either be passed directly in a ``request`` parameter,
+or be hosted by the client and be passed by reference with a ``request_uri``
+parameter.
+
+This usage is more secure than passing the request payload directly in the request,
+read the RFC to know all the details.
+
+Request objects are optional, unless it is enforced by clients with the
+``require_signed_request_object`` client metadata, or server-wide with the
+``require_signed_request_object`` server metadata.
+
+API Reference
+-------------
+
+.. module:: authlib.oauth2.rfc9101
+
+.. autoclass:: JWTAuthenticationRequest
+    :member-order: bysource
+    :members:
+
+.. autoclass:: ClientMetadataClaims
+    :member-order: bysource
+    :members:
+
+.. autoclass:: AuthorizationServerMetadata
+    :member-order: bysource
+    :members:

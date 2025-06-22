@@ -1,12 +1,13 @@
-"""
-    authlib.jose.draft
-    ~~~~~~~~~~~~~~~~~~~~
+"""authlib.jose.draft.
+~~~~~~~~~~~~~~~~~~~~
 
-    Content Encryption per `Section 4`_.
+Content Encryption per `Section 4`_.
 
-    .. _`Section 4`: https://datatracker.ietf.org/doc/html/draft-amringer-jose-chacha-02#section-4
+.. _`Section 4`: https://datatracker.ietf.org/doc/html/draft-amringer-jose-chacha-02#section-4
 """
+
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
+
 from authlib.jose.rfc7516 import JWEEncAlgorithm
 
 
@@ -16,13 +17,13 @@ class C20PEncAlgorithm(JWEEncAlgorithm):
     IV_SIZE = 96
 
     def __init__(self, key_size):
-        self.name = 'C20P'
-        self.description = 'ChaCha20-Poly1305'
+        self.name = "C20P"
+        self.description = "ChaCha20-Poly1305"
         self.key_size = key_size
         self.CEK_SIZE = key_size
 
     def encrypt(self, msg, aad, iv, key):
-        """Content Encryption with AEAD_CHACHA20_POLY1305
+        """Content Encryption with AEAD_CHACHA20_POLY1305.
 
         :param msg: text to be encrypt in bytes
         :param aad: additional authenticated data in bytes
@@ -36,7 +37,7 @@ class C20PEncAlgorithm(JWEEncAlgorithm):
         return ciphertext[:-16], ciphertext[-16:]
 
     def decrypt(self, ciphertext, aad, iv, tag, key):
-        """Content Decryption with AEAD_CHACHA20_POLY1305
+        """Content Decryption with AEAD_CHACHA20_POLY1305.
 
         :param ciphertext: ciphertext in bytes
         :param aad: additional authenticated data in bytes

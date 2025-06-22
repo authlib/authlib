@@ -30,7 +30,7 @@ Feature Requests
 If you have feature requests, please comment on `Features Checklist`_.
 If they are accepted, they will be listed in the post.
 
-.. _`Features Checklist`: https://github.com/lepture/authlib/issues/1
+.. _`Features Checklist`: https://github.com/authlib/authlib/issues/1
 
 
 Commercial Support

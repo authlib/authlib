@@ -1,0 +1,66 @@
+.. _specs/rfc9068:
+
+RFC9068: JSON Web Token (JWT) Profile for OAuth 2.0 Access Tokens
+=================================================================
+
+This section contains the generic implementation of RFC9068_.
+JSON Web Token (JWT) Profile for OAuth 2.0 Access Tokens allows
+developers to generate JWT access tokens.
+
+Using JWT instead of plain text for access tokens result in different
+possibilities:
+
+- User information can be filled in the JWT claims, similar to the
+  :ref:`specs/oidc` ``id_token``, possibly making the economy of
+  requests to the ``userinfo_endpoint``.
+- Resource servers do not *need* to reach the authorization server
+  :ref:`specs/rfc7662` endpoint to verify each incoming tokens, as
+  the JWT signature is a proof of its validity. This brings the economy
+  of one network request at each resource access.
+- Consequently, the authorization server do not need to store access
+  tokens in a database. If a resource server does not implement this
+  spec and still need to reach the authorization server introspection
+  endpoint to check the token validation, then the authorization server
+  can simply validate the JWT without requesting its database.
+- If the authorization server do not store access tokens in a database,
+  it won't have the possibility to revoke the tokens. The produced access
+  tokens will be valid until the timestamp defined in its ``exp`` claim
+  is reached.
+
+This specification is just about **access** tokens. Other kinds of tokens
+like refresh tokens are not covered.
+
+RFC9068_ define a few optional JWT claims inspired from RFC7643_ that can
+can be used to determine if the token bearer is authorized to access a
+resource: ``groups``, ``roles`` and ``entitlements``.
+
+This module brings tools to:
+
+- generate JWT access tokens with :class:`~authlib.oauth2.rfc9068.JWTBearerTokenGenerator`
+- protected resources endpoints and validate JWT access tokens with :class:`~authlib.oauth2.rfc9068.JWTBearerTokenValidator`
+- introspect JWT access tokens with :class:`~authlib.oauth2.rfc9068.JWTIntrospectionEndpoint`
+- deny JWT access tokens revokation attempts with :class:`~authlib.oauth2.rfc9068.JWTRevocationEndpoint`
+
+.. _RFC9068: https://www.rfc-editor.org/rfc/rfc9068.html
+.. _RFC7643: https://tools.ietf.org/html/rfc7643
+
+API Reference
+-------------
+
+.. module:: authlib.oauth2.rfc9068
+
+.. autoclass:: JWTBearerTokenGenerator
+    :member-order: bysource
+    :members:
+
+.. autoclass:: JWTBearerTokenValidator
+    :member-order: bysource
+    :members:
+
+.. autoclass:: JWTIntrospectionEndpoint
+    :member-order: bysource
+    :members:
+
+.. autoclass:: JWTRevocationEndpoint
+    :member-order: bysource
+    :members:

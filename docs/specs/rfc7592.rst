@@ -35,7 +35,7 @@ Before register the endpoint, developers MUST implement the missing methods::
             return token
 
         def authenticate_client(self, request):
-            client_id = request.data.get('client_id')
+            client_id = request.payload.data.get('client_id')
             return Client.get(client_id=client_id)
 
         def revoke_access_token(self, token, request):

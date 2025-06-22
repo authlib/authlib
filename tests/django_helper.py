@@ -1,5 +1,6 @@
-from django.test import TestCase as _TestCase, RequestFactory
 from django.conf import settings
+from django.test import RequestFactory
+from django.test import TestCase as _TestCase
 from django.utils.module_loading import import_module
 
 

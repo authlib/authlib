@@ -44,7 +44,7 @@ Configuration
 -------------
 
 Authlib Flask OAuth registry can load the configuration from Flask ``app.config``
-automatically. Every key value pair in ``.register`` can be omitted. They can be
+automatically. Every key-value pair in ``.register`` can be omitted. They can be
 configured in your Flask App configuration. Config keys are formatted as
 ``{name}_{key}`` in uppercase, e.g.
 
@@ -71,7 +71,7 @@ Here is a full list of the configuration keys:
 - ``{name}_REQUEST_TOKEN_PARAMS``: Extra parameters for Request Token endpoint
 - ``{name}_ACCESS_TOKEN_URL``: Access Token endpoint for OAuth 1 and OAuth 2
 - ``{name}_ACCESS_TOKEN_PARAMS``: Extra parameters for Access Token endpoint
-- ``{name}_AUTHORIZE_URL``: Endpoint for user authorization of OAuth 1 ro OAuth 2
+- ``{name}_AUTHORIZE_URL``: Endpoint for user authorization of OAuth 1 or OAuth 2
 - ``{name}_AUTHORIZE_PARAMS``: Extra parameters for Authorization Endpoint.
 - ``{name}_API_BASE_URL``: A base URL endpoint to make requests simple
 - ``{name}_CLIENT_KWARGS``: Extra keyword arguments for OAuth1Session or OAuth2Session
@@ -83,8 +83,8 @@ your Flask application configuration.
 Using Cache for Temporary Credential
 ------------------------------------
 
-By default, Flask OAuth registry will use Flask session to store OAuth 1.0 temporary
-credential (request token). However in this way, there are chances your temporary
+By default, the Flask OAuth registry will use Flask session to store OAuth 1.0 temporary
+credential (request token). However, in this way, there are chances your temporary
 credential will be exposed.
 
 Our ``OAuth`` registry provides a simple way to store temporary credentials in a cache
@@ -98,8 +98,45 @@ system. When initializing ``OAuth``, you can pass an ``cache`` instance::
 
 A ``cache`` instance MUST have methods:
 
+- ``.delete(key)``
 - ``.get(key)``
 - ``.set(key, value, expires=None)``
+
+An example of a ``cache`` instance can be:
+
+.. code-block:: python
+
+    from flask import Flask
+
+    class OAuthCache:
+
+        def __init__(self, app: Flask) -> None:
+            """Initialize the AuthCache."""
+            self.app = app
+
+        def delete(self, key: str) -> None:
+            """
+            Delete a cache entry.
+    
+            :param key: Unique identifier for the cache entry.
+            """
+
+        def get(self, key: str) -> str | None:
+            """
+            Retrieve a value from the cache.
+    
+            :param key: Unique identifier for the cache entry.
+            :return: Retrieved value or None if not found or expired.
+            """
+
+        def set(self, key: str, value: str, expires: int | None = None) -> None:
+            """
+            Set a value in the cache with optional expiration.
+    
+            :param key: Unique identifier for the cache entry.
+            :param value: Value to be stored.
+            :param expires: Expiration time in seconds. Defaults to None (no expiration).
+            """
 
 
 Routes for Authorization
@@ -108,7 +145,7 @@ Routes for Authorization
 Unlike the examples in :ref:`frameworks_clients`, Flask does not pass a ``request``
 into routes. In this case, the routes for authorization should look like::
 
-    from flask import url_for, render_template
+    from flask import url_for, redirect
 
     @app.route('/login')
     def login():
@@ -128,7 +165,7 @@ Accessing OAuth Resources
 -------------------------
 
 There is no ``request`` in accessing OAuth resources either. Just like above,
-we don't need to pass ``request`` parameter, everything is handled by Authlib
+we don't need to pass the ``request`` parameter, everything is handled by Authlib
 automatically::
 
     from flask import render_template
@@ -156,7 +193,7 @@ In this case, our ``fetch_token`` could look like::
         )
         return token.to_token()
 
-    # initialize OAuth registry with this fetch_token function
+    # initialize the OAuth registry with this fetch_token function
     oauth = OAuth(fetch_token=fetch_token)
 
 You don't have to pass ``token``, you don't have to pass ``request``. That
@@ -169,10 +206,10 @@ Auto Update Token via Signal
 
     The signal is added since v0.13
 
-Instead of define a ``update_token`` method and passing it into OAuth registry,
-it is also possible to use signal to listen for token updating.
+Instead of defining an ``update_token`` method and passing it into the OAuth registry,
+it is also possible to use a signal to listen for token updating.
 
-Before using signal, make sure you have installed **blinker** library::
+Before using the signal, make sure you have installed the **blinker** library::
 
     $ pip install blinker
 
@@ -200,7 +237,7 @@ Flask OpenID Connect Client
 ---------------------------
 
 An OpenID Connect client is no different than a normal OAuth 2.0 client. When
-register with ``openid`` scope, the built-in Flask OAuth client will handle everything
+registered with ``openid`` scope, the built-in Flask OAuth client will handle everything
 automatically::
 
     oauth.register(

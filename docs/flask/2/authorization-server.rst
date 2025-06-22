@@ -163,18 +163,22 @@ OAUTH2_ERROR_URIS                  A list of tuple for (``error``, ``error_uri``
 Now define an endpoint for authorization. This endpoint is used by
 ``authorization_code`` and ``implicit`` grants::
 
+    from authlib.oauth2 import OAuth2Error
     from flask import request, render_template
     from your_project.auth import current_user
 
     @app.route('/oauth/authorize', methods=['GET', 'POST'])
     def authorize():
+        try:
+            grant = server.get_consent_grant(end_user=current_user)
+        except OAuth2Error as error:
+            return authorization.handle_error_response(request, error)
+
         # Login is required since we need to know the current resource owner.
         # It can be done with a redirection to the login page, or a login
         # form on this authorization page.
         if request.method == 'GET':
-            grant = server.get_consent_grant(end_user=current_user)
-            client = grant.client
-            scope = client.get_allowed_scope(grant.request.scope)
+            scope = grant.client.get_allowed_scope(grant.request.payload.scope)
 
             # You may add a function to extract scope into a list of scopes
             # with rich information, e.g.
@@ -183,15 +187,16 @@ Now define an endpoint for authorization. This endpoint is used by
                 'authorize.html',
                 grant=grant,
                 user=current_user,
-                client=client,
                 scopes=scopes,
             )
+
         confirmed = request.form['confirm']
         if confirmed:
             # granted by resource owner
-            return server.create_authorization_response(grant_user=current_user)
+            return server.create_authorization_response(grant=grant, grant_user=current_user)
+
         # denied by resource owner
-        return server.create_authorization_response(grant_user=None)
+        return server.create_authorization_response(grant=grant, grant_user=None)
 
 This is a simple demo, the real case should be more complex. There is a little
 more complex demo in https://github.com/authlib/example-oauth2-server.

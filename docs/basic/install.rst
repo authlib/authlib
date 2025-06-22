@@ -57,19 +57,19 @@ Get the Source Code
 -------------------
 
 Authlib is actively developed on GitHub, where the code is
-`always available <https://github.com/lepture/authlib>`_.
+`always available <https://github.com/authlib/authlib>`_.
 
 You can either clone the public repository::
 
-    $ git clone git://github.com/lepture/authlib.git
+    $ git clone git://github.com/authlib/authlib.git
 
-Download the `tarball <https://github.com/lepture/authlib/tarball/master>`_::
+Download the `tarball <https://github.com/authlib/authlib/tarball/main>`_::
 
-    $ curl -OL https://github.com/lepture/authlib/tarball/master
+    $ curl -OL https://github.com/authlib/authlib/tarball/main
 
-Or, download the `zipball <https://github.com/lepture/authlib/zipball/master>`_::
+Or, download the `zipball <https://github.com/authlib/authlib/zipball/main>`_::
 
-    $ curl -OL https://github.com/lepture/authlib/zipball/master
+    $ curl -OL https://github.com/authlib/authlib/zipball/main
 
 
 Once you have a copy of the source, you can embed it in your Python package,

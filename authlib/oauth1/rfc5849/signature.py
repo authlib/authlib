@@ -1,26 +1,29 @@
-# -*- coding: utf-8 -*-
-"""
-    authlib.oauth1.rfc5849.signature
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+"""authlib.oauth1.rfc5849.signature.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    This module represents a direct implementation of `section 3.4`_ of the spec.
+This module represents a direct implementation of `section 3.4`_ of the spec.
 
-    .. _`section 3.4`: https://tools.ietf.org/html/rfc5849#section-3.4
+.. _`section 3.4`: https://tools.ietf.org/html/rfc5849#section-3.4
 """
+
 import binascii
 import hashlib
 import hmac
+
+from authlib.common.encoding import to_bytes
+from authlib.common.encoding import to_unicode
 from authlib.common.urls import urlparse
-from authlib.common.encoding import to_unicode, to_bytes
-from .util import escape, unescape
+
+from .util import escape
+from .util import unescape
 
 SIGNATURE_HMAC_SHA1 = "HMAC-SHA1"
 SIGNATURE_RSA_SHA1 = "RSA-SHA1"
 SIGNATURE_PLAINTEXT = "PLAINTEXT"
 
-SIGNATURE_TYPE_HEADER = 'HEADER'
-SIGNATURE_TYPE_QUERY = 'QUERY'
-SIGNATURE_TYPE_BODY = 'BODY'
+SIGNATURE_TYPE_HEADER = "HEADER"
+SIGNATURE_TYPE_QUERY = "QUERY"
+SIGNATURE_TYPE_BODY = "BODY"
 
 
 def construct_base_string(method, uri, params, host=None):
@@ -52,7 +55,6 @@ def construct_base_string(method, uri, params, host=None):
 
     .. _`Section 3.4.1`: https://tools.ietf.org/html/rfc5849#section-3.4.1
     """
-
     # Create base string URI per Section 3.4.1.2
     base_string_uri = normalize_base_string_uri(uri, host)
 
@@ -60,11 +62,11 @@ def construct_base_string(method, uri, params, host=None):
     unescaped_params = []
     for k, v in params:
         # The "oauth_signature" parameter MUST be excluded from the signature
-        if k in ('oauth_signature', 'realm'):
+        if k in ("oauth_signature", "realm"):
             continue
 
         # ensure oauth params are unescaped
-        if k.startswith('oauth_'):
+        if k.startswith("oauth_"):
             v = unescape(v)
         unescaped_params.append((k, v))
 
@@ -72,11 +74,13 @@ def construct_base_string(method, uri, params, host=None):
     normalized_params = normalize_parameters(unescaped_params)
 
     # construct base string
-    return '&'.join([
-        escape(method.upper()),
-        escape(base_string_uri),
-        escape(normalized_params),
-    ])
+    return "&".join(
+        [
+            escape(method.upper()),
+            escape(base_string_uri),
+            escape(normalized_params),
+        ]
+    )
 
 
 def normalize_base_string_uri(uri, host=None):
@@ -110,7 +114,7 @@ def normalize_base_string_uri(uri, host=None):
     # .. _`RFC3986`: https://tools.ietf.org/html/rfc3986
 
     if not scheme or not netloc:
-        raise ValueError('uri must include a scheme and netloc')
+        raise ValueError("uri must include a scheme and netloc")
 
     # Per `RFC 2616 section 5.1.2`_:
     #
@@ -119,7 +123,7 @@ def normalize_base_string_uri(uri, host=None):
     #
     # .. _`RFC 2616 section 5.1.2`: https://tools.ietf.org/html/rfc2616#section-5.1.2
     if not path:
-        path = '/'
+        path = "/"
 
     # 1.  The scheme and host MUST be in lowercase.
     scheme = scheme.lower()
@@ -139,15 +143,15 @@ def normalize_base_string_uri(uri, host=None):
     # .. _`RFC2616`: https://tools.ietf.org/html/rfc2616
     # .. _`RFC2818`: https://tools.ietf.org/html/rfc2818
     default_ports = (
-        ('http', '80'),
-        ('https', '443'),
+        ("http", "80"),
+        ("https", "443"),
     )
-    if ':' in netloc:
-        host, port = netloc.split(':', 1)
+    if ":" in netloc:
+        host, port = netloc.split(":", 1)
         if (scheme, port) in default_ports:
             netloc = host
 
-    return urlparse.urlunparse((scheme, netloc, path, params, '', ''))
+    return urlparse.urlunparse((scheme, netloc, path, params, "", ""))
 
 
 def normalize_parameters(params):
@@ -219,7 +223,6 @@ def normalize_parameters(params):
 
     .. _`Section 3.4.1.3.2`: https://tools.ietf.org/html/rfc5849#section-3.4.1.3.2
     """
-
     # 1.  First, the name and value of each parameter are encoded
     #     (`Section 3.6`_).
     #
@@ -234,19 +237,18 @@ def normalize_parameters(params):
     # 3.  The name of each parameter is concatenated to its corresponding
     #     value using an "=" character (ASCII code 61) as a separator, even
     #     if the value is empty.
-    parameter_parts = ['{0}={1}'.format(k, v) for k, v in key_values]
+    parameter_parts = [f"{k}={v}" for k, v in key_values]
 
     # 4.  The sorted name/value pairs are concatenated together into a
     #     single string by using an "&" character (ASCII code 38) as
     #     separator.
-    return '&'.join(parameter_parts)
+    return "&".join(parameter_parts)
 
 
 def generate_signature_base_string(request):
     """Generate signature base string from request."""
-    host = request.headers.get('Host', None)
-    return construct_base_string(
-        request.method, request.uri, request.params, host)
+    host = request.headers.get("Host", None)
+    return construct_base_string(request.method, request.uri, request.params, host)
 
 
 def hmac_sha1_signature(base_string, client_secret, token_secret):
@@ -255,12 +257,11 @@ def hmac_sha1_signature(base_string, client_secret, token_secret):
     The "HMAC-SHA1" signature method uses the HMAC-SHA1 signature
     algorithm as defined in `RFC2104`_::
 
-        digest = HMAC-SHA1 (key, text)
+        digest = HMAC - SHA1(key, text)
 
     .. _`RFC2104`: https://tools.ietf.org/html/rfc2104
     .. _`Section 3.4.2`: https://tools.ietf.org/html/rfc5849#section-3.4.2
     """
-
     # The HMAC-SHA1 function variables are used in following way:
 
     # text is set to the value of the signature base string from
@@ -273,16 +274,16 @@ def hmac_sha1_signature(base_string, client_secret, token_secret):
     # 1.  The client shared-secret, after being encoded (`Section 3.6`_).
     #
     # .. _`Section 3.6`: https://tools.ietf.org/html/rfc5849#section-3.6
-    key = escape(client_secret or '')
+    key = escape(client_secret or "")
 
     # 2.  An "&" character (ASCII code 38), which MUST be included
     #     even when either secret is empty.
-    key += '&'
+    key += "&"
 
     # 3.  The token shared-secret, after being encoded (`Section 3.6`_).
     #
     # .. _`Section 3.6`: https://tools.ietf.org/html/rfc5849#section-3.6
-    key += escape(token_secret or '')
+    key += escape(token_secret or "")
 
     signature = hmac.new(to_bytes(key), to_bytes(text), hashlib.sha1)
 
@@ -309,6 +310,7 @@ def rsa_sha1_signature(base_string, rsa_private_key):
     .. _`RFC3447, Section 8.2`: https://tools.ietf.org/html/rfc3447#section-8.2
     """
     from .rsa import sign_sha1
+
     base_string = to_bytes(base_string)
     s = sign_sha1(to_bytes(base_string), rsa_private_key)
     sig = binascii.b2a_base64(s)[:-1]
@@ -326,23 +328,22 @@ def plaintext_signature(client_secret, token_secret):
 
     .. _`Section 3.4.4`: https://tools.ietf.org/html/rfc5849#section-3.4.4
     """
-
     # The "oauth_signature" protocol parameter is set to the concatenated
     # value of:
 
     # 1.  The client shared-secret, after being encoded (`Section 3.6`_).
     #
     # .. _`Section 3.6`: https://tools.ietf.org/html/rfc5849#section-3.6
-    signature = escape(client_secret or '')
+    signature = escape(client_secret or "")
 
     # 2.  An "&" character (ASCII code 38), which MUST be included even
     #     when either secret is empty.
-    signature += '&'
+    signature += "&"
 
     # 3.  The token shared-secret, after being encoded (`Section 3.6`_).
     #
     # .. _`Section 3.6`: https://tools.ietf.org/html/rfc5849#section-3.6
-    signature += escape(token_secret or '')
+    signature += escape(token_secret or "")
 
     return signature
 
@@ -350,8 +351,7 @@ def plaintext_signature(client_secret, token_secret):
 def sign_hmac_sha1(client, request):
     """Sign a HMAC-SHA1 signature."""
     base_string = generate_signature_base_string(request)
-    return hmac_sha1_signature(
-        base_string, client.client_secret, client.token_secret)
+    return hmac_sha1_signature(base_string, client.client_secret, client.token_secret)
 
 
 def sign_rsa_sha1(client, request):
@@ -368,14 +368,14 @@ def sign_plaintext(client, request):
 def verify_hmac_sha1(request):
     """Verify a HMAC-SHA1 signature."""
     base_string = generate_signature_base_string(request)
-    sig = hmac_sha1_signature(
-        base_string, request.client_secret, request.token_secret)
+    sig = hmac_sha1_signature(base_string, request.client_secret, request.token_secret)
     return hmac.compare_digest(sig, request.signature)
 
 
 def verify_rsa_sha1(request):
     """Verify a RSASSA-PKCS #1 v1.5 base64 encoded signature."""
     from .rsa import verify_sha1
+
     base_string = generate_signature_base_string(request)
     sig = binascii.a2b_base64(to_bytes(request.signature))
     return verify_sha1(sig, to_bytes(base_string), request.rsa_public_key)

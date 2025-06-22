@@ -1,0 +1,56 @@
+name: Release to PyPI
+
+permissions:
+  contents: write
+  id-token: write
+
+on:
+  push:
+    tags:
+      - "v1.*"
+
+env:
+  FORCE_COLOR: '1'
+
+jobs:
+  build:
+    name: build dist files
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: 3.9
+
+    - name: install build
+      run: python -m pip install --upgrade build
+
+    - name: build dist
+      run: python -m build
+
+    - uses: actions/upload-artifact@v4
+      with:
+        name: artifacts
+        path: dist/*
+        if-no-files-found: error
+
+  publish:
+    environment:
+      name: pypi-release
+      url: https://pypi.org/project/Authlib/
+    permissions:
+      id-token: write
+    name: release to pypi
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: artifacts
+        path: dist
+
+    - name: Push build artifacts to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1

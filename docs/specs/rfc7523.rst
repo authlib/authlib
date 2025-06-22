@@ -43,9 +43,11 @@ methods in order to use it. Here is an example::
             # if client has `jwks` column
             key_set = JsonWebKey.import_key_set(client.jwks)
 
+            return key_set.find_by_kid(headers['kid'])
+
         def authenticate_user(self, subject):
             # when assertion contains `sub` value, if this `sub` is email
-            return User.objects.get(email=sub)
+            return User.objects.get(email=subject)
 
         def has_granted_permission(self, client, user):
             # check if the client has access to user's resource.

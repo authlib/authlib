@@ -1,37 +1,40 @@
 import binascii
-from authlib.common.encoding import urlsafe_b64decode, json_loads, to_unicode
+
+from authlib.common.encoding import json_loads
+from authlib.common.encoding import to_unicode
+from authlib.common.encoding import urlsafe_b64decode
 from authlib.jose.errors import DecodeError
 
 
 def extract_header(header_segment, error_cls):
-    header_data = extract_segment(header_segment, error_cls, 'header')
+    header_data = extract_segment(header_segment, error_cls, "header")
 
     try:
-        header = json_loads(header_data.decode('utf-8'))
+        header = json_loads(header_data.decode("utf-8"))
     except ValueError as e:
-        raise error_cls('Invalid header string: {}'.format(e))
+        raise error_cls(f"Invalid header string: {e}") from e
 
     if not isinstance(header, dict):
-        raise error_cls('Header must be a json object')
+        raise error_cls("Header must be a json object")
     return header
 
 
-def extract_segment(segment, error_cls, name='payload'):
+def extract_segment(segment, error_cls, name="payload"):
     try:
         return urlsafe_b64decode(segment)
-    except (TypeError, binascii.Error):
-        msg = 'Invalid {} padding'.format(name)
-        raise error_cls(msg)
+    except (TypeError, binascii.Error) as exc:
+        msg = f"Invalid {name} padding"
+        raise error_cls(msg) from exc
 
 
 def ensure_dict(s, structure_name):
     if not isinstance(s, dict):
         try:
             s = json_loads(to_unicode(s))
-        except (ValueError, TypeError):
-            raise DecodeError('Invalid {}'.format(structure_name))
+        except (ValueError, TypeError) as exc:
+            raise DecodeError(f"Invalid {structure_name}") from exc
 
     if not isinstance(s, dict):
-        raise DecodeError('Invalid {}'.format(structure_name))
+        raise DecodeError(f"Invalid {structure_name}")
 
     return s

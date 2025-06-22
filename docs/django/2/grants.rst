@@ -67,8 +67,8 @@ grant type. Here is how::
                 code=code,
                 client_id=client.client_id,
                 redirect_uri=request.redirect_uri,
-                response_type=request.response_type,
-                scope=request.scope,
+                response_type=request.payload.response_type,
+                scope=request.payload.scope,
                 user=request.user,
             )
             auth_code.save()

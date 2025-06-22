@@ -38,7 +38,7 @@ Implement this grant by subclassing :class:`AuthorizationCodeGrant`::
                 code=code,
                 client_id=client.client_id,
                 redirect_uri=request.redirect_uri,
-                scope=request.scope,
+                scope=request.payload.scope,
                 user_id=request.user.id,
             )
             db.session.add(auth_code)

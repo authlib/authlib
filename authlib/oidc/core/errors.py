@@ -10,7 +10,8 @@ class InteractionRequiredError(OAuth2Error):
 
     http://openid.net/specs/openid-connect-core-1_0.html#AuthError
     """
-    error = 'interaction_required'
+
+    error = "interaction_required"
 
 
 class LoginRequiredError(OAuth2Error):
@@ -21,7 +22,8 @@ class LoginRequiredError(OAuth2Error):
 
     http://openid.net/specs/openid-connect-core-1_0.html#AuthError
     """
-    error = 'login_required'
+
+    error = "login_required"
 
 
 class AccountSelectionRequiredError(OAuth2Error):
@@ -35,7 +37,8 @@ class AccountSelectionRequiredError(OAuth2Error):
 
     http://openid.net/specs/openid-connect-core-1_0.html#AuthError
     """
-    error = 'account_selection_required'
+
+    error = "account_selection_required"
 
 
 class ConsentRequiredError(OAuth2Error):
@@ -46,7 +49,8 @@ class ConsentRequiredError(OAuth2Error):
 
     http://openid.net/specs/openid-connect-core-1_0.html#AuthError
     """
-    error = 'consent_required'
+
+    error = "consent_required"
 
 
 class InvalidRequestURIError(OAuth2Error):
@@ -55,24 +59,29 @@ class InvalidRequestURIError(OAuth2Error):
 
     http://openid.net/specs/openid-connect-core-1_0.html#AuthError
     """
-    error = 'invalid_request_uri'
+
+    error = "invalid_request_uri"
 
 
 class InvalidRequestObjectError(OAuth2Error):
     """The request parameter contains an invalid Request Object."""
-    error = 'invalid_request_object'
+
+    error = "invalid_request_object"
 
 
 class RequestNotSupportedError(OAuth2Error):
     """The OP does not support use of the request parameter."""
-    error = 'request_not_supported'
+
+    error = "request_not_supported"
 
 
 class RequestURINotSupportedError(OAuth2Error):
     """The OP does not support use of the request_uri parameter."""
-    error = 'request_uri_not_supported'
+
+    error = "request_uri_not_supported"
 
 
 class RegistrationNotSupportedError(OAuth2Error):
     """The OP does not support use of the registration parameter."""
-    error = 'registration_not_supported'
+
+    error = "registration_not_supported"

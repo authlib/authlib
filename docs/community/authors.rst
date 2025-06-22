@@ -16,8 +16,9 @@ Here is the list of the main contributors:
 - Mario Jimenez Carrasco
 - Bastian Venthur
 - Nuno Santos
+- Éloi Rivard
 
-And more on https://github.com/lepture/authlib/graphs/contributors
+And more on https://github.com/authlib/authlib/graphs/contributors
 
 Sponsors
 --------
@@ -42,6 +43,7 @@ Here is a full list of our backers:
 * `Aveline <https://github.com/ym>`_
 * `Callam <https://github.com/cal97g>`_
 * `Krishna Kumar <https://github.com/krishnaku>`_
+* `Yaal Coop <https://github.com/yaal-coop>`_
 
 .. _`GitHub Sponsors`: https://github.com/sponsors/lepture
 .. _Patreon: https://www.patreon.com/lepture

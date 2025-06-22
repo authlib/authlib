@@ -1,6 +1,5 @@
 from django.dispatch import Signal
 
-
 #: signal when client is authenticated
 client_authenticated = Signal()
 

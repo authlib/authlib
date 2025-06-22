@@ -1,20 +1,18 @@
-from authlib.common.urls import (
-    urlparse,
-    add_params_to_uri,
-    add_params_to_qs,
-)
 from authlib.common.encoding import to_unicode
-from .errors import (
-    MissingCodeException,
-    MissingTokenException,
-    MissingTokenTypeException,
-    MismatchingStateException,
-)
+from authlib.common.urls import add_params_to_qs
+from authlib.common.urls import add_params_to_uri
+from authlib.common.urls import urlparse
+
+from .errors import MismatchingStateException
+from .errors import MissingCodeException
+from .errors import MissingTokenException
+from .errors import MissingTokenTypeException
 from .util import list_to_scope
 
 
-def prepare_grant_uri(uri, client_id, response_type, redirect_uri=None,
-                      scope=None, state=None, **kwargs):
+def prepare_grant_uri(
+    uri, client_id, response_type, redirect_uri=None, scope=None, state=None, **kwargs
+):
     """Prepare the authorization grant request URI.
 
     The client constructs the request URI by adding the following
@@ -47,26 +45,23 @@ def prepare_grant_uri(uri, client_id, response_type, redirect_uri=None,
     .. _`Section 3.3`: https://tools.ietf.org/html/rfc6749#section-3.3
     .. _`section 10.12`: https://tools.ietf.org/html/rfc6749#section-10.12
     """
-    params = [
-        ('response_type', response_type),
-        ('client_id', client_id)
-    ]
+    params = [("response_type", response_type), ("client_id", client_id)]
 
     if redirect_uri:
-        params.append(('redirect_uri', redirect_uri))
+        params.append(("redirect_uri", redirect_uri))
     if scope:
-        params.append(('scope', list_to_scope(scope)))
+        params.append(("scope", list_to_scope(scope)))
     if state:
-        params.append(('state', state))
+        params.append(("state", state))
 
     for k in kwargs:
-        if kwargs[k]:
+        if kwargs[k] is not None:
             params.append((to_unicode(k), kwargs[k]))
 
     return add_params_to_uri(uri, params)
 
 
-def prepare_token_request(grant_type, body='', redirect_uri=None, **kwargs):
+def prepare_token_request(grant_type, body="", redirect_uri=None, **kwargs):
     """Prepare the access token request. Per `Section 4.1.3`_.
 
     The client makes a request to the token endpoint by adding the
@@ -89,15 +84,15 @@ def prepare_token_request(grant_type, body='', redirect_uri=None, **kwargs):
     .. _`Section 4.1.1`: https://tools.ietf.org/html/rfc6749#section-4.1.1
     .. _`Section 4.1.3`: https://tools.ietf.org/html/rfc6749#section-4.1.3
     """
-    params = [('grant_type', grant_type)]
+    params = [("grant_type", grant_type)]
 
     if redirect_uri:
-        params.append(('redirect_uri', redirect_uri))
+        params.append(("redirect_uri", redirect_uri))
 
-    if 'scope' in kwargs:
-        kwargs['scope'] = list_to_scope(kwargs['scope'])
+    if "scope" in kwargs:
+        kwargs["scope"] = list_to_scope(kwargs["scope"])
 
-    if grant_type == 'authorization_code' and 'code' not in kwargs:
+    if grant_type == "authorization_code" and "code" not in kwargs:
         raise MissingCodeException()
 
     for k in kwargs:
@@ -148,10 +143,10 @@ def parse_authorization_code_response(uri, state=None):
     query = urlparse.urlparse(uri).query
     params = dict(urlparse.parse_qsl(query))
 
-    if 'code' not in params:
+    if "code" not in params:
         raise MissingCodeException()
 
-    params_state = params.get('state')
+    params_state = params.get("state")
     if state and params_state != state:
         raise MismatchingStateException()
 
@@ -202,13 +197,13 @@ def parse_implicit_response(uri, state=None):
     fragment = urlparse.urlparse(uri).fragment
     params = dict(urlparse.parse_qsl(fragment, keep_blank_values=True))
 
-    if 'access_token' not in params:
+    if "access_token" not in params:
         raise MissingTokenException()
 
-    if 'token_type' not in params:
+    if "token_type" not in params:
         raise MissingTokenTypeException()
 
-    if state and params.get('state', None) != state:
+    if state and params.get("state", None) != state:
         raise MismatchingStateException()
 
     return params

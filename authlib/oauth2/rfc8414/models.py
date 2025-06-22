@@ -1,5 +1,6 @@
-from authlib.common.urls import urlparse, is_valid_url
 from authlib.common.security import is_secure_transport
+from authlib.common.urls import is_valid_url
+from authlib.common.urls import urlparse
 
 
 class AuthorizationServerMetadata(dict):
@@ -8,20 +9,30 @@ class AuthorizationServerMetadata(dict):
     .. _RFC8414: https://tools.ietf.org/html/rfc8414
     .. _`Section 2`: https://tools.ietf.org/html/rfc8414#section-2
     """
+
     REGISTRY_KEYS = [
-        'issuer', 'authorization_endpoint', 'token_endpoint',
-        'jwks_uri', 'registration_endpoint', 'scopes_supported',
-        'response_types_supported', 'response_modes_supported',
-        'grant_types_supported', 'token_endpoint_auth_methods_supported',
-        'token_endpoint_auth_signing_alg_values_supported',
-        'service_documentation', 'ui_locales_supported',
-        'op_policy_uri', 'op_tos_uri', 'revocation_endpoint',
-        'revocation_endpoint_auth_methods_supported',
-        'revocation_endpoint_auth_signing_alg_values_supported',
-        'introspection_endpoint',
-        'introspection_endpoint_auth_methods_supported',
-        'introspection_endpoint_auth_signing_alg_values_supported',
-        'code_challenge_methods_supported',
+        "issuer",
+        "authorization_endpoint",
+        "token_endpoint",
+        "jwks_uri",
+        "registration_endpoint",
+        "scopes_supported",
+        "response_types_supported",
+        "response_modes_supported",
+        "grant_types_supported",
+        "token_endpoint_auth_methods_supported",
+        "token_endpoint_auth_signing_alg_values_supported",
+        "service_documentation",
+        "ui_locales_supported",
+        "op_policy_uri",
+        "op_tos_uri",
+        "revocation_endpoint",
+        "revocation_endpoint_auth_methods_supported",
+        "revocation_endpoint_auth_signing_alg_values_supported",
+        "introspection_endpoint",
+        "introspection_endpoint_auth_methods_supported",
+        "introspection_endpoint_auth_signing_alg_values_supported",
+        "code_challenge_methods_supported",
     ]
 
     def validate_issuer(self):
@@ -29,7 +40,7 @@ class AuthorizationServerMetadata(dict):
         a URL that uses the "https" scheme and has no query or fragment
         components.
         """
-        issuer = self.get('issuer')
+        issuer = self.get("issuer")
 
         #: 1. REQUIRED
         if not issuer:
@@ -50,15 +61,14 @@ class AuthorizationServerMetadata(dict):
         [RFC6749]. This is REQUIRED unless no grant types are supported
         that use the authorization endpoint.
         """
-        url = self.get('authorization_endpoint')
+        url = self.get("authorization_endpoint")
         if url:
             if not is_secure_transport(url):
-                raise ValueError(
-                    '"authorization_endpoint" MUST use "https" scheme')
+                raise ValueError('"authorization_endpoint" MUST use "https" scheme')
             return
 
         grant_types_supported = set(self.grant_types_supported)
-        authorization_grant_types = {'authorization_code', 'implicit'}
+        authorization_grant_types = {"authorization_code", "implicit"}
         if grant_types_supported & authorization_grant_types:
             raise ValueError('"authorization_endpoint" is required')
 
@@ -66,12 +76,15 @@ class AuthorizationServerMetadata(dict):
         """URL of the authorization server's token endpoint [RFC6749]. This
         is REQUIRED unless only the implicit grant type is supported.
         """
-        grant_types_supported = self.get('grant_types_supported')
-        if grant_types_supported and len(grant_types_supported) == 1 and \
-                grant_types_supported[0] == 'implicit':
+        grant_types_supported = self.get("grant_types_supported")
+        if (
+            grant_types_supported
+            and len(grant_types_supported) == 1
+            and grant_types_supported[0] == "implicit"
+        ):
             return
 
-        url = self.get('token_endpoint')
+        url = self.get("token_endpoint")
         if not url:
             raise ValueError('"token_endpoint" is required')
 
@@ -89,7 +102,7 @@ class AuthorizationServerMetadata(dict):
         parameter value is REQUIRED for all keys in the referenced JWK Set
         to indicate each key's intended usage.
         """
-        url = self.get('jwks_uri')
+        url = self.get("jwks_uri")
         if url and not is_secure_transport(url):
             raise ValueError('"jwks_uri" MUST use "https" scheme')
 
@@ -97,10 +110,9 @@ class AuthorizationServerMetadata(dict):
         """OPTIONAL.  URL of the authorization server's OAuth 2.0 Dynamic
         Client Registration endpoint [RFC7591].
         """
-        url = self.get('registration_endpoint')
+        url = self.get("registration_endpoint")
         if url and not is_secure_transport(url):
-            raise ValueError(
-                '"registration_endpoint" MUST use "https" scheme')
+            raise ValueError('"registration_endpoint" MUST use "https" scheme')
 
     def validate_scopes_supported(self):
         """RECOMMENDED. JSON array containing a list of the OAuth 2.0
@@ -108,7 +120,7 @@ class AuthorizationServerMetadata(dict):
         Servers MAY choose not to advertise some supported scope values
         even when this parameter is used.
         """
-        validate_array_value(self, 'scopes_supported')
+        validate_array_value(self, "scopes_supported")
 
     def validate_response_types_supported(self):
         """REQUIRED.  JSON array containing a list of the OAuth 2.0
@@ -117,7 +129,7 @@ class AuthorizationServerMetadata(dict):
         "response_types" parameter defined by "OAuth 2.0 Dynamic Client
         Registration Protocol" [RFC7591].
         """
-        response_types_supported = self.get('response_types_supported')
+        response_types_supported = self.get("response_types_supported")
         if not response_types_supported:
             raise ValueError('"response_types_supported" is required')
         if not isinstance(response_types_supported, list):
@@ -131,7 +143,7 @@ class AuthorizationServerMetadata(dict):
         "fragment"]".  The response mode value "form_post" is also defined
         in "OAuth 2.0 Form Post Response Mode" [OAuth.Post].
         """
-        validate_array_value(self, 'response_modes_supported')
+        validate_array_value(self, "response_modes_supported")
 
     def validate_grant_types_supported(self):
         """OPTIONAL. JSON array containing a list of the OAuth 2.0 grant
@@ -141,7 +153,7 @@ class AuthorizationServerMetadata(dict):
         Protocol" [RFC7591].  If omitted, the default value is
         "["authorization_code", "implicit"]".
         """
-        validate_array_value(self, 'grant_types_supported')
+        validate_array_value(self, "grant_types_supported")
 
     def validate_token_endpoint_auth_methods_supported(self):
         """OPTIONAL.  JSON array containing a list of client authentication
@@ -151,7 +163,7 @@ class AuthorizationServerMetadata(dict):
         default is "client_secret_basic" -- the HTTP Basic Authentication
         Scheme specified in Section 2.3.1 of OAuth 2.0 [RFC6749].
         """
-        validate_array_value(self, 'token_endpoint_auth_methods_supported')
+        validate_array_value(self, "token_endpoint_auth_methods_supported")
 
     def validate_token_endpoint_auth_signing_alg_values_supported(self):
         """OPTIONAL.  JSON array containing a list of the JWS signing
@@ -166,8 +178,8 @@ class AuthorizationServerMetadata(dict):
         """
         _validate_alg_values(
             self,
-            'token_endpoint_auth_signing_alg_values_supported',
-            self.token_endpoint_auth_methods_supported
+            "token_endpoint_auth_signing_alg_values_supported",
+            self.token_endpoint_auth_methods_supported,
         )
 
     def validate_service_documentation(self):
@@ -178,7 +190,7 @@ class AuthorizationServerMetadata(dict):
         how to register clients needs to be provided in this
         documentation.
         """
-        value = self.get('service_documentation')
+        value = self.get("service_documentation")
         if value and not is_valid_url(value):
             raise ValueError('"service_documentation" MUST be a URL')
 
@@ -188,7 +200,7 @@ class AuthorizationServerMetadata(dict):
         [RFC5646].  If omitted, the set of supported languages and scripts
         is unspecified.
         """
-        validate_array_value(self, 'ui_locales_supported')
+        validate_array_value(self, "ui_locales_supported")
 
     def validate_op_policy_uri(self):
         """OPTIONAL.  URL that the authorization server provides to the
@@ -201,7 +213,7 @@ class AuthorizationServerMetadata(dict):
         specification is actually referring to a general OAuth 2.0 feature
         that is not specific to OpenID Connect.
         """
-        value = self.get('op_policy_uri')
+        value = self.get("op_policy_uri")
         if value and not is_valid_url(value):
             raise ValueError('"op_policy_uri" MUST be a URL')
 
@@ -215,14 +227,15 @@ class AuthorizationServerMetadata(dict):
         specification is actually referring to a general OAuth 2.0 feature
         that is not specific to OpenID Connect.
         """
-        value = self.get('op_tos_uri')
+        value = self.get("op_tos_uri")
         if value and not is_valid_url(value):
             raise ValueError('"op_tos_uri" MUST be a URL')
 
     def validate_revocation_endpoint(self):
         """OPTIONAL. URL of the authorization server's OAuth 2.0 revocation
-        endpoint [RFC7009]."""
-        url = self.get('revocation_endpoint')
+        endpoint [RFC7009].
+        """
+        url = self.get("revocation_endpoint")
         if url and not is_secure_transport(url):
             raise ValueError('"revocation_endpoint" MUST use "https" scheme')
 
@@ -235,7 +248,7 @@ class AuthorizationServerMetadata(dict):
         "client_secret_basic" -- the HTTP Basic Authentication Scheme
         specified in Section 2.3.1 of OAuth 2.0 [RFC6749].
         """
-        validate_array_value(self, 'revocation_endpoint_auth_methods_supported')
+        validate_array_value(self, "revocation_endpoint_auth_methods_supported")
 
     def validate_revocation_endpoint_auth_signing_alg_values_supported(self):
         """OPTIONAL.  JSON array containing a list of the JWS signing
@@ -250,18 +263,17 @@ class AuthorizationServerMetadata(dict):
         """
         _validate_alg_values(
             self,
-            'revocation_endpoint_auth_signing_alg_values_supported',
-            self.revocation_endpoint_auth_methods_supported
+            "revocation_endpoint_auth_signing_alg_values_supported",
+            self.revocation_endpoint_auth_methods_supported,
         )
 
     def validate_introspection_endpoint(self):
         """OPTIONAL.  URL of the authorization server's OAuth 2.0
         introspection endpoint [RFC7662].
         """
-        url = self.get('introspection_endpoint')
+        url = self.get("introspection_endpoint")
         if url and not is_secure_transport(url):
-            raise ValueError(
-                '"introspection_endpoint" MUST use "https" scheme')
+            raise ValueError('"introspection_endpoint" MUST use "https" scheme')
 
     def validate_introspection_endpoint_auth_methods_supported(self):
         """OPTIONAL.  JSON array containing a list of client authentication
@@ -274,7 +286,7 @@ class AuthorizationServerMetadata(dict):
         omitted, the set of supported authentication methods MUST be
         determined by other means.
         """
-        validate_array_value(self, 'introspection_endpoint_auth_methods_supported')
+        validate_array_value(self, "introspection_endpoint_auth_methods_supported")
 
     def validate_introspection_endpoint_auth_signing_alg_values_supported(self):
         """OPTIONAL.  JSON array containing a list of the JWS signing
@@ -289,8 +301,8 @@ class AuthorizationServerMetadata(dict):
         """
         _validate_alg_values(
             self,
-            'introspection_endpoint_auth_signing_alg_values_supported',
-            self.introspection_endpoint_auth_methods_supported
+            "introspection_endpoint_auth_signing_alg_values_supported",
+            self.introspection_endpoint_auth_methods_supported,
         )
 
     def validate_code_challenge_methods_supported(self):
@@ -303,39 +315,45 @@ class AuthorizationServerMetadata(dict):
         [IANA.OAuth.Parameters].  If omitted, the authorization server
         does not support PKCE.
         """
-        validate_array_value(self, 'code_challenge_methods_supported')
+        validate_array_value(self, "code_challenge_methods_supported")
 
     @property
     def response_modes_supported(self):
         #: If omitted, the default is ["query", "fragment"]
-        return self.get('response_modes_supported', ["query", "fragment"])
+        return self.get("response_modes_supported", ["query", "fragment"])
 
     @property
     def grant_types_supported(self):
         #: If omitted, the default value is ["authorization_code", "implicit"]
-        return self.get('grant_types_supported', ["authorization_code", "implicit"])
+        return self.get("grant_types_supported", ["authorization_code", "implicit"])
 
     @property
     def token_endpoint_auth_methods_supported(self):
         #: If omitted, the default is "client_secret_basic"
-        return self.get('token_endpoint_auth_methods_supported', ["client_secret_basic"])
+        return self.get(
+            "token_endpoint_auth_methods_supported", ["client_secret_basic"]
+        )
 
     @property
     def revocation_endpoint_auth_methods_supported(self):
         #: If omitted, the default is "client_secret_basic"
-        return self.get('revocation_endpoint_auth_methods_supported', ["client_secret_basic"])
+        return self.get(
+            "revocation_endpoint_auth_methods_supported", ["client_secret_basic"]
+        )
 
     @property
     def introspection_endpoint_auth_methods_supported(self):
         #: If omitted, the set of supported authentication methods MUST be
         #: determined by other means
         #: here, we use "client_secret_basic"
-        return self.get('introspection_endpoint_auth_methods_supported', ["client_secret_basic"])
+        return self.get(
+            "introspection_endpoint_auth_methods_supported", ["client_secret_basic"]
+        )
 
     def validate(self):
         """Validate all server metadata value."""
         for key in self.REGISTRY_KEYS:
-            object.__getattribute__(self, 'validate_{}'.format(key))()
+            object.__getattribute__(self, f"validate_{key}")()
 
     def __getattr__(self, key):
         try:
@@ -349,20 +367,19 @@ class AuthorizationServerMetadata(dict):
 def _validate_alg_values(data, key, auth_methods_supported):
     value = data.get(key)
     if value and not isinstance(value, list):
-        raise ValueError('"{}" MUST be JSON array'.format(key))
+        raise ValueError(f'"{key}" MUST be JSON array')
 
     auth_methods = set(auth_methods_supported)
-    jwt_auth_methods = {'private_key_jwt', 'client_secret_jwt'}
+    jwt_auth_methods = {"private_key_jwt", "client_secret_jwt"}
     if auth_methods & jwt_auth_methods:
         if not value:
-            raise ValueError('"{}" is required'.format(key))
+            raise ValueError(f'"{key}" is required')
 
-    if value and 'none' in value:
-        raise ValueError(
-            'the value "none" MUST NOT be used in "{}"'.format(key))
+    if value and "none" in value:
+        raise ValueError(f'the value "none" MUST NOT be used in "{key}"')
 
 
 def validate_array_value(metadata, key):
     values = metadata.get(key)
     if values is not None and not isinstance(values, list):
-        raise ValueError('"{}" MUST be JSON array'.format(key))
+        raise ValueError(f'"{key}" MUST be JSON array')

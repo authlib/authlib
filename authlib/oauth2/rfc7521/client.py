@@ -2,21 +2,32 @@ from authlib.common.encoding import to_native
 from authlib.oauth2.base import OAuth2Error
 
 
-class AssertionClient(object):
+class AssertionClient:
     """Constructs a new Assertion Framework for OAuth 2.0 Authorization Grants
     per RFC7521_.
 
     .. _RFC7521: https://tools.ietf.org/html/rfc7521
     """
+
     DEFAULT_GRANT_TYPE = None
     ASSERTION_METHODS = {}
     token_auth_class = None
     oauth_error_class = OAuth2Error
 
-    def __init__(self, session, token_endpoint, issuer, subject,
-                 audience=None, grant_type=None, claims=None,
-                 token_placement='header', scope=None, **kwargs):
-
+    def __init__(
+        self,
+        session,
+        token_endpoint,
+        issuer,
+        subject,
+        audience=None,
+        grant_type=None,
+        claims=None,
+        token_placement="header",
+        scope=None,
+        leeway=60,
+        **kwargs,
+    ):
         self.session = session
 
         if audience is None:
@@ -38,6 +49,7 @@ class AssertionClient(object):
         if self.token_auth_class is not None:
             self.token_auth = self.token_auth_class(None, token_placement, self)
         self._kwargs = kwargs
+        self.leeway = leeway
 
     @property
     def token(self):
@@ -59,14 +71,14 @@ class AssertionClient(object):
             subject=self.subject,
             audience=self.audience,
             claims=self.claims,
-            **self._kwargs
+            **self._kwargs,
         )
         data = {
-            'assertion': to_native(assertion),
-            'grant_type': self.grant_type,
+            "assertion": to_native(assertion),
+            "grant_type": self.grant_type,
         }
         if self.scope:
-            data['scope'] = self.scope
+            data["scope"] = self.scope
 
         return self._refresh_token(data)
 
@@ -75,10 +87,9 @@ class AssertionClient(object):
             resp.raise_for_status()
 
         token = resp.json()
-        if 'error' in token:
+        if "error" in token:
             raise self.oauth_error_class(
-                error=token['error'],
-                description=token.get('error_description')
+                error=token["error"], description=token.get("error_description")
             )
 
         self.token = token
@@ -86,6 +97,11 @@ class AssertionClient(object):
 
     def _refresh_token(self, data):
         resp = self.session.request(
-            'POST', self.token_endpoint, data=data, withhold_token=True)
+            "POST", self.token_endpoint, data=data, withhold_token=True
+        )
 
         return self.parse_response_token(resp)
+
+    def __del__(self):
+        if self.session:
+            del self.session

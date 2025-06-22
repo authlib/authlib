@@ -1,11 +1,13 @@
 import logging
+
 from authlib.common.urls import add_params_to_uri
-from .base import BaseGrant, AuthorizationEndpointMixin
-from ..errors import (
-    OAuth2Error,
-    UnauthorizedClientError,
-    AccessDeniedError,
-)
+
+from ..errors import AccessDeniedError
+from ..errors import OAuth2Error
+from ..errors import UnauthorizedClientError
+from ..hooks import hooked
+from .base import AuthorizationEndpointMixin
+from .base import BaseGrant
 
 log = logging.getLogger(__name__)
 
@@ -66,15 +68,17 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
         |         |
         +---------+
     """
+
     #: authorization_code grant type has authorization endpoint
     AUTHORIZATION_ENDPOINT = True
     #: Allowed client auth methods for token endpoint
-    TOKEN_ENDPOINT_AUTH_METHODS = ['none']
+    TOKEN_ENDPOINT_AUTH_METHODS = ["none"]
 
-    RESPONSE_TYPES = {'token'}
-    GRANT_TYPE = 'implicit'
+    RESPONSE_TYPES = {"token"}
+    GRANT_TYPE = "implicit"
     ERROR_RESPONSE_FRAGMENT = True
 
+    @hooked
     def validate_authorization_request(self):
         """The client constructs the request URI by adding the following
         parameters to the query component of the authorization endpoint URI
@@ -121,17 +125,14 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
 
         # The implicit grant type is optimized for public clients
         client = self.authenticate_token_endpoint_client()
-        log.debug('Validate authorization request of %r', client)
+        log.debug("Validate authorization request of %r", client)
 
-        redirect_uri = self.validate_authorization_redirect_uri(
-            self.request, client)
+        redirect_uri = self.validate_authorization_redirect_uri(self.request, client)
 
-        response_type = self.request.response_type
+        response_type = self.request.payload.response_type
         if not client.check_response_type(response_type):
             raise UnauthorizedClientError(
-                'The client is not authorized to use '
-                '"response_type={}"'.format(response_type),
-                state=self.request.state,
+                f"The client is not authorized to use 'response_type={response_type}'",
                 redirect_uri=redirect_uri,
                 redirect_fragment=True,
             )
@@ -139,13 +140,13 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
         try:
             self.request.client = client
             self.validate_requested_scope()
-            self.execute_hook('after_validate_authorization_request')
         except OAuth2Error as error:
             error.redirect_uri = redirect_uri
             error.redirect_fragment = True
             raise error
         return redirect_uri
 
+    @hooked
     def create_authorization_response(self, redirect_uri, grant_user):
         """If the resource owner grants the access request, the authorization
         server issues an access token and delivers it to the client by adding
@@ -202,28 +203,23 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
             resource owner, otherwise pass None.
         :returns: (status_code, body, headers)
         """
-        state = self.request.state
+        state = self.request.payload.state
         if grant_user:
             self.request.user = grant_user
             token = self.generate_token(
                 user=grant_user,
-                scope=self.request.scope,
+                scope=self.request.payload.scope,
                 include_refresh_token=False,
             )
-            log.debug('Grant token %r to %r', token, self.request.client)
+            log.debug("Grant token %r to %r", token, self.request.client)
 
             self.save_token(token)
-            self.execute_hook('process_token', token=token)
             params = [(k, token[k]) for k in token]
             if state:
-                params.append(('state', state))
+                params.append(("state", state))
 
             uri = add_params_to_uri(redirect_uri, params, fragment=True)
-            headers = [('Location', uri)]
-            return 302, '', headers
+            headers = [("Location", uri)]
+            return 302, "", headers
         else:
-            raise AccessDeniedError(
-                state=state,
-                redirect_uri=redirect_uri,
-                redirect_fragment=True
-            )
+            raise AccessDeniedError(redirect_uri=redirect_uri, redirect_fragment=True)

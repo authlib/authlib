@@ -43,13 +43,13 @@ method::
 
         def save_authorization_code(self, code, request):
             # NOTICE BELOW
-            code_challenge = request.data.get('code_challenge')
-            code_challenge_method = request.data.get('code_challenge_method')
+            code_challenge = request.payload.data.get('code_challenge')
+            code_challenge_method = request.payload.data.get('code_challenge_method')
             auth_code = AuthorizationCode(
                 code=code,
                 client_id=request.client.client_id,
                 redirect_uri=request.redirect_uri,
-                scope=request.scope,
+                scope=request.payload.scope,
                 user_id=request.user.id,
                 code_challenge=code_challenge,
                 code_challenge_method=code_challenge_method,

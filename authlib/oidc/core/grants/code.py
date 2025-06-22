@@ -1,25 +1,25 @@
-"""
-    authlib.oidc.core.grants.code
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+"""authlib.oidc.core.grants.code.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    Implementation of Authentication using the Authorization Code Flow
-    per `Section 3.1`_.
+Implementation of Authentication using the Authorization Code Flow
+per `Section 3.1`_.
 
-    .. _`Section 3.1`: http://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth
+.. _`Section 3.1`: http://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth
 """
 
 import logging
-from .util import (
-    is_openid_scope,
-    validate_nonce,
-    validate_request_prompt,
-    generate_id_token,
-)
+
+from authlib.oauth2.rfc6749 import OAuth2Request
+
+from .util import generate_id_token
+from .util import is_openid_scope
+from .util import validate_nonce
+from .util import validate_request_prompt
 
 log = logging.getLogger(__name__)
 
 
-class OpenIDToken(object):
+class OpenIDToken:
     def get_jwt_config(self, grant):  # pragma: no cover
         """Get the JWT configuration for OpenIDCode extension. The JWT
         configuration will be used to generate ``id_token``. Developers
@@ -27,10 +27,10 @@ class OpenIDToken(object):
 
             def get_jwt_config(self, grant):
                 return {
-                    'key': read_private_key_file(key_path),
-                    'alg': 'RS256',
-                    'iss': 'issuer-identity',
-                    'exp': 3600
+                    "key": read_private_key_file(key_path),
+                    "alg": "RS256",
+                    "iss": "issuer-identity",
+                    "exp": 3600,
                 }
 
         :param grant: AuthorizationCodeGrant instance
@@ -44,10 +44,11 @@ class OpenIDToken(object):
 
             from authlib.oidc.core import UserInfo
 
+
             def generate_user_info(self, user, scope):
                 user_info = UserInfo(sub=user.id, name=user.name)
-                if 'email' in scope:
-                    user_info['email'] = user.email
+                if "email" in scope:
+                    user_info["email"] = user.email
                 return user_info
 
         :param user: user instance
@@ -63,29 +64,36 @@ class OpenIDToken(object):
         client = request.client
         return [client.get_client_id()]
 
-    def process_token(self, grant, token):
-        scope = token.get('scope')
+    def process_token(self, grant, response):
+        _, token, _ = response
+        scope = token.get("scope")
         if not scope or not is_openid_scope(scope):
             # standard authorization code flow
             return token
 
-        request = grant.request
-        credential = request.credential
+        request: OAuth2Request = grant.request
+        authorization_code = request.authorization_code
 
         config = self.get_jwt_config(grant)
-        config['aud'] = self.get_audiences(request)
+        config["aud"] = self.get_audiences(request)
 
-        if credential:
-            config['nonce'] = credential.get_nonce()
-            config['auth_time'] = credential.get_auth_time()
+        if authorization_code:
+            config["nonce"] = authorization_code.get_nonce()
+            config["auth_time"] = authorization_code.get_auth_time()
 
-        user_info = self.generate_user_info(request.user, token['scope'])
+            if acr := authorization_code.get_acr():
+                config["acr"] = acr
+
+            if amr := authorization_code.get_amr():
+                config["amr"] = amr
+
+        user_info = self.generate_user_info(request.user, token["scope"])
         id_token = generate_id_token(token, user_info, **config)
-        token['id_token'] = id_token
+        token["id_token"] = id_token
         return token
 
     def __call__(self, grant):
-        grant.register_hook('process_token', self.process_token)
+        grant.register_hook("after_create_token_response", self.process_token)
 
 
 class OpenIDCode(OpenIDToken):
@@ -97,15 +105,18 @@ class OpenIDCode(OpenIDToken):
                 return {...}
 
             def exists_nonce(self, nonce, request):
-                return check_if_nonce_in_cache(request.client_id, nonce)
+                return check_if_nonce_in_cache(request.payload.client_id, nonce)
 
             def generate_user_info(self, user, scope):
                 return {...}
 
     The register this extension with AuthorizationCodeGrant::
 
-        authorization_server.register_grant(AuthorizationCodeGrant, extensions=[MyOpenIDCode()])
+        authorization_server.register_grant(
+            AuthorizationCodeGrant, extensions=[MyOpenIDCode()]
+        )
     """
+
     def __init__(self, require_nonce=False):
         self.require_nonce = require_nonce
 
@@ -115,7 +126,7 @@ class OpenIDCode(OpenIDToken):
 
             def exists_nonce(self, nonce, request):
                 exists = AuthorizationCode.query.filter_by(
-                    client_id=request.client_id, nonce=nonce
+                    client_id=request.payload.client_id, nonce=nonce
                 ).first()
                 return bool(exists)
 
@@ -125,17 +136,16 @@ class OpenIDCode(OpenIDToken):
         """
         raise NotImplementedError()
 
-    def validate_openid_authorization_request(self, grant):
+    def validate_openid_authorization_request(self, grant, redirect_uri):
         validate_nonce(grant.request, self.exists_nonce, self.require_nonce)
 
     def __call__(self, grant):
-        grant.register_hook('process_token', self.process_token)
-        if is_openid_scope(grant.request.scope):
+        grant.register_hook("after_create_token_response", self.process_token)
+        if is_openid_scope(grant.request.payload.scope):
             grant.register_hook(
-                'after_validate_authorization_request',
-                self.validate_openid_authorization_request
+                "after_validate_authorization_request_payload",
+                self.validate_openid_authorization_request,
             )
             grant.register_hook(
-                'after_validate_consent_request',
-                validate_request_prompt
+                "after_validate_consent_request", validate_request_prompt
             )

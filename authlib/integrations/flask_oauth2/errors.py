@@ -1,12 +1,14 @@
-import werkzeug
+import importlib.metadata
+
 from werkzeug.exceptions import HTTPException
 
-_version = werkzeug.__version__.split('.')[0]
+_version = importlib.metadata.version("werkzeug").split(".")[0]
 
-if _version in ('0', '1'):
+if _version in ("0", "1"):
+
     class _HTTPException(HTTPException):
         def __init__(self, code, body, headers, response=None):
-            super(_HTTPException, self).__init__(None, response)
+            super().__init__(None, response)
             self.code = code
 
             self.body = body
@@ -18,9 +20,10 @@ if _version in ('0', '1'):
         def get_headers(self, environ=None):
             return self.headers
 else:
+
     class _HTTPException(HTTPException):
         def __init__(self, code, body, headers, response=None):
-            super(_HTTPException, self).__init__(None, response)
+            super().__init__(None, response)
             self.code = code
 
             self.body = body

@@ -534,7 +534,7 @@ And later, when the client has obtained the access token, we can call::
 
     def authorize(request):
         token = oauth.google.authorize_access_token(request)
-        user = oauth.google.userinfo(request)
+        user = oauth.google.userinfo(token=token)
         return '...'
 
 

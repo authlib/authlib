@@ -5,31 +5,27 @@
 # Authlib
 
 <a href="https://github.com/sponsors/lepture"><img src="https://badgen.net/badge/support/authlib/ff69b4?icon=patreon" /></a>
-<a href="https://github.com/lepture/authlib/actions"><img src="https://github.com/lepture/authlib/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://codecov.io/gh/lepture/authlib?branch=master"><img src="https://badgen.net/codecov/c/github/lepture/authlib" alt="Coverage Status"></a>
+<a href="https://github.com/authlib/authlib/actions"><img src="https://github.com/authlib/authlib/workflows/tests/badge.svg" alt="Build Status"></a>
+<a href="https://codecov.io/gh/authlib/authlib" > <img src="https://codecov.io/gh/authlib/authlib/graph/badge.svg?token=BQKzPoql9j"/></a>
 <a href="https://pypi.org/project/Authlib/"><img src="https://badgen.net/pypi/v/authlib" alt="PyPI Version"></a>
-<a href="https://codeclimate.com/github/lepture/authlib/maintainability"><img src="https://badgen.net/codeclimate/maintainability/lepture/authlib?icon=codeclimate" alt="Maintainability" /></a>
-<a href="https://twitter.com/intent/follow?screen_name=authlib"><img src="https://img.shields.io/twitter/follow/authlib.svg?maxAge=3600&style=social&logo=twitter&label=Follow" alt="Follow Twitter"></a>
+<a href="https://codeclimate.com/github/authlib/authlib/maintainability"><img src="https://badgen.net/codeclimate/maintainability/authlib/authlib?icon=codeclimate" alt="Maintainability" /></a>
 
 The ultimate Python library in building OAuth and OpenID Connect servers.
 JWS, JWK, JWA, JWT are included.
 
-Authlib is compatible with Python3.6+.
+Authlib is compatible with Python3.9+.
+
+**[Migrating from `authlib.jose` to `joserfc`](https://jose.authlib.org/en/dev/migrations/authlib/)**
 
 ## Sponsors
 
 <table>
 <tr>
-<td><img align="middle" width="48" src="https://user-images.githubusercontent.com/290496/39297078-89d00928-497d-11e8-8119-0c53afe14cd0.png"></td>
-<td>If you want to quickly add secure token-based authentication to Python projects, feel free to check Auth0's Python SDK and free plan at <a href="https://auth0.com/developers?utm_source=GHsponsor&utm_medium=GHsponsor&utm_campaign=authlib&utm_content=auth">auth0.com/developers</a>.</td>
+<td><img align="middle" width="48" src="https://avatars.githubusercontent.com/u/70178963?v=4"></td>
+<td>If you want to quickly add secure token-based authentication to Python projects, feel free to check Auth0's Python SDK and free plan at <a href="https://auth0.com/overview?utm_source=GHsponsor&utm_medium=GHsponsor&utm_campaign=authlib&utm_content=auth">auth0.com/overview</a>.</td>
 </tr>
 <tr>
-<td><img align="middle" width="48" src="https://avatars.githubusercontent.com/u/105941848?s=200&v=4"></td>
-<td>Kraken is the world's leading customer & culture platform for energy, water & broadband. Licensing enquiries at <a href="https://kraken.tech/">Kraken.tech</a>.
-</td>
-</tr>
-<tr>
-<td><img align="middle" width="48" src="https://typlog.com/assets/icon-black.svg"></td>
+<td><img align="middle" width="48" src="https://typlog.com/assets/icon-white.svg"></td>
 <td>A blogging and podcast hosting platform with minimal design but powerful features. Host your blog and Podcast with <a href="https://typlog.com/">Typlog.com</a>.
 </td>
 </tr>
@@ -54,6 +50,9 @@ Generic, spec-compliant implementation to build clients and providers:
   - [RFC7662: OAuth 2.0 Token Introspection](https://docs.authlib.org/en/latest/specs/rfc7662.html)
   - [RFC8414: OAuth 2.0 Authorization Server Metadata](https://docs.authlib.org/en/latest/specs/rfc8414.html)
   - [RFC8628: OAuth 2.0 Device Authorization Grant](https://docs.authlib.org/en/latest/specs/rfc8628.html)
+  - [RFC9068: JSON Web Token (JWT) Profile for OAuth 2.0 Access Tokens](https://docs.authlib.org/en/latest/specs/rfc9068.html)
+  - [RFC9101: The OAuth 2.0 Authorization Framework: JWT-Secured Authorization Request (JAR)](https://docs.authlib.org/en/latest/specs/rfc9101.html)
+  - [RFC9207: OAuth 2.0 Authorization Server Issuer Identification](https://docs.authlib.org/en/latest/specs/rfc9207.html)
 - [Javascript Object Signing and Encryption](https://docs.authlib.org/en/latest/jose/index.html)
   - [RFC7515: JSON Web Signature](https://docs.authlib.org/en/latest/jose/jws.html)
   - [RFC7516: JSON Web Encryption](https://docs.authlib.org/en/latest/jose/jwe.html)
@@ -67,6 +66,7 @@ Generic, spec-compliant implementation to build clients and providers:
 - [OpenID Connect 1.0](https://docs.authlib.org/en/latest/specs/oidc.html)
   - [x] OpenID Connect Core 1.0
   - [x] OpenID Connect Discovery 1.0
+  - [x] OpenID Connect Dynamic Client Registration 1.0
 
 Connect third party OAuth providers with Authlib built-in client integrations:
 
@@ -124,19 +124,10 @@ Tidelift will coordinate the fix and disclosure.
 
 Authlib offers two licenses:
 
-1. BSD (LICENSE)
+1. BSD LICENSE
 2. COMMERCIAL-LICENSE
 
-Companies can purchase a commercial license at
-[Authlib Plans](https://authlib.org/plans).
-
-**If your company is creating a closed source OAuth provider, it is strongly
-suggested that your company purchasing a commercial license.**
-
-## Support
-
-If you need any help, you can always ask questions on StackOverflow with
-a tag of "Authlib". DO NOT ASK HELP IN GITHUB ISSUES.
-
-We also provide commercial consulting and supports. You can find more
-information at <https://authlib.org/support>.
+Any project, open or closed source, can use the BSD license.
+If your company needs commercial support, you can purchase a commercial license at
+[Authlib Plans](https://authlib.org/plans). You can find more information at
+<https://authlib.org/support>.

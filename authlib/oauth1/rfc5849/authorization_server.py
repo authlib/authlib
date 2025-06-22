@@ -1,24 +1,24 @@
-from authlib.common.urls import is_valid_url, add_params_to_uri
+from authlib.common.urls import add_params_to_uri
+from authlib.common.urls import is_valid_url
+
 from .base_server import BaseServer
-from .errors import (
-    OAuth1Error,
-    InvalidRequestError,
-    MissingRequiredParameterError,
-    InvalidClientError,
-    InvalidTokenError,
-    AccessDeniedError,
-    MethodNotAllowedError,
-)
+from .errors import AccessDeniedError
+from .errors import InvalidClientError
+from .errors import InvalidRequestError
+from .errors import InvalidTokenError
+from .errors import MethodNotAllowedError
+from .errors import MissingRequiredParameterError
+from .errors import OAuth1Error
 
 
 class AuthorizationServer(BaseServer):
     TOKEN_RESPONSE_HEADER = [
-        ('Content-Type', 'application/x-www-form-urlencoded'),
-        ('Cache-Control', 'no-store'),
-        ('Pragma', 'no-cache'),
+        ("Content-Type", "application/x-www-form-urlencoded"),
+        ("Cache-Control", "no-store"),
+        ("Pragma", "no-cache"),
     ]
 
-    TEMPORARY_CREDENTIALS_METHOD = 'POST'
+    TEMPORARY_CREDENTIALS_METHOD = "POST"
 
     def _get_client(self, request):
         client = self.get_client_by_id(request.client_id)
@@ -33,14 +33,11 @@ class AuthorizationServer(BaseServer):
 
     def handle_error_response(self, error):
         return self.handle_response(
-            error.status_code,
-            error.get_body(),
-            error.get_headers()
+            error.status_code, error.get_body(), error.get_headers()
         )
 
     def validate_temporary_credentials_request(self, request):
         """Validate HTTP request for temporary credentials."""
-
         # The client obtains a set of temporary credentials from the server by
         # making an authenticated (Section 3) HTTP "POST" request to the
         # Temporary Credential Request endpoint (unless the server advertises
@@ -50,16 +47,16 @@ class AuthorizationServer(BaseServer):
 
         # REQUIRED parameter
         if not request.client_id:
-            raise MissingRequiredParameterError('oauth_consumer_key')
+            raise MissingRequiredParameterError("oauth_consumer_key")
 
         # REQUIRED parameter
         oauth_callback = request.redirect_uri
         if not request.redirect_uri:
-            raise MissingRequiredParameterError('oauth_callback')
+            raise MissingRequiredParameterError("oauth_callback")
 
         # An absolute URI or
         # other means (the parameter value MUST be set to "oob"
-        if oauth_callback != 'oob' and not is_valid_url(oauth_callback):
+        if oauth_callback != "oob" and not is_valid_url(oauth_callback):
             raise InvalidRequestError('Invalid "oauth_callback" value')
 
         client = self._get_client(request)
@@ -109,16 +106,16 @@ class AuthorizationServer(BaseServer):
 
         credential = self.create_temporary_credential(request)
         payload = [
-            ('oauth_token', credential.get_oauth_token()),
-            ('oauth_token_secret', credential.get_oauth_token_secret()),
-            ('oauth_callback_confirmed', True)
+            ("oauth_token", credential.get_oauth_token()),
+            ("oauth_token_secret", credential.get_oauth_token_secret()),
+            ("oauth_callback_confirmed", True),
         ]
         return self.handle_response(200, payload, self.TOKEN_RESPONSE_HEADER)
 
     def validate_authorization_request(self, request):
         """Validate the request for resource owner authorization."""
         if not request.token:
-            raise MissingRequiredParameterError('oauth_token')
+            raise MissingRequiredParameterError("oauth_token")
 
         credential = self.get_temporary_credential(request)
         if not credential:
@@ -156,7 +153,7 @@ class AuthorizationServer(BaseServer):
 
         temporary_credentials = request.credential
         redirect_uri = temporary_credentials.get_redirect_uri()
-        if not redirect_uri or redirect_uri == 'oob':
+        if not redirect_uri or redirect_uri == "oob":
             client_id = temporary_credentials.get_client_id()
             client = self.get_client_by_id(client_id)
             redirect_uri = client.get_default_redirect_uri()
@@ -164,38 +161,34 @@ class AuthorizationServer(BaseServer):
         if grant_user is None:
             error = AccessDeniedError()
             location = add_params_to_uri(redirect_uri, error.get_body())
-            return self.handle_response(302, '', [('Location', location)])
+            return self.handle_response(302, "", [("Location", location)])
 
         request.user = grant_user
         verifier = self.create_authorization_verifier(request)
 
-        params = [
-            ('oauth_token', request.token),
-            ('oauth_verifier', verifier)
-        ]
+        params = [("oauth_token", request.token), ("oauth_verifier", verifier)]
         location = add_params_to_uri(redirect_uri, params)
-        return self.handle_response(302, '', [('Location', location)])
+        return self.handle_response(302, "", [("Location", location)])
 
     def validate_token_request(self, request):
         """Validate request for issuing token."""
-
         if not request.client_id:
-            raise MissingRequiredParameterError('oauth_consumer_key')
+            raise MissingRequiredParameterError("oauth_consumer_key")
 
         client = self._get_client(request)
         if not client:
             raise InvalidClientError()
 
         if not request.token:
-            raise MissingRequiredParameterError('oauth_token')
+            raise MissingRequiredParameterError("oauth_token")
 
         token = self.get_temporary_credential(request)
         if not token:
             raise InvalidTokenError()
 
-        verifier = request.oauth_params.get('oauth_verifier')
+        verifier = request.oauth_params.get("oauth_verifier")
         if not verifier:
-            raise MissingRequiredParameterError('oauth_verifier')
+            raise MissingRequiredParameterError("oauth_verifier")
 
         if not token.check_verifier(verifier):
             raise InvalidRequestError('Invalid "oauth_verifier"')
@@ -252,8 +245,8 @@ class AuthorizationServer(BaseServer):
 
         credential = self.create_token_credential(request)
         payload = [
-            ('oauth_token', credential.get_oauth_token()),
-            ('oauth_token_secret', credential.get_oauth_token_secret()),
+            ("oauth_token", credential.get_oauth_token()),
+            ("oauth_token_secret", credential.get_oauth_token_secret()),
         ]
         self.delete_temporary_credential(request)
         return self.handle_response(200, payload, self.TOKEN_RESPONSE_HEADER)
@@ -287,7 +280,7 @@ class AuthorizationServer(BaseServer):
         ``TemporaryCredentialMixin``::
 
             def get_temporary_credential(self, request):
-                key = 'a-key-prefix:{}'.format(request.token)
+                key = "a-key-prefix:{}".format(request.token)
                 data = cache.get(key)
                 # TemporaryCredential shares methods from TemporaryCredentialMixin
                 return TemporaryCredential(data)
@@ -302,7 +295,7 @@ class AuthorizationServer(BaseServer):
         if temporary credential is saved in cache::
 
             def delete_temporary_credential(self, request):
-                key = 'a-key-prefix:{}'.format(request.token)
+                key = "a-key-prefix:{}".format(request.token)
                 cache.delete(key)
 
         :param request: OAuth1Request instance
@@ -345,7 +338,7 @@ class AuthorizationServer(BaseServer):
                     oauth_token=oauth_token,
                     oauth_token_secret=oauth_token_secret,
                     client_id=temporary_credential.get_client_id(),
-                    user_id=temporary_credential.get_user_id()
+                    user_id=temporary_credential.get_user_id(),
                 )
                 # if the credential has a save method
                 token_credential.save()

@@ -1,3 +1,141 @@
 [build-system]
 requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "Authlib"
+description = "The ultimate Python library in building OAuth and OpenID Connect servers and clients."
+authors = [{name = "Hsiaoming Yang", email="me@lepture.com"}]
+dependencies = [
+  "cryptography",
+]
+license = {text = "BSD-3-Clause"}
+requires-python = ">=3.9"
+dynamic = ["version"]
+readme = "README.rst"
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
+  "Environment :: Web Environment",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: BSD License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+  "Topic :: Security",
+  "Topic :: Security :: Cryptography",
+  "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+  "Topic :: Internet :: WWW/HTTP :: WSGI :: Application",
+]
+
+[project.urls]
+Documentation = "https://docs.authlib.org/"
+Purchase = "https://authlib.org/plans"
+Issues = "https://github.com/authlib/authlib/issues"
+Source = "https://github.com/authlib/authlib"
+Donate = "https://github.com/sponsors/lepture"
+Blog = "https://blog.authlib.org/"
+
+[dependency-groups]
+dev = [
+    "coverage",
+    "cryptography",
+    "pre-commit-uv>=4.1.4",
+    "pytest",
+    "pytest-asyncio",
+    "tox-uv >= 1.16.0",
+]
+
+clients = [
+    "anyio",
+    "cachelib",
+    "django",
+    "flask",
+    "httpx",
+    "requests",
+    "starlette",
+    # there is an incompatibility with asgiref, pypy and coverage,
+    # see https://github.com/django/asgiref/issues/393 for details
+    "asgiref==3.6.0 ; implementation_name == 'pypy' and python_version < '3.10'",
+]
+
+django = [
+    "django",
+    "pytest-django",
+    # there is an incompatibility with asgiref, pypy and coverage,
+    # see https://github.com/django/asgiref/issues/393 for details
+    "asgiref==3.6.0 ; implementation_name == 'pypy' and python_version < '3.10'",
+]
+
+flask = [
+    "Flask",
+    "Flask-SQLAlchemy",
+]
+
+jose = [
+    "pycryptodomex>=3.10,<4",
+]
+
+docs = [
+    "shibuya",
+    "sphinx",
+    "sphinx-design",
+    "sphinx-copybutton",
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "authlib.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["authlib", "authlib.*"]
+
+[tool.ruff.lint]
+select = [
+    "B", # flake8-bugbear
+    "E", # pycodestyle
+    "F", # pyflakes
+    "I", # isort
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501", # line-too-long
+    "E722", # bare-except
+]
+
+[tool.ruff.lint.isort]
+force-single-line = true
+
+[tool.ruff.format]
+docstring-code-format = true
+
+[tool.pytest.ini_options]
+asyncio_default_fixture_loop_scope = "function"
+asyncio_mode = "auto"
+norecursedirs = ["authlib", "build", "dist", "docs", "htmlcov"]
+
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "except ImportError",
+    "def __repr__",
+    "raise NotImplementedError",
+    "raise DeprecationWarning",
+    "deprecate",
+]
+
+[tool.check-manifest]
+ignore = ["tox.ini"]
+
+[tool.distutils.bdist_wheel]
+universal = true

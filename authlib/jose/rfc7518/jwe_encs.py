@@ -1,20 +1,23 @@
-"""
-    authlib.jose.rfc7518
-    ~~~~~~~~~~~~~~~~~~~~
+"""authlib.jose.rfc7518.
+~~~~~~~~~~~~~~~~~~~~
 
-    Cryptographic Algorithms for Cryptographic Algorithms for Content
-    Encryption per `Section 5`_.
+Cryptographic Algorithms for Cryptographic Algorithms for Content
+Encryption per `Section 5`_.
 
-    .. _`Section 5`: https://tools.ietf.org/html/rfc7518#section-5
+.. _`Section 5`: https://tools.ietf.org/html/rfc7518#section-5
 """
-import hmac
+
 import hashlib
+import hmac
+
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.ciphers import Cipher
 from cryptography.hazmat.primitives.ciphers.algorithms import AES
-from cryptography.hazmat.primitives.ciphers.modes import GCM, CBC
+from cryptography.hazmat.primitives.ciphers.modes import CBC
+from cryptography.hazmat.primitives.ciphers.modes import GCM
 from cryptography.hazmat.primitives.padding import PKCS7
-from cryptography.exceptions import InvalidTag
+
 from ..rfc7516 import JWEEncAlgorithm
 from .util import encode_int
 
@@ -25,8 +28,8 @@ class CBCHS2EncAlgorithm(JWEEncAlgorithm):
     IV_SIZE = 128
 
     def __init__(self, key_size, hash_type):
-        self.name = 'A{}CBC-HS{}'.format(key_size, hash_type)
-        tpl = 'AES_{}_CBC_HMAC_SHA_{} authenticated encryption algorithm'
+        self.name = f"A{key_size}CBC-HS{hash_type}"
+        tpl = "AES_{}_CBC_HMAC_SHA_{} authenticated encryption algorithm"
         self.description = tpl.format(key_size, hash_type)
 
         # bit length
@@ -35,13 +38,13 @@ class CBCHS2EncAlgorithm(JWEEncAlgorithm):
         self.key_len = key_size // 8
 
         self.CEK_SIZE = key_size * 2
-        self.hash_alg = getattr(hashlib, 'sha{}'.format(hash_type))
+        self.hash_alg = getattr(hashlib, f"sha{hash_type}")
 
     def _hmac(self, ciphertext, aad, iv, key):
         al = encode_int(len(aad) * 8, 64)
         msg = aad + iv + ciphertext + al
         d = hmac.new(key, msg, self.hash_alg).digest()
-        return d[:self.key_len]
+        return d[: self.key_len]
 
     def encrypt(self, msg, aad, iv, key):
         """Key Encryption with AES_CBC_HMAC_SHA2.
@@ -53,8 +56,8 @@ class CBCHS2EncAlgorithm(JWEEncAlgorithm):
         :return: (ciphertext, iv, tag)
         """
         self.check_iv(iv)
-        hkey = key[:self.key_len]
-        ekey = key[self.key_len:]
+        hkey = key[: self.key_len]
+        ekey = key[self.key_len :]
 
         pad = PKCS7(AES.block_size).padder()
         padded_data = pad.update(msg) + pad.finalize()
@@ -76,8 +79,8 @@ class CBCHS2EncAlgorithm(JWEEncAlgorithm):
         :return: message
         """
         self.check_iv(iv)
-        hkey = key[:self.key_len]
-        dkey = key[self.key_len:]
+        hkey = key[: self.key_len]
+        dkey = key[self.key_len :]
 
         _tag = self._hmac(ciphertext, aad, iv, hkey)
         if not hmac.compare_digest(_tag, tag):
@@ -96,13 +99,13 @@ class GCMEncAlgorithm(JWEEncAlgorithm):
     IV_SIZE = 96
 
     def __init__(self, key_size):
-        self.name = 'A{}GCM'.format(key_size)
-        self.description = 'AES GCM using {}-bit key'.format(key_size)
+        self.name = f"A{key_size}GCM"
+        self.description = f"AES GCM using {key_size}-bit key"
         self.key_size = key_size
         self.CEK_SIZE = key_size
 
     def encrypt(self, msg, aad, iv, key):
-        """Key Encryption with AES GCM
+        """Key Encryption with AES GCM.
 
         :param msg: text to be encrypt in bytes
         :param aad: additional authenticated data in bytes
@@ -118,7 +121,7 @@ class GCMEncAlgorithm(JWEEncAlgorithm):
         return ciphertext, enc.tag
 
     def decrypt(self, ciphertext, aad, iv, tag, key):
-        """Key Decryption with AES GCM
+        """Key Decryption with AES GCM.
 
         :param ciphertext: ciphertext in bytes
         :param aad: additional authenticated data in bytes
