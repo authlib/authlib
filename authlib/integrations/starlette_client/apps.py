@@ -2,6 +2,7 @@ from starlette.datastructures import URL
 from starlette.responses import RedirectResponse
 
 from ..base_client import BaseApp
+from ..base_client import MissingCodeError
 from ..base_client import OAuthError
 from ..base_client.async_app import AsyncOAuth1Mixin
 from ..base_client.async_app import AsyncOAuth2Mixin
@@ -72,6 +73,9 @@ class StarletteOAuth2App(
             "code": request.query_params.get("code"),
             "state": request.query_params.get("state"),
         }
+
+        if not params["code"]:
+            raise MissingCodeError()
 
         if self.framework.cache:
             session = None

@@ -4,6 +4,7 @@ from flask import request
 from flask import session
 
 from ..base_client import BaseApp
+from ..base_client import MissingCodeError
 from ..base_client import OAuth1Mixin
 from ..base_client import OAuth2Mixin
 from ..base_client import OAuthError
@@ -99,6 +100,9 @@ class FlaskOAuth2App(FlaskAppMixin, OAuth2Mixin, OpenIDMixin, BaseApp):
                 "code": request.form.get("code"),
                 "state": request.form.get("state"),
             }
+
+        if not params["code"]:
+            raise MissingCodeError()
 
         state_data = self.framework.get_state_data(session, params.get("state"))
         self.framework.clear_state_data(session, params.get("state"))

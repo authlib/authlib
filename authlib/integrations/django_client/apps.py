@@ -1,6 +1,7 @@
 from django.http import HttpResponseRedirect
 
 from ..base_client import BaseApp
+from ..base_client import MissingCodeError
 from ..base_client import OAuth1Mixin
 from ..base_client import OAuth2Mixin
 from ..base_client import OAuthError
@@ -77,6 +78,9 @@ class DjangoOAuth2App(DjangoAppMixin, OAuth2Mixin, OpenIDMixin, BaseApp):
                 "code": request.POST.get("code"),
                 "state": request.POST.get("state"),
             }
+
+        if not params["code"]:
+            raise MissingCodeError()
 
         state_data = self.framework.get_state_data(request.session, params.get("state"))
         self.framework.clear_state_data(request.session, params.get("state"))
