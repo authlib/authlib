@@ -109,7 +109,7 @@ class DjangoOAuthTest(TestCase):
 
         with mock.patch("requests.sessions.Session.send") as send:
             send.return_value = mock_send_value(get_bearer_token())
-            request2 = self.factory.get(f"/authorize?state={state}")
+            request2 = self.factory.get(f"/authorize?state={state}&code=foo")
             request2.session = request.session
 
             token = client.authorize_access_token(request2)
@@ -162,7 +162,7 @@ class DjangoOAuthTest(TestCase):
             return mock_send_value(get_bearer_token())
 
         with mock.patch("requests.sessions.Session.send", fake_send):
-            request2 = self.factory.get(f"/authorize?state={state}")
+            request2 = self.factory.get(f"/authorize?state={state}&code=foo")
             request2.session = request.session
             token = client.authorize_access_token(request2)
             assert token["access_token"] == "a"
@@ -193,7 +193,7 @@ class DjangoOAuthTest(TestCase):
         with mock.patch("requests.sessions.Session.send") as send:
             send.return_value = mock_send_value(get_bearer_token())
 
-            request2 = self.factory.get(f"/authorize?state={state}")
+            request2 = self.factory.get(f"/authorize?state={state}&code=foo")
             request2.session = request.session
 
             token = client.authorize_access_token(request2)
