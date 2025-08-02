@@ -87,6 +87,11 @@ class ProtectedResourceMetadata(dict):
         absence indicate that they are not supported.
         """
         validate_array_value(self, "bearer_methods_supported")
+        for method in self.get("bearer_methods_supported", []):
+            if method not in ["header", "body", "query"]:
+                raise ValueError(f'"{method}" is not a valid bearer method, valid methods are: '
+                                 '' + ', '.join(["header", "body", "query"]))
+
 
     def validate_resource_signing_alg_values_supported(self):
         """OPTIONAL. JSON array containing a list of the JWS [JWS] signing
@@ -116,6 +121,13 @@ class ProtectedResourceMetadata(dict):
         if value and not isinstance(value, str):
             raise ValueError('"resource_name" MUST be a string')
 
+        # check internationalized resource_name
+        for key in self.keys():
+            if key.startswith("resource_name#"):
+                value = self.get(key)
+                if value and not isinstance(value, str):
+                    raise ValueError('"{key}" MUST be a string')
+
     def validate_resource_documentation(self):
         """OPTIONAL. URL of a page containing human-readable information that
         developers might want or need to know when using the protected
@@ -130,6 +142,13 @@ class ProtectedResourceMetadata(dict):
         if value and not is_valid_url(value):
             raise ValueError('"resource_documentation" MUST be a URL')
 
+        # check internationalized resource_documentation
+        for key in self.keys():
+            if key.startswith("resource_documentation#"):
+                value = self.get(key)
+                if value and not is_valid_url(value):
+                    raise ValueError('"resource_documentation" MUST be a URL')
+
     def validate_resource_policy_uri(self):
         """OPTIONAL. URL of a page containing human-readable information about
         the protected resource's requirements on how the client can use the
@@ -141,6 +160,13 @@ class ProtectedResourceMetadata(dict):
         if value and not is_valid_url(value):
             raise ValueError('"resource_policy_uri" MUST be a URL')
 
+        # check internationalized resource_policy_uri
+        for key in self.keys():
+            if key.startswith("resource_policy_uri#"):
+                value = self.get(key)
+                if value and not is_valid_url(value):
+                    raise ValueError('"resource_policy_uri" MUST be a URL')
+
     def validate_resource_tos_uri(self):
         """OPTIONAL. URL of a page containing human-readable information about
         the protected resource's terms of service. The value of this field MAY
@@ -149,6 +175,13 @@ class ProtectedResourceMetadata(dict):
         value = self.get("resource_tos_uri")
         if value and not is_valid_url(value):
             raise ValueError('"resource_tos_uri" MUST be a URL')
+
+        # check internationalized resource_tos_uri
+        for key in self.keys():
+            if key.startswith("resource_tos_uri#"):
+                value = self.get(key)
+                if value and not is_valid_url(value):
+                    raise ValueError('"resource_tos_uri" MUST be a URL')
 
     def validate_tls_client_certificate_bound_access_tokens(self):
         """OPTIONAL. Boolean value indicating protected resource support for
@@ -200,15 +233,6 @@ class ProtectedResourceMetadata(dict):
     def validate(self):
         """Validate all server metadata value."""
         for key in self.REGISTRY_KEYS:
-            if '#' in key:
-                # Handle internationalized keys
-                split_key = key.split('#')
-                if len(split_key) != 2:
-                    raise ValueError(f'Invalid key format: {key}, expected "key#lang" format')
-                # Now we have the key and the language tag, lets validate
-                # the key without the language tag
-                key = split_key[0]
-
             object.__getattribute__(self, f"validate_{key}")()
 
     def __getattr__(self, key):
