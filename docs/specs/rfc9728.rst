@@ -1,0 +1,71 @@
+.. _specs/rfc9728:
+
+RFC9728: OAuth 2.0 Protected Resource Metadata
+================================================
+
+This section contains the generic implementation of :rfc:`RFC9728 <9728>`.
+
+Get the well-known URL for the protected resource metadata
+----------------------------------------------------------
+
+Considering a resource server with the following URL: ``https://api.example.com/``::
+
+    from authlib.oauth2.rfc9728 import get_well_known_url
+
+    url = get_well_known_url('https://api.example.com/')
+
+This will return the URL:
+``/.well-known/oauth-authorization-server``
+
+When using ``external=True``::
+
+    from authlib.oauth2.rfc9728 import get_well_known_url
+
+    url = get_well_known_url('https://api.example.com/')
+
+This will return the URL:
+``'https://api.example.com/.well-known/oauth-authorization-server``
+
+.. meta::
+    :description: Implementation of RFC9728 OAuth 2.0 Protected Resource Metadata,
+        this module helps to find the associated .well-known url and provides
+        a class (ProtectedResourceMetadata) to handle the metadata, with validation.
+
+.. _RFC9728: https://tools.ietf.org/html/rfc9728
+.. module:: authlib.oauth2.rfc9728
+
+Get the protected resource metadata and validate it
+---------------------------------------------------
+
+You can use the :class:`ProtectedResourceMetadata` to get the metadata and validate it::
+
+    from authlib.oauth2.rfc9728 import get_well_known_url
+    from authlib.oauth2.rfc9728 import ProtectedResourceMetadata
+    import requests
+    
+    # Get the well-known URL
+    resource_server_url = 'https://api.example.com/'
+    well_known_url = get_well_known_url(resource_server_url, external=True)
+    # Fetch the metadata from the well-known URL
+    response = requests.get(well_known_url)
+    metadata = ProtectedResourceMetadata(response.json())
+
+    # Validate the metadata, this will raise an error if validation fails
+    metadata.validate()
+
+    # Access the properties
+    print(metadata)
+    print(metadata.resource)
+    for authorization_server in metadata.authorization_servers:
+        print(authorization_server)
+
+
+
+API Reference
+-------------
+
+.. autoclass:: ProtectedResourceMetadata
+    :member-order: bysource
+    :members:
+
+.. autofunction:: get_well_known_url
