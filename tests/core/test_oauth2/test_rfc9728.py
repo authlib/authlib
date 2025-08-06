@@ -1,6 +1,6 @@
 import unittest
-import pytest
 
+import pytest
 
 from authlib.oauth2.rfc9728 import ProtectedResourceMetadata
 from authlib.oauth2.rfc9728.well_known import get_well_known_url
@@ -45,18 +45,22 @@ class ProtectedResourceMetadataTest(unittest.TestCase):
             metadata.validate()
 
         #: https
-        metadata = ProtectedResourceMetadata({"resource": "http://authlib.org/test-resource"})
+        metadata = ProtectedResourceMetadata(
+            {"resource": "http://authlib.org/test-resource"}
+        )
         with pytest.raises(ValueError, match="https"):
             metadata.validate_resource()
 
         #: fragment
-        metadata = ProtectedResourceMetadata({
-            "resource": "https://authlib.org/test-resource#fragment"}
-            )
+        metadata = ProtectedResourceMetadata(
+            {"resource": "https://authlib.org/test-resource#fragment"}
+        )
         with pytest.raises(ValueError, match="fragment"):
             metadata.validate_resource()
 
-        metadata = ProtectedResourceMetadata({"resource": "https://authlib.org/test-resource"})
+        metadata = ProtectedResourceMetadata(
+            {"resource": "https://authlib.org/test-resource"}
+        )
         metadata.validate_resource()
 
     def test_validate_authorization_servers(self):
@@ -138,12 +142,16 @@ class ProtectedResourceMetadataTest(unittest.TestCase):
         metadata.validate_resource_signing_alg_values_supported()
 
         # not array
-        metadata = ProtectedResourceMetadata({"resource_signing_alg_values_supported": "foo"})
+        metadata = ProtectedResourceMetadata(
+            {"resource_signing_alg_values_supported": "foo"}
+        )
         with pytest.raises(ValueError, match="JSON array"):
             metadata.validate_resource_signing_alg_values_supported()
 
         # forbidden none
-        metadata = ProtectedResourceMetadata({"resource_signing_alg_values_supported": ["none"]})
+        metadata = ProtectedResourceMetadata(
+            {"resource_signing_alg_values_supported": ["none"]}
+        )
         with pytest.raises(ValueError, match="none"):
             metadata.validate_resource_signing_alg_values_supported()
 
@@ -191,7 +199,9 @@ class ProtectedResourceMetadataTest(unittest.TestCase):
         with pytest.raises(ValueError, match="MUST be a URL"):
             metadata.validate_resource_documentation()
         # valid URL
-        metadata = ProtectedResourceMetadata({"resource_documentation": "https://authlib.org/"})
+        metadata = ProtectedResourceMetadata(
+            {"resource_documentation": "https://authlib.org/"}
+        )
         metadata.validate_resource_documentation()
 
         # check internationalized resource_documentation - not url
@@ -200,7 +210,9 @@ class ProtectedResourceMetadataTest(unittest.TestCase):
             metadata.validate_resource_documentation()
 
         # check internationalized resource_documentation - valid
-        metadata = ProtectedResourceMetadata({"resource_documentation#fr": "https://authlib.org/"})
+        metadata = ProtectedResourceMetadata(
+            {"resource_documentation#fr": "https://authlib.org/"}
+        )
         metadata.validate_resource_documentation()
 
     def test_validate_resource_policy_uri(self):
@@ -214,7 +226,9 @@ class ProtectedResourceMetadataTest(unittest.TestCase):
             metadata.validate_resource_policy_uri()
 
         # valid URL
-        metadata = ProtectedResourceMetadata({"resource_policy_uri": "https://authlib.org/"})
+        metadata = ProtectedResourceMetadata(
+            {"resource_policy_uri": "https://authlib.org/"}
+        )
         metadata.validate_resource_policy_uri()
 
     def test_validate_resource_tos_uri(self):
@@ -228,7 +242,9 @@ class ProtectedResourceMetadataTest(unittest.TestCase):
             metadata.validate_resource_tos_uri()
 
         # valid URL
-        metadata = ProtectedResourceMetadata({"resource_tos_uri": "https://authlib.org/"})
+        metadata = ProtectedResourceMetadata(
+            {"resource_tos_uri": "https://authlib.org/"}
+        )
         metadata.validate_resource_tos_uri()
 
     def test_validate_tls_client_certificate_bound_access_tokens(self):
@@ -244,7 +260,9 @@ class ProtectedResourceMetadataTest(unittest.TestCase):
             metadata.validate_tls_client_certificate_bound_access_tokens()
 
         # valid URL
-        metadata = ProtectedResourceMetadata({"tls_client_certificate_bound_access_tokens": True})
+        metadata = ProtectedResourceMetadata(
+            {"tls_client_certificate_bound_access_tokens": True}
+        )
         metadata.validate_tls_client_certificate_bound_access_tokens()
 
     def test_validate_authorization_details_types_supported(self):
@@ -253,12 +271,16 @@ class ProtectedResourceMetadataTest(unittest.TestCase):
         metadata.validate_authorization_details_types_supported()
 
         # not array
-        metadata = ProtectedResourceMetadata({"authorization_details_types_supported": "foo"})
+        metadata = ProtectedResourceMetadata(
+            {"authorization_details_types_supported": "foo"}
+        )
         with pytest.raises(ValueError, match="JSON array"):
             metadata.validate_authorization_details_types_supported()
 
         # valid
-        metadata = ProtectedResourceMetadata({"authorization_details_types_supported": ["foo"]})
+        metadata = ProtectedResourceMetadata(
+            {"authorization_details_types_supported": ["foo"]}
+        )
         metadata.validate_authorization_details_types_supported()
 
     def test_validate_dpop_signing_alg_values_supported(self):
@@ -267,7 +289,9 @@ class ProtectedResourceMetadataTest(unittest.TestCase):
         metadata.validate_dpop_signing_alg_values_supported()
 
         # not array
-        metadata = ProtectedResourceMetadata({"dpop_signing_alg_values_supported": "foo"})
+        metadata = ProtectedResourceMetadata(
+            {"dpop_signing_alg_values_supported": "foo"}
+        )
         with pytest.raises(ValueError, match="JSON array"):
             metadata.validate_dpop_signing_alg_values_supported()
 
@@ -283,10 +307,14 @@ class ProtectedResourceMetadataTest(unittest.TestCase):
         metadata.validate_dpop_bound_access_tokens_required()
 
         # not boolean
-        metadata = ProtectedResourceMetadata({"dpop_bound_access_tokens_required": "foo"})
+        metadata = ProtectedResourceMetadata(
+            {"dpop_bound_access_tokens_required": "foo"}
+        )
         with pytest.raises(ValueError, match="boolean"):
             metadata.validate_dpop_bound_access_tokens_required()
 
         # valid
-        metadata = ProtectedResourceMetadata({"dpop_bound_access_tokens_required": True})
+        metadata = ProtectedResourceMetadata(
+            {"dpop_bound_access_tokens_required": True}
+        )
         metadata.validate_dpop_bound_access_tokens_required()

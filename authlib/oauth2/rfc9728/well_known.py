@@ -1,4 +1,5 @@
 """Support for OAuth 2.0 Protected Resource Metadata .well-known url"""
+
 from authlib.common.urls import urlparse
 
 

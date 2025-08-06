@@ -1,4 +1,5 @@
 """Support for OAuth 2.0 Protected Resource Metadata model validation"""
+
 from authlib.common.security import is_secure_transport
 from authlib.common.urls import is_valid_url
 from authlib.common.urls import urlparse
@@ -25,7 +26,7 @@ class ProtectedResourceMetadata(dict):
         "tls_client_certificate_bound_access_tokens",
         "authorization_details_types_supported",
         "dpop_signing_alg_values_supported",
-        "dpop_bound_access_tokens_required"
+        "dpop_bound_access_tokens_required",
     ]
 
     def validate_resource(self):
@@ -55,12 +56,12 @@ class ProtectedResourceMetadata(dict):
         validate_array_value(self, "authorization_servers")
 
     def validate_jwks_uri(self):
-        """OPTIONAL.  URL of the protected resource's JSON Web Key (JWK) Set 
-        [JWK] document. This contains public keys belonging to the protected 
-        resource, such as signing key(s) that the resource server uses to sign 
-        resource responses. This URL MUST use the https scheme. When both 
-        signing and encryption keys are made available, a use (public key use) 
-        parameter value is REQUIRED for all keys in the referenced JWK Set to 
+        """OPTIONAL.  URL of the protected resource's JSON Web Key (JWK) Set
+        [JWK] document. This contains public keys belonging to the protected
+        resource, such as signing key(s) that the resource server uses to sign
+        resource responses. This URL MUST use the https scheme. When both
+        signing and encryption keys are made available, a use (public key use)
+        parameter value is REQUIRED for all keys in the referenced JWK Set to
         indicate each key's intended usage.
 
         """
@@ -69,8 +70,8 @@ class ProtectedResourceMetadata(dict):
             raise ValueError('"jwks_uri" MUST use "https" scheme')
 
     def validate_scopes_supported(self):
-        """RECOMMENDED. JSON array containing a list of scope values, as 
-        defined in OAuth 2.0 [RFC6749], that are used in authorization 
+        """RECOMMENDED. JSON array containing a list of scope values, as
+        defined in OAuth 2.0 [RFC6749], that are used in authorization
         requests to request access to this protected resource. Protected
         resources MAY choose not to advertise some scope values supported
         even when this parameter is used.
@@ -82,31 +83,36 @@ class ProtectedResourceMetadata(dict):
         sending an OAuth 2.0 bearer token [RFC6750] to the protected resource.
         Defined values are ["header", "body", "query"], corresponding to
         Sections 2.1, 2.2, and 2.3 of [RFC6750]. The empty array [] can be used
-        to indicate that no bearer methods are supported. If this entry is 
+        to indicate that no bearer methods are supported. If this entry is
         omitted, no default bearer methods supported are implied, nor does its
         absence indicate that they are not supported.
         """
         validate_array_value(self, "bearer_methods_supported")
         for method in self.get("bearer_methods_supported", []):
             if method not in ["header", "body", "query"]:
-                raise ValueError(f'"{method}" is not a valid bearer method, valid methods are: '
-                                 '' + ', '.join(["header", "body", "query"]))
-
+                raise ValueError(
+                    f'"{method}" is not a valid bearer method, valid methods are: '
+                    "" + ", ".join(["header", "body", "query"])
+                )
 
     def validate_resource_signing_alg_values_supported(self):
         """OPTIONAL. JSON array containing a list of the JWS [JWS] signing
         algorithms (alg values) [JWA] supported by the protected resource for
-        signing resource responses, for instance, as described in 
+        signing resource responses, for instance, as described in
         [FAPI.MessageSigning]. No default algorithms are implied if this entry
         is omitted. The value none MUST NOT be used.
         """
         value = self.get("resource_signing_alg_values_supported")
         if value and not isinstance(value, list):
-            raise ValueError('"resource_signing_alg_values_supported" MUST be JSON array')
+            raise ValueError(
+                '"resource_signing_alg_values_supported" MUST be JSON array'
+            )
 
         if value and "none" in value:
-            raise ValueError('the value "none" MUST NOT be used in '
-                             '"validate_resource_signing_alg_values_supported"')
+            raise ValueError(
+                'the value "none" MUST NOT be used in '
+                '"validate_resource_signing_alg_values_supported"'
+            )
 
     def validate_resource_name(self):
         """Human-readable name of the protected resource intended for display
@@ -126,7 +132,7 @@ class ProtectedResourceMetadata(dict):
             if key.startswith("resource_name#"):
                 value = self.get(key)
                 if value and not isinstance(value, str):
-                    raise ValueError('"{key}" MUST be a string')
+                    raise ValueError(f'"{key}" MUST be a string')
 
     def validate_resource_documentation(self):
         """OPTIONAL. URL of a page containing human-readable information that
@@ -170,7 +176,7 @@ class ProtectedResourceMetadata(dict):
     def validate_resource_tos_uri(self):
         """OPTIONAL. URL of a page containing human-readable information about
         the protected resource's terms of service. The value of this field MAY
-        be unternationalized, as described in Section 2.1.
+        be internationalized, as described in Section 2.1.
         """
         value = self.get("resource_tos_uri")
         if value and not is_valid_url(value):
@@ -190,7 +196,9 @@ class ProtectedResourceMetadata(dict):
         """
         value = self.get("tls_client_certificate_bound_access_tokens")
         if value and not isinstance(value, bool):
-            raise ValueError('"tls_client_certificate_bound_access_tokens" MUST be a boolean')
+            raise ValueError(
+                '"tls_client_certificate_bound_access_tokens" MUST be a boolean'
+            )
 
     def validate_authorization_details_types_supported(self):
         """JSON array containing a list of the authorization details type
@@ -202,7 +210,7 @@ class ProtectedResourceMetadata(dict):
     def validate_dpop_signing_alg_values_supported(self):
         """JSON array containing a list of the JWS alg values (from the
         "JSON Web Signature and Encryption Algorithms" registry [IANA.JOSE])
-        supported by the resource server for validating 
+        supported by the resource server for validating
         Demonstrating Proof of Possession (DPoP) proof JWTs [RFC9449].
 
         """
@@ -210,7 +218,7 @@ class ProtectedResourceMetadata(dict):
 
     def validate_dpop_bound_access_tokens_required(self):
         """OPTIONAL. Boolean value specifying whether the protected resource
-        always requires the use of DPoP-bound access tokens [RFC9449]. 
+        always requires the use of DPoP-bound access tokens [RFC9449].
         If omitted, the default value is false.
 
         """
@@ -242,6 +250,7 @@ class ProtectedResourceMetadata(dict):
             if key in self.REGISTRY_KEYS:
                 return self.get(key)
             raise error
+
 
 def validate_array_value(metadata, key):
     """Helper function to validate that a metadata key is a JSON array."""
