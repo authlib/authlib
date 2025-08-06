@@ -21,7 +21,7 @@ When using ``external=True``::
 
     from authlib.oauth2.rfc9728 import get_well_known_url
 
-    url = get_well_known_url('https://api.example.com/')
+    url = get_well_known_url('https://api.example.com/', external=True)
 
 This will return the URL:
 ``'https://api.example.com/.well-known/oauth-authorization-server``
@@ -42,7 +42,7 @@ You can use the :class:`ProtectedResourceMetadata` to get the metadata and valid
     from authlib.oauth2.rfc9728 import get_well_known_url
     from authlib.oauth2.rfc9728 import ProtectedResourceMetadata
     import requests
-    
+
     # Get the well-known URL
     resource_server_url = 'https://api.example.com/'
     well_known_url = get_well_known_url(resource_server_url, external=True)
