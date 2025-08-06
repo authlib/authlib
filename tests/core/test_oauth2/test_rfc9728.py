@@ -318,3 +318,87 @@ class ProtectedResourceMetadataTest(unittest.TestCase):
             {"dpop_bound_access_tokens_required": True}
         )
         metadata.validate_dpop_bound_access_tokens_required()
+
+    def test_validate_resource_policy_uri_internationalized(self):
+        # error case
+        metadata = ProtectedResourceMetadata({"resource_policy_uri#es": "invalid"})
+        with pytest.raises(ValueError, match="MUST be a URL"):
+            metadata.validate_resource_policy_uri()
+
+        # nominal case
+        metadata = ProtectedResourceMetadata(
+            {"resource_policy_uri#es": "https://authlib.org/"}
+        )
+        metadata.validate_resource_policy_uri()
+
+    def test_validate_resource_tos_uri_internationalized(self):
+        # error case
+        metadata = ProtectedResourceMetadata({"resource_tos_uri#de": "invalid"})
+        with pytest.raises(ValueError, match="MUST be a URL"):
+            metadata.validate_resource_tos_uri()
+
+        # nominal case
+        metadata = ProtectedResourceMetadata(
+            {"resource_tos_uri#de": "https://authlib.org/"}
+        )
+        metadata.validate_resource_tos_uri()
+
+    def test_properties_default_values(self):
+        """Test default values for boolean properties."""
+        metadata = ProtectedResourceMetadata({})
+
+        assert metadata.tls_client_certificate_bound_access_tokens is False
+        assert metadata.dpop_bound_access_tokens_required is False
+
+        metadata = ProtectedResourceMetadata(
+            {
+                "tls_client_certificate_bound_access_tokens": True,
+                "dpop_bound_access_tokens_required": True,
+            }
+        )
+        assert metadata.tls_client_certificate_bound_access_tokens is True
+        assert metadata.dpop_bound_access_tokens_required is True
+
+    def test_getattr_registry_keys(self):
+        metadata = ProtectedResourceMetadata(
+            {
+                "resource": "https://example.com/api",
+                "scopes_supported": ["read", "write"],
+            }
+        )
+
+        assert metadata.resource == "https://example.com/api"
+        assert metadata.scopes_supported == ["read", "write"]
+        assert metadata.authorization_servers is None
+
+    def test_getattr_non_registry_keys(self):
+        # test __getattr__ method for non-registry keys
+        metadata = ProtectedResourceMetadata({})
+
+        with pytest.raises(AttributeError):
+            _ = metadata.non_existent_attribute
+
+    def test_validate_all_metadata_complete(self):
+        metadata = ProtectedResourceMetadata(
+            {
+                "resource": "https://api.example.com/v1",
+                "authorization_servers": ["https://auth.example.com"],
+                "jwks_uri": "https://api.example.com/.well-known/jwks.json",
+                "scopes_supported": ["read", "write", "admin"],
+                "bearer_methods_supported": ["header", "body"],
+                "resource_signing_alg_values_supported": ["RS256", "ES256"],
+                "resource_name": "Example API",
+                "resource_name#fr": "API Example",
+                "resource_documentation": "https://docs.example.com/api",
+                "resource_documentation#fr": "https://docs.example.com/api/fr",
+                "resource_policy_uri": "https://example.com/policy",
+                "resource_policy_uri#fr": "https://example.com/policy/fr",
+                "resource_tos_uri": "https://example.com/tos",
+                "resource_tos_uri#fr": "https://example.com/tos/fr",
+                "tls_client_certificate_bound_access_tokens": True,
+                "authorization_details_types_supported": ["payment", "account"],
+                "dpop_signing_alg_values_supported": ["RS256", "ES256"],
+                "dpop_bound_access_tokens_required": False,
+            }
+        )
+        metadata.validate()
