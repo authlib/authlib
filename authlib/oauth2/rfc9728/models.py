@@ -111,7 +111,7 @@ class ProtectedResourceMetadata(dict):
         if value and "none" in value:
             raise ValueError(
                 'the value "none" MUST NOT be used in '
-                '"validate_resource_signing_alg_values_supported"'
+                '"resource_signing_alg_values_supported"'
             )
 
     def validate_resource_name(self):

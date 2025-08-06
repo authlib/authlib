@@ -82,10 +82,14 @@ class OpenIDMixin:
         def load_key(header, _):
             jwk_set = JsonWebKey.import_key_set(self.fetch_jwk_set())
             try:
-                return jwk_set.find_by_kid(header.get("kid"), use="sig", alg=header.get("alg"))
+                return jwk_set.find_by_kid(
+                    header.get("kid"), use="sig", alg=header.get("alg")
+                )
             except ValueError:
                 # re-try with new jwk set
                 jwk_set = JsonWebKey.import_key_set(self.fetch_jwk_set(force=True))
-                return jwk_set.find_by_kid(header.get("kid"), use="sig", alg=header.get("alg"))
+                return jwk_set.find_by_kid(
+                    header.get("kid"), use="sig", alg=header.get("alg")
+                )
 
         return load_key

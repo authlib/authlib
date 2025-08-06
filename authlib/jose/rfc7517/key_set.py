@@ -34,7 +34,7 @@ class KeySet:
 
         if keys:
             return keys[0]
-        raise ValueError('Key not found')
+        raise ValueError("Key not found")
 
 
 def _filter_keys_by_params(keys, **params):
