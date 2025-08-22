@@ -197,6 +197,8 @@ class OAuth2Base:
         access_token_params=None,
         authorize_url=None,
         authorize_params=None,
+        authorize_redirect_params=None,
+        pushed_authorization_url=None,
         api_base_url=None,
         client_kwargs=None,
         server_metadata_url=None,
@@ -213,6 +215,8 @@ class OAuth2Base:
         self.access_token_params = access_token_params
         self.authorize_url = authorize_url
         self.authorize_params = authorize_params
+        self.authorize_url_params = authorize_redirect_params
+        self.pushed_authorization_url = pushed_authorization_url
         self.api_base_url = api_base_url
         self.client_kwargs = client_kwargs or {}
 
@@ -237,6 +241,8 @@ class OAuth2Base:
             client_kwargs["authorization_endpoint"] = self.authorize_url
         if self.access_token_url:
             client_kwargs["token_endpoint"] = self.access_token_url
+        if self.pushed_authorization_url:
+            client_kwargs["pushed_authorization_request_endpoint"] = self.pushed_authorization_url
 
         session = self.client_cls(
             client_id=self.client_id,
@@ -269,14 +275,13 @@ class OAuth2Base:
         return params
 
     @staticmethod
-    def _create_oauth2_authorization_url(client, authorization_endpoint, **kwargs):
-        rv = {}
+    def _get_authorization_params(client, **kwargs):
+        params = {}
         if client.code_challenge_method:
             code_verifier = kwargs.get("code_verifier")
             if not code_verifier:
                 code_verifier = generate_token(48)
-                kwargs["code_verifier"] = code_verifier
-            rv["code_verifier"] = code_verifier
+            params["code_verifier"] = code_verifier
             log.debug(f"Using code_verifier: {code_verifier!r}")
 
         scope = kwargs.get("scope", client.scope)
@@ -290,9 +295,15 @@ class OAuth2Base:
             nonce = kwargs.get("nonce")
             if not nonce:
                 nonce = generate_token(20)
-                kwargs["nonce"] = nonce
-            rv["nonce"] = nonce
+            params["nonce"] = nonce
+        return params
 
+    @staticmethod
+    def _create_oauth2_authorization_url(client, authorization_endpoint, **kwargs):
+        rv = {}
+        params = OAuth2Base._get_authorization_params(client, **kwargs)
+        rv.update(params)
+        kwargs.update(params)
         url, state = client.create_authorization_url(authorization_endpoint, **kwargs)
         rv["url"] = url
         rv["state"] = state
@@ -331,30 +342,59 @@ class OAuth2Mixin(_RequestMixin, OAuth2Base):
             self.server_metadata.update(metadata)
         return self.server_metadata
 
-    def create_authorization_url(self, redirect_uri=None, **kwargs):
+    def create_authorization_url(self, redirect_uri=None, authorize_url_params=None, **authorize_params):
         """Generate the authorization url and state for HTTP redirect.
 
         :param redirect_uri: Callback or redirect URI for authorization.
-        :param kwargs: Extra parameters to include.
+        :param authorize_url_params: Extra parameters specifically for the authorize_url endpoint, regardless of method.
+        :param authorize_params: Extra parameters to include for authorization.
         :return: dict
         """
         metadata = self.load_server_metadata()
+        if self.authorize_params:
+            authorize_params.update(self.authorize_params)
+
+        authorize_url_params = authorize_url_params or {}
+        if self.authorize_url_params:
+            authorize_url_params.update(self.authorize_url_params)
+
         authorization_endpoint = self.authorize_url or metadata.get(
             "authorization_endpoint"
         )
-
         if not authorization_endpoint:
             raise RuntimeError('Missing "authorize_url" value')
 
-        if self.authorize_params:
-            kwargs.update(self.authorize_params)
+        par_endpoint = self.pushed_authorization_url or metadata.get(
+            "pushed_authorization_request_endpoint"
+        )
+        par_required = metadata.get("require_pushed_authorization_requests")
+        if par_required and not par_endpoint:
+            raise RuntimeError('Missing "pushed_authorization_url" value')
 
         with self._get_oauth_client(**metadata) as client:
             if redirect_uri is not None:
                 client.redirect_uri = redirect_uri
-            return self._create_oauth2_authorization_url(
-                client, authorization_endpoint, **kwargs
-            )
+
+            if par_required:
+                rv, request_uri = self._pushed_authorization_request(client, par_endpoint, **authorize_params)
+                url, _ = client.create_authorization_url(
+                    authorization_endpoint,
+                    request_uri=request_uri['request_uri'],
+                    **authorize_url_params)
+                rv['url'] = url
+                return rv
+            else:
+                authorize_params.update(authorize_url_params)
+                return self._create_oauth2_authorization_url(client, authorization_endpoint, **authorize_params)
+
+    def _pushed_authorization_request(self, client, par_endpoint, **kwargs):
+        rv = {}
+        params = self._get_authorization_params(client, **kwargs)
+        rv.update(params)
+        kwargs.update(params)
+        request_uri, state = client.pushed_authorization(par_endpoint, **kwargs)
+        rv["state"] = state
+        return rv, request_uri
 
     def fetch_access_token(self, redirect_uri=None, **kwargs):
         """Fetch access token in the final step.

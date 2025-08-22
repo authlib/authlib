@@ -22,18 +22,19 @@ class StarletteAppMixin:
         else:
             raise RuntimeError("Missing state value")
 
-    async def authorize_redirect(self, request, redirect_uri=None, **kwargs):
+    async def authorize_redirect(self, request, redirect_uri=None, authorize_url_params=None, **kwargs):
         """Create a HTTP Redirect for Authorization Endpoint.
 
         :param request: HTTP request instance from Starlette view.
         :param redirect_uri: Callback or redirect URI for authorization.
-        :param kwargs: Extra parameters to include.
+        :param authorize_url_params: Extra parameters specifically for the authorize_url endpoint, regardless of method.
+        :param kwargs: Extra parameters to include for authorization.
         :return: A HTTP redirect response.
         """
         # Handle Starlette >= 0.26.0 where redirect_uri may now be a URL and not a string
         if redirect_uri and isinstance(redirect_uri, URL):
             redirect_uri = str(redirect_uri)
-        rv = await self.create_authorization_url(redirect_uri, **kwargs)
+        rv = await self.create_authorization_url(redirect_uri, authorize_url_params, **kwargs)
         await self.save_authorize_data(request, redirect_uri=redirect_uri, **rv)
         return RedirectResponse(rv["url"], status_code=302)
 
