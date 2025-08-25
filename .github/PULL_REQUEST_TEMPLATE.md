@@ -27,6 +27,7 @@ Please indicate if this PR is related to other issues or PRs.
 
 - [ ] You ran the linters with ``pre-commit``.
 - [ ] You wrote unit test to demonstrate the bug you are fixing, or to stress the feature you are bringing.
+- [ ] You reached 100% of code coverage on the code you edited, without abusive use of `pragma: no cover`
 - [ ] If this PR is about a new feature, or a behavior change, you have updated the documentation accordingly.
 
 ---
