@@ -1,3 +1,5 @@
+from flask import current_app
+
 from authlib.common.urls import add_params_to_uri
 from authlib.common.urls import url_decode
 from authlib.common.urls import urlparse
@@ -15,7 +17,8 @@ from .oauth2_server import create_authorization_server
 
 class OpenIDImplicitGrant(_OpenIDImplicitGrant):
     def get_jwt_config(self):
-        return dict(key="secret", alg="HS256", iss="Authlib", exp=3600)
+        alg = current_app.config.get("OAUTH2_JWT_ALG", "HS256")
+        return dict(key="secret", alg=alg, iss="Authlib", exp=3600)
 
     def generate_user_info(self, user, scopes):
         return user.generate_user_info(scopes)
@@ -25,7 +28,7 @@ class OpenIDImplicitGrant(_OpenIDImplicitGrant):
 
 
 class ImplicitTest(TestCase):
-    def prepare_data(self):
+    def prepare_data(self, id_token_signed_response_alg=None):
         server = create_authorization_server(self.app)
         server.register_grant(OpenIDImplicitGrant)
 
@@ -43,6 +46,7 @@ class ImplicitTest(TestCase):
                 "scope": "openid profile",
                 "token_endpoint_auth_method": "none",
                 "response_types": ["id_token", "id_token token"],
+                "id_token_signed_response_alg": id_token_signed_response_alg,
             }
         )
         self.authorize_url = (
@@ -51,12 +55,13 @@ class ImplicitTest(TestCase):
         db.session.add(client)
         db.session.commit()
 
-    def validate_claims(self, id_token, params):
-        jwt = JsonWebToken(["HS256"])
+    def validate_claims(self, id_token, params, alg="HS256"):
+        jwt = JsonWebToken([alg])
         claims = jwt.decode(
             id_token, "secret", claims_cls=ImplicitIDToken, claims_params=params
         )
         claims.validate()
+        return claims
 
     def test_consent_view(self):
         self.prepare_data()
@@ -199,3 +204,44 @@ class ImplicitTest(TestCase):
         )
         assert b'name="id_token"' in rv.data
         assert b'name="state"' in rv.data
+
+    def test_client_metadata_custom_alg(self):
+        """If the client metadata 'id_token_signed_response_alg' is defined,
+        it should be used to sign id_tokens."""
+        self.prepare_data(id_token_signed_response_alg="HS384")
+        self.app.config["OAUTH2_JWT_ALG"] = None
+        rv = self.client.post(
+            "/oauth/authorize",
+            data={
+                "response_type": "id_token",
+                "client_id": "implicit-client",
+                "scope": "openid profile",
+                "state": "foo",
+                "redirect_uri": "https://a.b/c",
+                "user_id": "1",
+                "nonce": "abc",
+            },
+        )
+        params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+        claims = self.validate_claims(params["id_token"], params, "HS384")
+        assert claims.header["alg"] == "HS384"
+
+    def test_client_metadata_alg_none(self):
+        """The 'none' 'id_token_signed_response_alg' alg should be
+        forbidden in non implicit flows."""
+        self.prepare_data(id_token_signed_response_alg="none")
+        self.app.config["OAUTH2_JWT_ALG"] = None
+        rv = self.client.post(
+            "/oauth/authorize",
+            data={
+                "response_type": "id_token",
+                "client_id": "implicit-client",
+                "scope": "openid profile",
+                "state": "foo",
+                "redirect_uri": "https://a.b/c",
+                "user_id": "1",
+                "nonce": "abc",
+            },
+        )
+        params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+        assert params["error"] == "invalid_request"

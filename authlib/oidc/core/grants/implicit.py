@@ -4,6 +4,7 @@ from authlib.oauth2.rfc6749 import AccessDeniedError
 from authlib.oauth2.rfc6749 import ImplicitGrant
 from authlib.oauth2.rfc6749 import InvalidScopeError
 from authlib.oauth2.rfc6749 import OAuth2Error
+from authlib.oauth2.rfc6749.errors import InvalidRequestError
 from authlib.oauth2.rfc6749.hooks import hooked
 
 from .util import create_response_mode_response
@@ -147,6 +148,26 @@ class OpenIDImplicitGrant(ImplicitGrant):
         config["nonce"] = self.request.payload.data.get("nonce")
         if code is not None:
             config["code"] = code
+
+        # Per OpenID Connect Registration 1.0 Section 2:
+        # Use client's id_token_signed_response_alg if specified
+        if not config.get("alg") and (
+            client_alg := self.request.client.id_token_signed_response_alg
+        ):
+            if client_alg == "none":
+                # According to oidc-registration §2 the 'none' alg is not valid in
+                # implicit flows:
+                #    The value none MUST NOT be used as the ID Token alg value unless
+                #    the Client uses only Response Types that return no ID Token from
+                #    the Authorization Endpoint (such as when only using the
+                #    Authorization Code Flow).
+                raise InvalidRequestError(
+                    "id_token must be signed in implicit flows",
+                    redirect_uri=self.request.payload.redirect_uri,
+                    redirect_fragment=True,
+                )
+
+            config["alg"] = client_alg
 
         user_info = self.generate_user_info(self.request.user, token["scope"])
         id_token = generate_id_token(token, user_info, **config)

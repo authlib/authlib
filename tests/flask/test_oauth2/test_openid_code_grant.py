@@ -31,9 +31,9 @@ class AuthorizationCodeGrant(CodeGrantMixin, _AuthorizationCodeGrant):
 
 class OpenIDCode(_OpenIDCode):
     def get_jwt_config(self, grant):
-        key = current_app.config["OAUTH2_JWT_KEY"]
-        alg = current_app.config["OAUTH2_JWT_ALG"]
-        iss = current_app.config["OAUTH2_JWT_ISS"]
+        key = current_app.config.get("OAUTH2_JWT_KEY")
+        alg = current_app.config.get("OAUTH2_JWT_ALG")
+        iss = current_app.config.get("OAUTH2_JWT_ISS")
         return dict(key=key, alg=alg, iss=iss, exp=3600)
 
     def exists_nonce(self, nonce, request):
@@ -53,7 +53,7 @@ class BaseTestCase(TestCase):
             }
         )
 
-    def prepare_data(self, require_nonce=False):
+    def prepare_data(self, require_nonce=False, id_token_signed_response_alg=None):
         self.config_app()
         server = create_authorization_server(self.app)
         server.register_grant(
@@ -75,6 +75,7 @@ class BaseTestCase(TestCase):
                 "scope": "openid profile address",
                 "response_types": ["code"],
                 "grant_types": ["authorization_code"],
+                "id_token_signed_response_alg": id_token_signed_response_alg,
             }
         )
         db.session.add(client)
@@ -237,6 +238,82 @@ class OpenIDCodeTest(BaseTestCase):
         params = dict(url_decode(urlparse.urlparse(rv.location).query))
         assert params["error"] == "login_required"
         assert params["state"] == "bar"
+
+    def test_client_metadata_custom_alg(self):
+        """If the client metadata 'id_token_signed_response_alg' is defined,
+        it should be used to sign id_tokens."""
+        self.prepare_data(id_token_signed_response_alg="HS384")
+        del self.app.config["OAUTH2_JWT_ALG"]
+        rv = self.client.post(
+            "/oauth/authorize",
+            data={
+                "response_type": "code",
+                "client_id": "code-client",
+                "state": "bar",
+                "scope": "openid profile",
+                "redirect_uri": "https://a.b",
+                "user_id": "1",
+            },
+        )
+        params = dict(url_decode(urlparse.urlparse(rv.location).query))
+        code = params["code"]
+        headers = self.create_basic_header("code-client", "code-secret")
+        rv = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "redirect_uri": "https://a.b",
+                "code": code,
+            },
+            headers=headers,
+        )
+        resp = json.loads(rv.data)
+        claims = jwt.decode(
+            resp["id_token"],
+            "secret",
+            claims_cls=CodeIDToken,
+            claims_options={"iss": {"value": "Authlib"}},
+        )
+        claims.validate()
+        assert claims.header["alg"] == "HS384"
+
+    def test_client_metadata_alg_none(self):
+        """The 'none' 'id_token_signed_response_alg' alg should be
+        supported in non implicit flows."""
+        self.prepare_data(id_token_signed_response_alg="none")
+        del self.app.config["OAUTH2_JWT_ALG"]
+        rv = self.client.post(
+            "/oauth/authorize",
+            data={
+                "response_type": "code",
+                "client_id": "code-client",
+                "state": "bar",
+                "scope": "openid profile",
+                "redirect_uri": "https://a.b",
+                "user_id": "1",
+            },
+        )
+        params = dict(url_decode(urlparse.urlparse(rv.location).query))
+        code = params["code"]
+        headers = self.create_basic_header("code-client", "code-secret")
+        rv = self.client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "redirect_uri": "https://a.b",
+                "code": code,
+            },
+            headers=headers,
+        )
+        resp = json.loads(rv.data)
+        claims = jwt.decode(
+            resp["id_token"],
+            "secret",
+            claims_cls=CodeIDToken,
+            claims_options={"iss": {"value": "Authlib"}},
+        )
+        claims.validate()
+        assert claims.header["alg"] == "none"
 
 
 class RSAOpenIDCodeTest(BaseTestCase):

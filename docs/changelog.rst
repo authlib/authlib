@@ -6,6 +6,14 @@ Changelog
 
 Here you can see the full list of changes between each Authlib release.
 
+Version 1.6.3
+-------------
+
+**Unreleased**
+
+- OIDC ``id_token`` are signed according to ``id_token_signed_response_alg``
+  client metadata. :issue:`755`
+
 Version 1.6.2
 -------------
 

@@ -22,8 +22,12 @@ log = logging.getLogger(__name__)
 class OpenIDToken:
     def get_jwt_config(self, grant):  # pragma: no cover
         """Get the JWT configuration for OpenIDCode extension. The JWT
-        configuration will be used to generate ``id_token``. Developers
-        MUST implement this method in subclass, e.g.::
+        configuration will be used to generate ``id_token``.
+        If ``alg`` is undefined, the ``id_token_signed_response_alg`` client
+        metadata will be used. By default ``RS256`` will be used.
+        If ``key`` is undefined, the ``jwks_uri`` or ``jwks`` client metadata
+        will be used.
+        Developers MUST implement this method in subclass, e.g.::
 
             def get_jwt_config(self, grant):
                 return {
@@ -76,6 +80,13 @@ class OpenIDToken:
 
         config = self.get_jwt_config(grant)
         config["aud"] = self.get_audiences(request)
+
+        # Per OpenID Connect Registration 1.0 Section 2:
+        # Use client's id_token_signed_response_alg if specified
+        if not config.get("alg") and (
+            client_alg := request.client.id_token_signed_response_alg
+        ):
+            config["alg"] = client_alg
 
         if authorization_code:
             config["nonce"] = authorization_code.get_nonce()

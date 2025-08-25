@@ -110,6 +110,10 @@ class OAuth2ClientMixin(ClientMixin):
     def software_version(self):
         return self.client_metadata.get("software_version")
 
+    @property
+    def id_token_signed_response_alg(self):
+        return self.client_metadata.get("id_token_signed_response_alg")
+
     def get_client_id(self):
         return self.client_id
 
