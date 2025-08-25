@@ -1,12 +1,18 @@
+import time
+
 import pytest
 from httpx import ASGITransport
 from starlette.config import Config
 from starlette.requests import Request
 
+from authlib.common.encoding import to_native
 from authlib.common.urls import url_decode
 from authlib.common.urls import urlparse
 from authlib.integrations.starlette_client import OAuth
 from authlib.integrations.starlette_client import OAuthError
+from authlib.jose import JsonWebKey, jwt
+from authlib.jose.errors import InvalidClaimError
+from authlib.oidc.core.grants.util import generate_id_token
 
 from ..asgi_helper import AsyncPathMapDispatch
 from ..util import get_bearer_token
@@ -310,3 +316,72 @@ async def test_oauth2_authorize_with_metadata():
     req = Request(req_scope)
     resp = await client.authorize_redirect(req, "https://b.com/bar")
     assert resp.status_code == 302
+
+
+async def test_oauth2_decode_access_token():
+    secret_key = JsonWebKey.generate_key(
+        'RSA',
+        1024,
+        is_private=True)
+
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id='123',
+        jwks={"keys": [secret_key.as_dict()]},
+        issuer="https://i.b",
+    )
+
+    header = {
+        "alg": "RS256",
+        "typ": "at+jwt",
+    }
+    now = int(time.time())
+    access_token = {
+        "iss": "https://i.b",
+        "exp": now + 3600,
+        "aud": "dev",
+        "sub": "123",
+        "client_id": "123",
+        "iat": now,
+        "jti": "123",
+    }
+    token = to_native(jwt.encode(header, access_token, secret_key))
+
+    claims = await client.decode_access_token(token)
+    assert claims == access_token
+
+
+async def test_oauth2_invalid_access_token():
+    secret_key = JsonWebKey.generate_key(
+        'RSA',
+        1024,
+        is_private=True)
+
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id='123',
+        jwks={"keys": [secret_key.as_dict()]},
+        issuer="https://i.b",
+    )
+
+    header = {
+        "alg": "RS256",
+        "typ": "at+jwt",
+    }
+    now = int(time.time())
+    access_token = {
+        "iss": "https://i.b",
+        "exp": now + 3600,
+        "aud": "invalid", # aud does not equal client_id
+        "sub": "123",
+        "client_id": "123",
+        "iat": now,
+        "jti": "123",
+    }
+    token = to_native(jwt.encode(header, access_token, secret_key))
+
+    claims = await client.decode_access_token(token)
+    with pytest.raises(InvalidClaimError):
+        claims.validate()
