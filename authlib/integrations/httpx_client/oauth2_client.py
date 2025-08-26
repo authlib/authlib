@@ -9,7 +9,7 @@ from httpx import Request
 from httpx import Response
 
 from authlib.common.urls import url_decode
-from authlib.oauth2.auth import ClientAuth
+from authlib.oauth2.auth import ClientAuth, DPoPAuthProtocol
 from authlib.oauth2.auth import TokenAuth
 from authlib.oauth2.client import OAuth2Client as _OAuth2Client
 
@@ -28,36 +28,56 @@ __all__ = [
 ]
 
 
-class OAuth2Auth(Auth, TokenAuth):
-    """Sign requests for OAuth 2.0, currently only bearer token is supported."""
+class OAuth2DPoPAuthMixin(DPoPAuthProtocol):
+    def retry_dpop_if_necessary(self, response: Response):
+        request = response.request
+        if "DPoP-Nonce" in response.headers:
+            self.set_dpop_nonce(response.headers.get("DPoP-Nonce"))
 
-    requires_request_body = True
-
-    def auth_flow(self, request: Request) -> typing.Generator[Request, Response, None]:
-        try:
-            url, headers, body = self.prepare(
-                str(request.url), request.headers, request.content
+        if self.is_dpop_error(response):
+            url, headers, body = self.dpop_prepare(
+                request.method, str(request.url), request.headers, request.content
             )
             headers["Content-Length"] = str(len(body))
             yield build_request(
                 url=url, headers=headers, body=body, initial_request=request
             )
+
+
+class OAuth2Auth(Auth, TokenAuth, OAuth2DPoPAuthMixin):
+    """Sign requests for OAuth 2.0, currently only bearer token is supported."""
+
+    requires_request_body = True
+    requires_response_body = True
+
+    def auth_flow(self, request: Request) -> typing.Generator[Request, Response, None]:
+        try:
+            url, headers, body = self.prepare(
+                request.method, str(request.url), request.headers, request.content
+            )
+            headers["Content-Length"] = str(len(body))
+            response = yield build_request(
+                url=url, headers=headers, body=body, initial_request=request
+            )
+            yield from self.retry_dpop_if_necessary(response)
         except KeyError as error:
             description = f"Unsupported token_type: {str(error)}"
             raise UnsupportedTokenTypeError(description=description) from error
 
 
-class OAuth2ClientAuth(Auth, ClientAuth):
+class OAuth2ClientAuth(Auth, ClientAuth, OAuth2DPoPAuthMixin):
     requires_request_body = True
+    requires_response_body = True
 
     def auth_flow(self, request: Request) -> typing.Generator[Request, Response, None]:
         url, headers, body = self.prepare(
             request.method, str(request.url), request.headers, request.content
         )
         headers["Content-Length"] = str(len(body))
-        yield build_request(
+        response = yield build_request(
             url=url, headers=headers, body=body, initial_request=request
         )
+        yield from self.retry_dpop_if_necessary(response)
 
 
 class AsyncOAuth2Client(_OAuth2Client, httpx.AsyncClient):
@@ -78,6 +98,7 @@ class AsyncOAuth2Client(_OAuth2Client, httpx.AsyncClient):
         token=None,
         token_placement="header",
         update_token=None,
+        dpop_proof=None,
         leeway=60,
         **kwargs,
     ):
@@ -101,6 +122,7 @@ class AsyncOAuth2Client(_OAuth2Client, httpx.AsyncClient):
             token=token,
             token_placement=token_placement,
             update_token=update_token,
+            dpop_proof=dpop_proof,
             leeway=leeway,
             **kwargs,
         )

@@ -1,5 +1,8 @@
+import json
+
 from authlib.common.security import generate_token
 from authlib.common.urls import url_decode
+from authlib.jose import JsonWebKey
 
 from .auth import ClientAuth
 from .auth import TokenAuth
@@ -10,6 +13,7 @@ from .rfc6749.parameters import prepare_grant_uri
 from .rfc6749.parameters import prepare_token_request
 from .rfc7009 import prepare_revoke_token_request
 from .rfc7636 import create_s256_code_challenge
+from .rfc9449.proof import DPoPProof
 
 DEFAULT_HEADERS = {
     "Accept": "application/json",
@@ -64,6 +68,7 @@ class OAuth2Client:
         token=None,
         token_placement="header",
         update_token=None,
+        dpop_proof=None,
         leeway=60,
         **metadata,
     ):
@@ -92,7 +97,11 @@ class OAuth2Client:
         self.redirect_uri = redirect_uri
         self.code_challenge_method = code_challenge_method
 
-        self.token_auth = self.token_auth_class(token, token_placement, self)
+        self.dpop_proof = dpop_proof
+        self.token_auth = self.token_auth_class(token, token_placement, self, self.dpop_proof)
+        if self.dpop_proof:
+            self.dpop_proof.set_token(token)
+
         self.update_token = update_token
 
         token_updater = metadata.pop("token_updater", None)
@@ -131,6 +140,7 @@ class OAuth2Client:
             client_id=self.client_id,
             client_secret=self.client_secret,
             auth_method=auth_method,
+            dpop_proof=self.dpop_proof,
         )
 
     @property
@@ -140,6 +150,7 @@ class OAuth2Client:
     @token.setter
     def token(self, token):
         self.token_auth.set_token(token)
+        self.dpop_proof.set_token(token)
 
     def create_authorization_url(self, url, state=None, code_verifier=None, **kwargs):
         """Generate an authorization URL and state.
@@ -311,7 +322,7 @@ class OAuth2Client:
         elif self.metadata.get("grant_type") == "client_credentials":
             access_token = token["access_token"]
             new_token = self.fetch_token(url, grant_type="client_credentials")
-            if self.update_token:
+            if callable(self.update_token):
                 self.update_token(new_token, access_token=access_token)
             return True
 
@@ -421,6 +432,8 @@ class OAuth2Client:
                 error=token["error"], description=token.get("error_description")
             )
         self.token = token
+        if self.dpop_proof:
+            self.token["dpop_jwk"] = self.dpop_proof.jwk.as_dict(is_private=True)
         return self.token
 
     def _fetch_token(
@@ -435,6 +448,7 @@ class OAuth2Client:
                 url = "&".join([url, body])
             else:
                 url = "?".join([url, body])
+            # TODO: This should be self.session.get, right?
             resp = self.session.request(
                 method, url, headers=headers, auth=auth, **kwargs
             )
