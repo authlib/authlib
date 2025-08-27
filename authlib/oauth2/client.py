@@ -180,6 +180,9 @@ class OAuth2Client:
             kwargs["code_challenge"] = create_s256_code_challenge(code_verifier)
             kwargs["code_challenge_method"] = self.code_challenge_method
 
+        if self.dpop_proof:
+            kwargs["dpop_jkt"] = self.dpop_proof.jwk.thumbprint()
+
         for k in self.EXTRA_AUTHORIZE_PARAMS:
             if k not in kwargs and k in self.metadata:
                 kwargs[k] = self.metadata[k]
