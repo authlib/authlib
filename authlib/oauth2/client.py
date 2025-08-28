@@ -1,5 +1,8 @@
+import json
+
 from authlib.common.security import generate_token
 from authlib.common.urls import url_decode
+from authlib.jose import JsonWebKey
 
 from .auth import ClientAuth
 from .auth import TokenAuth
@@ -10,6 +13,7 @@ from .rfc6749.parameters import prepare_grant_uri
 from .rfc6749.parameters import prepare_token_request
 from .rfc7009 import prepare_revoke_token_request
 from .rfc7636 import create_s256_code_challenge
+from .rfc9449.proof import DPoPProof
 
 DEFAULT_HEADERS = {
     "Accept": "application/json",
@@ -64,6 +68,7 @@ class OAuth2Client:
         token=None,
         token_placement="header",
         update_token=None,
+        dpop_proof=None,
         leeway=60,
         **metadata,
     ):
@@ -92,7 +97,11 @@ class OAuth2Client:
         self.redirect_uri = redirect_uri
         self.code_challenge_method = code_challenge_method
 
-        self.token_auth = self.token_auth_class(token, token_placement, self)
+        self.dpop_proof = dpop_proof
+        if self.dpop_proof:
+            self.dpop_proof.generate_jwk(token)
+        self.token_auth = self.token_auth_class(token, token_placement, self, self.dpop_proof)
+
         self.update_token = update_token
 
         token_updater = metadata.pop("token_updater", None)
@@ -131,6 +140,7 @@ class OAuth2Client:
             client_id=self.client_id,
             client_secret=self.client_secret,
             auth_method=auth_method,
+            dpop_proof=self.dpop_proof,
         )
 
     @property
@@ -140,6 +150,8 @@ class OAuth2Client:
     @token.setter
     def token(self, token):
         self.token_auth.set_token(token)
+        if self.dpop_proof:
+            self.dpop_proof.set_token(token)
 
     def create_authorization_url(self, url, state=None, code_verifier=None, **kwargs):
         """Generate an authorization URL and state.
@@ -168,6 +180,9 @@ class OAuth2Client:
         ):
             kwargs["code_challenge"] = create_s256_code_challenge(code_verifier)
             kwargs["code_challenge_method"] = self.code_challenge_method
+
+        if self.dpop_proof:
+            kwargs["dpop_jkt"] = self.dpop_proof.jwk.thumbprint()
 
         for k in self.EXTRA_AUTHORIZE_PARAMS:
             if k not in kwargs and k in self.metadata:
@@ -311,7 +326,7 @@ class OAuth2Client:
         elif self.metadata.get("grant_type") == "client_credentials":
             access_token = token["access_token"]
             new_token = self.fetch_token(url, grant_type="client_credentials")
-            if self.update_token:
+            if callable(self.update_token):
                 self.update_token(new_token, access_token=access_token)
             return True
 
@@ -366,7 +381,7 @@ class OAuth2Client:
 
         :param url: Introspection Endpoint, must be HTTPS.
         :param token: The token to be introspected.
-        :param token_type_hint: The type of the token that to be revoked.
+        :param token_type_hint: The type of the token that to be introspected.
                                 It can be "access_token" or "refresh_token".
         :param body: Optional application/x-www-form-urlencoded body to add the
                      include in the token request. Prefer kwargs over body.
@@ -420,6 +435,9 @@ class OAuth2Client:
             raise self.oauth_error_class(
                 error=token["error"], description=token.get("error_description")
             )
+        if self.dpop_proof:
+            token["dpop_jwk"] = self.dpop_proof.jwk.as_dict(is_private=True)
+            token["dpop_nonces"] = self.dpop_proof.nonces
         self.token = token
         return self.token
 
@@ -435,6 +453,7 @@ class OAuth2Client:
                 url = "&".join([url, body])
             else:
                 url = "?".join([url, body])
+            # TODO: This should be self.session.get, right?
             resp = self.session.request(
                 method, url, headers=headers, auth=auth, **kwargs
             )

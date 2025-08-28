@@ -17,16 +17,41 @@ __all__ = ["OAuth2Session", "OAuth2Auth"]
 class OAuth2Auth(AuthBase, TokenAuth):
     """Sign requests for OAuth 2.0, currently only bearer token is supported."""
 
-    def ensure_active_token(self):
-        if self.client and not self.client.ensure_active_token(self.token):
-            raise InvalidTokenError()
+    def handle_401(self, resp, **kwargs):
+        if not 400 <= resp.status_code < 500:
+            self._thread_local.num_401_calls = 1
+            return resp
+
+        if self._thread_local.pos is not None:
+            # Rewind the file position indicator of the body to where
+            # it was to resend the request.
+            resp.request.body.seek(self._thread_local.pos)
+        s_auth = resp.headers.get("www-authenticate", "")
+
+        if "digest" in s_auth.lower() and self._thread_local.num_401_calls < 2:
+            self._thread_local.num_401_calls += 1
+
+            # Consume content and release the original connection
+            # to allow our new request to reuse the same one.
+            resp.content
+            resp.close()
+            prep = resp.request.copy()
+            prep.headers["Authorization"] = self.build_digest_header(
+                prep.method, prep.url
+            )
+            _r = r.connection.send(prep, **kwargs)
+            _r.history.append(r)
+            _r.request = prep
+
+            return _r
+
 
     def __call__(self, req):
-        self.ensure_active_token()
         try:
             req.url, req.headers, req.body = self.prepare(
-                req.url, req.headers, req.body
+                req.method, req.url, req.headers, req.body
             )
+            req.register_hook("response", self.handle_401)
         except KeyError as error:
             description = f"Unsupported token_type: {str(error)}"
             raise UnsupportedTokenTypeError(description=description) from error
@@ -136,5 +161,7 @@ class OAuth2Session(OAuth2Client, Session):
         if not withhold_token and auth is None:
             if not self.token:
                 raise MissingTokenError()
+            if not self.ensure_active_token(self.token):
+                raise InvalidTokenError()
             auth = self.token_auth
         return super().request(method, url, auth=auth, **kwargs)
