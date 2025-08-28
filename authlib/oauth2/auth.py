@@ -98,6 +98,9 @@ class DPoPAuthMixin(DPoPAuthProtocol):
         return uri, headers, body
 
     def is_dpop_error(self, response):
+        if "DPoP-Nonce" in response.headers:
+            self.set_dpop_nonce(response.headers.get("DPoP-Nonce"))
+
         return self.dpop_error_validator(response)
 
 
@@ -171,7 +174,8 @@ class TokenAuth(DPoPAuthMixin, AuthProtocol):
             self.token["access_token"], uri, headers, body, self.token_placement
         )
 
-        uri, headers, body = self.dpop_prepare(method, uri, headers, body)
+        if token_type.lower() == "dpop":
+            uri, headers, body = self.dpop_prepare(method, uri, headers, body)
 
         for hook in self.hooks:
             uri, headers, body = hook(uri, headers, body)

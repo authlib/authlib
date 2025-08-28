@@ -31,9 +31,6 @@ __all__ = [
 class OAuth2DPoPAuthMixin(DPoPAuthProtocol):
     def retry_dpop_if_necessary(self, response: Response):
         request = response.request
-        if "DPoP-Nonce" in response.headers:
-            self.set_dpop_nonce(response.headers.get("DPoP-Nonce"))
-
         if self.is_dpop_error(response):
             url, headers, body = self.dpop_prepare(
                 request.method, str(request.url), request.headers, request.content
@@ -45,7 +42,7 @@ class OAuth2DPoPAuthMixin(DPoPAuthProtocol):
 
 
 class OAuth2Auth(Auth, TokenAuth, OAuth2DPoPAuthMixin):
-    """Sign requests for OAuth 2.0, currently only bearer token is supported."""
+    """Sign requests for OAuth 2.0, currently only bearer and dpop token are supported."""
 
     requires_request_body = True
     requires_response_body = True

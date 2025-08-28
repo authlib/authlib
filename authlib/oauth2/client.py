@@ -98,9 +98,9 @@ class OAuth2Client:
         self.code_challenge_method = code_challenge_method
 
         self.dpop_proof = dpop_proof
-        self.token_auth = self.token_auth_class(token, token_placement, self, self.dpop_proof)
         if self.dpop_proof:
-            self.dpop_proof.set_token(token)
+            self.dpop_proof.generate_jwk(token)
+        self.token_auth = self.token_auth_class(token, token_placement, self, self.dpop_proof)
 
         self.update_token = update_token
 
@@ -150,7 +150,8 @@ class OAuth2Client:
     @token.setter
     def token(self, token):
         self.token_auth.set_token(token)
-        self.dpop_proof.set_token(token)
+        if self.dpop_proof:
+            self.dpop_proof.set_token(token)
 
     def create_authorization_url(self, url, state=None, code_verifier=None, **kwargs):
         """Generate an authorization URL and state.
@@ -380,7 +381,7 @@ class OAuth2Client:
 
         :param url: Introspection Endpoint, must be HTTPS.
         :param token: The token to be introspected.
-        :param token_type_hint: The type of the token that to be revoked.
+        :param token_type_hint: The type of the token that to be introspected.
                                 It can be "access_token" or "refresh_token".
         :param body: Optional application/x-www-form-urlencoded body to add the
                      include in the token request. Prefer kwargs over body.
@@ -434,9 +435,10 @@ class OAuth2Client:
             raise self.oauth_error_class(
                 error=token["error"], description=token.get("error_description")
             )
-        self.token = token
         if self.dpop_proof:
-            self.token["dpop_jwk"] = self.dpop_proof.jwk.as_dict(is_private=True)
+            token["dpop_jwk"] = self.dpop_proof.jwk.as_dict(is_private=True)
+            token["dpop_nonces"] = self.dpop_proof.nonces
+        self.token = token
         return self.token
 
     def _fetch_token(

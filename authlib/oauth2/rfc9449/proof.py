@@ -119,17 +119,20 @@ class DPoPProof:
 
         self.nonces[key] = nonce
 
-        if cur_nonce != nonce:
+        if cur_nonce != nonce and key is self.NonceKey.RESOURCE_SERVER_NONCE_KEY:
+            # AUTH_SERVER_NONCE_KEY is already emitted via update_token
             self._emit_nonces()
+
+    def generate_jwk(self, token):
+        self.set_token(token)
+        if not self.jwk:
+            if self.token and "dpop_jwk" in self.token:
+                self.jwk = JsonWebKey.import_key(self.token["dpop_jwk"])
+            elif self.jwk is None:
+                self.jwk = self.jwk_generator(self.jwk_generator_options)
 
     def set_token(self, token):
         self.token = OAuth2Token.from_dict(token)
-        self._emit_nonces()
-        if not self.jwk:
-            if token and "dpop_jwk" in token:
-                self.jwk = JsonWebKey.import_key(token["dpop_jwk"])
-            elif self.jwk is None:
-                self.jwk = self.jwk_generator(self.jwk_generator_options)
 
     def prepare(self, method, uri, headers, body, nonce_key: NonceKey = None, token=None):
         nonce = None
