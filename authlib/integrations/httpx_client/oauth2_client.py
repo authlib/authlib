@@ -133,6 +133,17 @@ class AsyncOAuth2Client(_OAuth2Client, httpx.AsyncClient):
         async with super().stream(method, url, auth=auth, **kwargs) as resp:
             yield resp
 
+    def send(self, req, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs):
+        if not withhold_token and auth is USE_CLIENT_DEFAULT:
+            if not self.token:
+                raise MissingTokenError()
+
+            self.ensure_active_token(self.token)
+
+            auth = self.token_auth
+
+        return super(AsyncOAuth2Client, self).send(req, auth=auth, **kwargs)
+
     async def ensure_active_token(self, token):
         async with self._token_refresh_lock:
             if self.token.is_expired(leeway=self.leeway):
