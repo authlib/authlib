@@ -1,19 +1,11 @@
-import json
-
 from authlib.common.security import generate_token
 from authlib.common.urls import url_decode
-from authlib.jose import JsonWebKey
-
-from .auth import ClientAuth
-from .auth import TokenAuth
+from .auth import ClientAuth, TokenAuth
 from .base import OAuth2Error
-from .rfc6749.parameters import parse_authorization_code_response
-from .rfc6749.parameters import parse_implicit_response
-from .rfc6749.parameters import prepare_grant_uri
-from .rfc6749.parameters import prepare_token_request
+from .rfc6749.parameters import parse_authorization_code_response, parse_implicit_response, prepare_grant_uri, \
+    prepare_token_request
 from .rfc7009 import prepare_revoke_token_request
 from .rfc7636 import create_s256_code_challenge
-from .rfc9449.proof import DPoPProof
 
 DEFAULT_HEADERS = {
     "Accept": "application/json",
@@ -99,7 +91,7 @@ class OAuth2Client:
 
         self.dpop_proof = dpop_proof
         if self.dpop_proof:
-            self.dpop_proof.generate_jwk(token)
+            self.dpop_proof.generate_jwk(token, metadata.get("dpop_signing_alg_values_supported", None))
         self.token_auth = self.token_auth_class(token, token_placement, self, self.dpop_proof)
 
         self.update_token = update_token
@@ -150,8 +142,6 @@ class OAuth2Client:
     @token.setter
     def token(self, token):
         self.token_auth.set_token(token)
-        if self.dpop_proof:
-            self.dpop_proof.set_token(token)
 
     def create_authorization_url(self, url, state=None, code_verifier=None, **kwargs):
         """Generate an authorization URL and state.
@@ -436,8 +426,7 @@ class OAuth2Client:
                 error=token["error"], description=token.get("error_description")
             )
         if self.dpop_proof:
-            token["dpop_jwk"] = self.dpop_proof.jwk.as_dict(is_private=True)
-            token["dpop_nonces"] = self.dpop_proof.nonces
+            token["dpop_jwk"] = self.dpop_proof.get_jwk_as_dict()
         self.token = token
         return self.token
 

@@ -1,15 +1,11 @@
 import base64
 from typing import Any, Callable, Protocol
 
-from authlib.common.encoding import to_bytes
-from authlib.common.encoding import to_native
-from authlib.common.urls import add_params_to_qs
-from authlib.common.urls import add_params_to_uri
-
+from authlib.common.encoding import to_bytes, to_native
+from authlib.common.urls import add_params_to_qs, add_params_to_uri
 from .rfc6749 import OAuth2Token
 from .rfc6750 import add_bearer_token
 from .rfc9449 import add_dpop_token
-from .rfc9449.proof import DPoPProof
 
 
 def encode_client_secret_basic(client, method, uri, headers, body):
@@ -60,9 +56,7 @@ def is_resource_server_dpop_error(response):
 
 
 class DPoPAuthProtocol(Protocol):
-    DEFAULT_DPOP_NONCE_KEY: DPoPProof.NonceKey = None
-
-    def set_dpop_nonce(self, nonce):
+    def set_dpop_nonce(self, origin, nonce):
         ...
 
     def dpop_prepare(self, method, uri, headers, body) -> tuple[Any, Any, Any]:
@@ -80,26 +74,24 @@ class DPoPAuthMixin(DPoPAuthProtocol):
         self.dpop_error_validator = dpop_error_validator
         self.dpop_proof = dpop_proof
 
-    def set_dpop_nonce(self, nonce):
-        self.dpop_proof.set_nonce(self.DEFAULT_DPOP_NONCE_KEY, nonce)
+    def set_dpop_nonce(self, origin: str, nonce: str):
+        self.dpop_proof.set_nonce(origin, nonce)
 
     def dpop_prepare(self, method, uri, headers, body):
         if self.dpop_proof:
-            token = None
-            if hasattr(self, 'token'):
-                token = self.token
+            token = getattr(self, "token", None)
             uri, headers, body = self.dpop_proof.prepare(
                 method,
                 uri,
                 headers,
                 body,
-                nonce_key=self.DEFAULT_DPOP_NONCE_KEY,
+                nonce_origin=uri,
                 token=token)
         return uri, headers, body
 
     def is_dpop_error(self, response):
         if "DPoP-Nonce" in response.headers:
-            self.set_dpop_nonce(response.headers.get("DPoP-Nonce"))
+            self.set_dpop_nonce(str(response.url), response.headers.get("DPoP-Nonce"))
 
         return self.dpop_error_validator(response)
 
@@ -116,7 +108,6 @@ class ClientAuth(DPoPAuthMixin, AuthProtocol):
         * client_secret_post
         * none
     """
-    DEFAULT_DPOP_NONCE_KEY = DPoPProof.NonceKey.AUTH_SERVER_NONCE_KEY
     DEFAULT_AUTH_METHODS = {
         "client_secret_basic": encode_client_secret_basic,
         "client_secret_post": encode_client_secret_post,
@@ -152,8 +143,6 @@ class TokenAuth(DPoPAuthMixin, AuthProtocol):
         * body
         * uri
     """
-
-    DEFAULT_DPOP_NONCE_KEY = DPoPProof.NonceKey.RESOURCE_SERVER_NONCE_KEY
     DEFAULT_TOKEN_TYPE = "bearer"
     SIGN_METHODS = {"bearer": add_bearer_token, "dpop": add_dpop_token}
 

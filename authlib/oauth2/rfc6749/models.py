@@ -165,6 +165,16 @@ class AuthorizationCodeMixin:
         """
         raise NotImplementedError()
 
+    def get_dpop_jkt(self):
+        """A method to get the DPoP jkt associated with this code:
+
+        .. code-block::
+
+            def get_dpop_jkt(self):
+                return self.dpop_jkt
+        """
+        return None
+
 
 class TokenMixin:
     def check_client(self, client):
@@ -241,3 +251,23 @@ class TokenMixin:
                 return Client.get(self.client_id)
         """
         raise NotImplementedError()
+
+    def get_token_type(self):
+        """A method to get the token type associated with this token:
+
+        .. code-block::
+
+            def get_token_type(self):
+                return self.token_type
+        """
+        raise NotImplementedError()
+
+    def get_dpop_jkt(self):
+        """A method to get the DPoP jkt associated with this token:
+
+        .. code-block::
+
+            def get_dpop_jkt(self):
+                return self.dpop_jkt
+        """
+        return None

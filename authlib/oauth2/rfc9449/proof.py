@@ -1,42 +1,43 @@
 import json
 import time
-import traceback
-from enum import Enum
+from typing import Any
 
 from authlib.common.security import generate_token
-from authlib.jose import JsonWebKey, jwt
+from authlib.jose import JsonWebKey, JsonWebSignature, jwt
+from authlib.jose.errors import UnsupportedAlgorithmError
+from authlib.jose.rfc7517 import AsymmetricKey
 from authlib.oauth2.rfc6749 import OAuth2Token
 from authlib.oauth2.rfc7636 import create_s256_code_challenge
+from authlib.oauth2.rfc9449.nonce import DPoPNonceCache, DefaultDPoPNonceCache
+from authlib.oauth2.rfc9449.validator import normalize_url
 
 
-def generate_ec_p256_jwk(options=None):
-    return JsonWebKey.generate_key("EC", "P-256", options=options, is_private=True)
-
-
-# Key could come from a provided token as a string
-# or internally, so should pass it as a string
-# Header:
-#   typ: dpop+jwt
-#   alg: <alg>
-#   jwk: <jwk public key>
-# Payload:
-#   jti: generate_token()
-#   htm: method
-#   htu: url
-#   iat: time.time()
-#   ath: <token> # Optional
-#   nonce: <nonce> # Optional
 def sign_dpop_proof(
         jwk,
         alg,
         method,
         url,
         nonce=None,
-        token=None,
+        access_token=None,
         claims=None,
         headers=None,
         expires_in=30,
 ):
+    """
+    Generate the DPoP proof JWT
+
+    :param jwk: the JWK keypair used to sign this proof
+    :param alg: the algorithm used
+    :param method: the HTTP method of the request this proof is being attached to
+    :param url: the HTTP url of the endpoint this proof is being attached to
+    :param nonce: an optional nonce is one has been provided by the server
+    :param access_token: an optional access token when requesting a protected resource
+    :param claims: optional additional payload claims to include
+    :param headers: optional additional header claims to include
+    :param expires_in: optional expiration time, defaults to 30 seconds
+    :return:
+    .. _`Section 4.3`: https://datatracker.ietf.org/doc/html/rfc9449#section-4.3
+    """
     header = {
         "typ": "dpop+jwt",
         "alg": alg,
@@ -45,6 +46,8 @@ def sign_dpop_proof(
 
     if headers:
         header.update(headers)
+
+    url = normalize_url(url)
 
     now = time.time()
     payload = {
@@ -57,8 +60,8 @@ def sign_dpop_proof(
     if expires_in:
         payload["exp"] = now + expires_in
 
-    if token:
-        payload["ath"] = create_s256_code_challenge(token["access_token"])
+    if access_token:
+        payload["ath"] = create_s256_code_challenge(access_token)
 
     if nonce:
         payload["nonce"] = nonce
@@ -70,87 +73,94 @@ def sign_dpop_proof(
 
 
 class DPoPProof:
-    name = "dpop_proof"
     DEFAULT_ALGORITHM = "ES256"
-    DEFAULT_JWK_GENERATOR = generate_ec_p256_jwk
-
-    class NonceKey(Enum):
-        AUTH_SERVER_NONCE_KEY = "auth_server"
-        RESOURCE_SERVER_NONCE_KEY = "resource_server"
 
     def __init__(
             self,
             jwk=None,
             claims=None,
             headers=None,
-            alg=DEFAULT_ALGORITHM,
-            jwk_generator=DEFAULT_JWK_GENERATOR,
-            jwk_generator_options=None,
-            update_nonces=None,
-            auth_server_nonce=None,
-            resource_server_nonce=None):
+            preferred_alg=DEFAULT_ALGORITHM,
+            jwk_options=None,
+            nonce_cache: DPoPNonceCache = DefaultDPoPNonceCache()):
+        """
+        Initialize the DPoPProof signing with prepopulated values.
+
+        :param jwk: the JWK keypair used to sign this proof
+        :param claims: optional additional payload claims to include
+        :param headers: optional additional header claims to include
+        :param preferred_alg: the preferred algorithm to use when creating the JWK, defaults to ES256
+        :param jwk_options: additional options to provide when creating the JWK
+        :param nonce_cache: a custom DPoPNonceCache to use, defaults to DefaultDPoPNonceCache
+        """
         self.claims = claims
         self.headers = headers
-        self.alg = alg
+        self.preferred_alg = preferred_alg
         self.jwk = jwk
+        self.alg = None
+        if jwk:
+            self.alg = self._get_alg_from_jwk(jwk)
+        self.jwk_options = jwk_options
+        self.nonce_cache = nonce_cache
 
-        if not callable(jwk_generator):
-            raise ValueError("jwk_generator is not a callable function")
-        self.jwk_generator = jwk_generator
-        self.jwk_generator_options = jwk_generator_options
+    def set_nonce(self, origin: str, nonce: str):
+        origin = normalize_url(origin)
+        self.nonce_cache[origin] = nonce
 
-        if update_nonces and not callable(update_nonces):
-            raise ValueError("update_nonces is not a callable function")
-        self.update_nonces = update_nonces
-
-        self.nonces = {
-            self.NonceKey.AUTH_SERVER_NONCE_KEY: auth_server_nonce,
-            self.NonceKey.RESOURCE_SERVER_NONCE_KEY: resource_server_nonce
-        }
-        self.token = None
-
-    def set_nonce(self, key: NonceKey, nonce):
-        if key not in self.NonceKey:
-            return
-
-        cur_nonce = None
-        if key in self.nonces:
-            cur_nonce = self.nonces[key]
-
-        self.nonces[key] = nonce
-
-        if cur_nonce != nonce and key is self.NonceKey.RESOURCE_SERVER_NONCE_KEY:
-            # AUTH_SERVER_NONCE_KEY is already emitted via update_token
-            self._emit_nonces()
-
-    def generate_jwk(self, token):
-        self.set_token(token)
+    def generate_jwk(self, token, supported_algs: list[str]):
+        """
+        Create a new JWK keypair if one isn't provided on the initial token
+        :param token: the initial token if provided during Client initialization
+        :param supported_algs: the list of algorithms that the server supports
+        :return: the JWK keypair
+        """
+        token = OAuth2Token.from_dict(token)
         if not self.jwk:
-            if self.token and "dpop_jwk" in self.token:
-                self.jwk = JsonWebKey.import_key(self.token["dpop_jwk"])
+            if token and "dpop_jwk" in token:
+                self.alg = self._get_alg_from_jwk(token["dpop_jwk"])
+                self.jwk = JsonWebKey.import_key(token["dpop_jwk"])
             elif self.jwk is None:
-                self.jwk = self.jwk_generator(self.jwk_generator_options)
+                self.alg = self._negotiate_algorithm(supported_algs)
+                self.jwk = JsonWebKey.generate_key_from_jws_alg(self.alg, self.jwk_options, True)
 
-    def set_token(self, token):
-        self.token = OAuth2Token.from_dict(token)
-
-    def prepare(self, method, uri, headers, body, nonce_key: NonceKey = None, token=None):
-        nonce = None
-        if nonce_key and nonce_key in self.nonces:
-            nonce = self.nonces[nonce_key]
-
+    def prepare(self, method, uri, headers, body, nonce_origin=None, token=None):
+        nonce = self.nonce_cache[nonce_origin]
+        access_token = None
+        if token:
+            access_token = token["access_token"]
         proof = sign_dpop_proof(self.jwk,
                                 self.alg,
                                 method,
                                 uri,
                                 nonce=nonce,
-                                token=token,
+                                access_token=access_token,
                                 claims=self.claims,
                                 headers=self.headers)
         headers = headers or {}
         headers["DPoP"] = f"{proof}"
         return uri, headers, body
 
-    def _emit_nonces(self):
-        if self.token and self.update_nonces:
-            self.update_nonces(self.token, self.nonces)
+    def get_jwk_as_dict(self):
+        return self.jwk.as_dict(is_private=True, alg=self.alg)
+
+    def _negotiate_algorithm(self, supported_algs: list[str]):
+        if not supported_algs:
+            return self.preferred_alg
+
+        if self.preferred_alg in supported_algs:
+            supported_algs.pop(supported_algs.index(self.preferred_alg))
+            supported_algs.insert(0, self.preferred_alg)
+
+        for alg in supported_algs:
+            algorithm = JsonWebSignature.get_algorithm(alg)
+            if not issubclass(algorithm.key_cls, AsymmetricKey):
+                # Only Asymmetric algorithms are allowed by RFC-9449
+                continue
+            return alg
+        raise UnsupportedAlgorithmError()
+
+    def _get_alg_from_jwk(self, jwk: dict[str, Any]):
+        if "alg" in jwk:
+            return jwk["alg"]
+        else:
+            return self.preferred_alg

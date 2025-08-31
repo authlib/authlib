@@ -9,14 +9,10 @@ Access Token per `Section 6`_.
 
 import logging
 
-from ..errors import InvalidGrantError
-from ..errors import InvalidRequestError
-from ..errors import InvalidScopeError
-from ..errors import UnauthorizedClientError
+from .base import BaseGrant, TokenEndpointMixin
+from ..errors import InvalidGrantError, InvalidRequestError, InvalidScopeError, UnauthorizedClientError
 from ..hooks import hooked
 from ..util import scope_to_list
-from .base import BaseGrant
-from .base import TokenEndpointMixin
 
 log = logging.getLogger(__name__)
 
@@ -70,6 +66,7 @@ class RefreshTokenGrant(BaseGrant, TokenEndpointMixin):
         if not original_scope.issuperset(set(scope_to_list(scope))):
             raise InvalidScopeError()
 
+    @hooked
     def validate_token_request(self):
         """If the authorization server issued a refresh token to the client, the
         client makes a refresh request to the token endpoint by adding the
