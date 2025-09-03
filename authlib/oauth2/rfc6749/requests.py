@@ -49,6 +49,10 @@ class OAuth2Payload:
     def state(self):
         return self.data.get("state")
 
+    @property
+    def request_uri(self):
+        return self.data.get("request_uri")
+
 
 class BasicOAuth2Payload(OAuth2Payload):
     def __init__(self, payload):

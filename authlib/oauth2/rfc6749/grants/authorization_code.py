@@ -1,4 +1,7 @@
 import logging
+from typing import Tuple
+
+from authlib.consts import default_json_headers
 
 from authlib.common.security import generate_token
 from authlib.common.urls import add_params_to_uri
@@ -10,14 +13,14 @@ from ..errors import InvalidRequestError
 from ..errors import OAuth2Error
 from ..errors import UnauthorizedClientError
 from ..hooks import hooked
-from .base import AuthorizationEndpointMixin
+from .base import AuthorizationEndpointMixin, PushedAuthorizationEndpointMixin
 from .base import BaseGrant
 from .base import TokenEndpointMixin
 
 log = logging.getLogger(__name__)
 
 
-class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpointMixin):
+class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, PushedAuthorizationEndpointMixin, TokenEndpointMixin):
     """The authorization code grant type is used to obtain both access
     tokens and refresh tokens and is optimized for confidential clients.
     Since this is a redirection-based flow, the client must be capable of
@@ -57,6 +60,12 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
 
     #: Generated "code" length
     AUTHORIZATION_CODE_LENGTH = 48
+
+    #: Generated "request_uri" length
+    REQUEST_URI_LENGTH = 48
+    REQUEST_URI_EXPIRES_IN = 60  # 1 minute
+
+    REQUIRE_PUSHED_AUTHORIZATION_REQUESTS = False
 
     RESPONSE_TYPES = {"code"}
     GRANT_TYPE = "authorization_code"
@@ -150,20 +159,64 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
             resource owner, otherwise pass None.
         :returns: (status_code, body, headers)
         """
+        if self.request.payload.request_uri:
+            code, state = self._get_authorization_code_by_request_uri(self.request.payload.request_uri)
+        else:
+            if self.REQUIRE_PUSHED_AUTHORIZATION_REQUESTS:
+                raise InvalidRequestError(description="Pushed authorization request required before authorizing user")
+            code, state = self._create_authorization_code(grant_user, redirect_uri)
+
+        params = [("code", code)]
+        if state:
+            params.append(("state", state))
+        uri = add_params_to_uri(redirect_uri, params)
+        headers = [("Location", uri)]
+        return 302, "", headers
+
+    def validate_pushed_authorization_request(self):
+        client = self.authenticate_token_endpoint_client()
+        log.debug("Validate PAR request of %r", client)
+        if not client.check_grant_type(self.GRANT_TYPE):
+            raise UnauthorizedClientError(
+                f"The client is not authorized to use 'grant_type={self.GRANT_TYPE}'"
+            )
+
+        if self.request.payload.request_uri:
+            raise InvalidRequestError("The 'request_uri' parameter MUST NOT be present in the pushed authorization request.")
+        return validate_code_authorization_request(self)
+
+    def create_pushed_authorization_response(self, redirect_uri: str, grant_user):
+        request_uri, expires_in = self.generate_request_uri()
+        self._create_authorization_code(grant_user, redirect_uri, request_uri, expires_in)
+        request_uri = {
+            "request_uri": request_uri,
+            "expires_in": expires_in
+        }
+        return 201, request_uri, default_json_headers
+
+    def _get_authorization_code_by_request_uri(self, request_uri):
+        request = self.request
+        authorization_code = self.query_authorization_code_by_request_uri(request_uri, request.client)
+        if not authorization_code:
+            raise InvalidGrantError("Invalid 'request_uri' in request.")
+        if authorization_code.is_request_uri_expired():
+            self.delete_authorization_code(authorization_code)
+            raise InvalidGrantError("'request_uri' is expired")
+        authorization_code.remove_request_uri()
+        self.update_authorization_code(authorization_code)
+        code = authorization_code.get_code()
+        state = authorization_code.get_state()
+        return code, state
+
+    def _create_authorization_code(self, grant_user, redirect_uri, request_uri=None, expires_in=None):
         if not grant_user:
             raise AccessDeniedError(redirect_uri=redirect_uri)
 
         self.request.user = grant_user
-
+        state = self.request.payload.state
         code = self.generate_authorization_code()
-        self.save_authorization_code(code, self.request)
-
-        params = [("code", code)]
-        if self.request.payload.state:
-            params.append(("state", self.request.payload.state))
-        uri = add_params_to_uri(redirect_uri, params)
-        headers = [("Location", uri)]
-        return 302, "", headers
+        self.save_authorization_code(code, self.request, state=state, request_uri=request_uri, request_uri_expires_in=expires_in)
+        return code, state
 
     @hooked
     def validate_token_request(self):
@@ -290,7 +343,7 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
         return 200, token, self.TOKEN_RESPONSE_HEADER
 
     def generate_authorization_code(self):
-        """ "The method to generate "code" value for authorization code data.
+        """The method to generate "code" value for authorization code data.
         Developers may rewrite this method, or customize the code length with::
 
             class MyAuthorizationCodeGrant(AuthorizationCodeGrant):
@@ -298,7 +351,19 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
         """
         return generate_token(self.AUTHORIZATION_CODE_LENGTH)
 
-    def save_authorization_code(self, code, request):
+    def generate_request_uri(self) -> Tuple[str, int]:
+        """The method to generate "request_uri" value for authorization code data
+         for Pushed Authorization Requests.
+
+        Developers may rewrite this method, or customize the code length with::
+
+            class MyAuthorizationCodeGrant(AuthorizationCodeGrant):
+                REQUEST_URI_LENGTH = 32  # default is 48
+        """
+        return (f"urn:ietf:params:oauth:request_uri:{generate_token(self.REQUEST_URI_LENGTH)}",
+                self.REQUEST_URI_EXPIRES_IN)
+
+    def save_authorization_code(self, code, request, state=None, request_uri=None, request_uri_expires_in=None):
         """Save authorization_code for later use. Developers MUST implement
         it in subclass. Here is an example::
 
@@ -315,6 +380,26 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
         """
         raise NotImplementedError()
 
+    def save_authorization_code_v2(self, request, code, state=None, request_uri=None, request_uri_expires_in=None):
+        """Save authorization_code for later use. Developers MUST implement
+        it in subclass. Here is an example::
+
+            def save_authorization_code(self, code, request):
+                client = request.client
+                item = AuthorizationCode(
+                    code=code,
+                    client_id=client.client_id,
+                    redirect_uri=request.payload.redirect_uri,
+                    scope=request.payload.scope,
+                    user_id=request.user.id,
+                    state=state,
+                    request_uri=request_uri,
+                    request_uri_expires_in=request_uri_expires_in,
+                )
+                item.save()
+        """
+        raise NotImplementedError()
+
     def query_authorization_code(self, code, client):  # pragma: no cover
         """Get authorization_code from previously savings. Developers MUST
         implement it in subclass::
@@ -322,10 +407,43 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
             def query_authorization_code(self, code, client):
                 return Authorization.get(code=code, client_id=client.client_id)
 
-        :param code: a string represent the code.
+        :param code: the code.
         :param client: client related to this code.
         :return: authorization_code object
         """
+        raise NotImplementedError()
+
+    def query_authorization_code_by_request_uri(self, request_uri, client):  # pragma: no cover
+        """Get authorization_code from previously savings. Developers MUST
+        implement it in subclass::
+
+            def query_authorization_code(self, request_uri, client):
+                return Authorization.get(request_uri=request_uri, client_id=client.client_id)
+
+        :param request_uri: the request_uri from a PAR request.
+        :param client: client related to this code.
+        :return: authorization_code object
+        """
+        raise NotImplementedError()
+
+    def query_authorization_code_v2(self, client, code=None, request_uri=None):
+        """Get authorization_code from previously savings. Developers MUST
+        implement it in subclass::
+
+            def query_authorization_code(self, client, code=None, request_uri=None):
+                if code:
+                    return Authorization.get(code=code, client_id=client.client_id)
+                elif request_uri:
+                    return Authorization.get(request_uri=request_uri, client_id=client.client_id)
+
+        :param client: client related to this code.
+        :param code: the code.
+        :param request_uri: the request_uri from a PAR request.
+        :return: authorization_code object
+        """
+        raise NotImplementedError()
+
+    def update_authorization_code(self, authorization_code):
         raise NotImplementedError()
 
     def delete_authorization_code(self, authorization_code):

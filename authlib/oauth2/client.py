@@ -166,7 +166,7 @@ class OAuth2Client:
 
     def pushed_authorization(self, url=None, body="", headers=None, auth=None, state=None, code_verifier=None, **kwargs):
         if "request_uri" in kwargs:
-            raise InvalidRequestError("request_uri MUST NOT be present in the push authorization request.")
+            raise InvalidRequestError("The 'request_uri' parameter MUST NOT be present in the pushed authorization request.")
 
         session_kwargs = self._extract_session_request_params(kwargs)
         params, state = self._prepare_authorization_params(state=state, code_verifier=code_verifier, **kwargs)

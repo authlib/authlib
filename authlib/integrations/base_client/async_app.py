@@ -120,6 +120,7 @@ class AsyncOAuth2Mixin(OAuth2Base):
         par_required = metadata.get("require_pushed_authorization_requests")
         if par_required and not par_endpoint:
             raise RuntimeError('Missing "pushed_authorization_url" value')
+        par_required = par_required or par_endpoint
 
         async with self._get_oauth_client(**metadata) as client:
             if redirect_uri is not None:
