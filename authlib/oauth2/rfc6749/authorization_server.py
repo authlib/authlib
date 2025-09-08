@@ -152,7 +152,9 @@ class AuthorizationServer(Hookable):
         self._client_auth.register(method, func)
 
     def register_extension(self, extension):
-        self._extensions.append(extension(self))
+        if extension not in self._extensions:
+            extension(self)
+            self._extensions.append(extension)
 
     def get_error_uri(self, request, error):
         """Return a URI for the given error, framework may implement this method."""
@@ -294,6 +296,7 @@ class AuthorizationServer(Hookable):
         endpoints = self._endpoints[name]
         for endpoint in endpoints:
             request = endpoint.create_endpoint_request(request)
+            request.endpoint = endpoint
             try:
                 return self.handle_response(*endpoint(request))
             except ContinueIteration:
@@ -330,21 +333,6 @@ class AuthorizationServer(Hookable):
             response = self.handle_error_response(request, error)
 
         grant.execute_hook("after_authorization_response", response)
-        return response
-
-    def create_pushed_authorization_response(self, request=None, grant_user=None, grant=None):
-        if not isinstance(request, OAuth2Request):
-            request = self.create_oauth2_request(request)
-
-        try:
-            redirect_uri = grant.validate_pushed_authorization_request()
-            args = grant.create_pushed_authorization_response(redirect_uri, grant_user)
-            response = self.handle_response(*args)
-        except OAuth2Error as error:
-            error.state = request.payload.state
-            response = self.handle_error_response(request, error)
-
-        grant.execute_hook("after_pushed_authorization_response", response)
         return response
 
     def create_token_response(self, request=None):

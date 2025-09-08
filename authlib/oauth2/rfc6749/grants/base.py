@@ -112,7 +112,7 @@ class AuthorizationEndpointMixin:
 
     @classmethod
     def check_authorization_endpoint(cls, request: OAuth2Request):
-        return request.payload.response_type in cls.RESPONSE_TYPES or request.payload.request_uri
+        return request.payload.response_type in cls.RESPONSE_TYPES
 
     @staticmethod
     def validate_authorization_redirect_uri(request: OAuth2Request, client):
@@ -155,12 +155,4 @@ class AuthorizationEndpointMixin:
         raise NotImplementedError()
 
     def create_authorization_response(self, redirect_uri: str, grant_user):
-        raise NotImplementedError()
-
-
-class PushedAuthorizationEndpointMixin:
-    def validate_pushed_authorization_request(self):
-        raise NotImplementedError()
-
-    def create_pushed_authorization_response(self, redirect_uri: str, grant_user):
         raise NotImplementedError()

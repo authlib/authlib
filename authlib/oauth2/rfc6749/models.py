@@ -165,30 +165,6 @@ class AuthorizationCodeMixin:
         """
         raise NotImplementedError()
 
-    def get_code(self):
-        raise NotImplementedError()
-
-    def get_state(self):
-        raise NotImplementedError()
-
-    def get_request_uri_expires_in(self):
-        raise NotImplementedError()
-
-    def is_request_uri_expired(self):
-        """A method to define if this token is expired. For instance,
-        there is a column ``request_uri_expired_at`` in the table::
-
-            def is_request_uri_expired(self):
-                return self.request_uri_expired_at < now
-
-        :return: boolean
-        """
-        raise NotImplementedError()
-
-    def remove_request_uri(self):
-        raise NotImplementedError()
-
-
 
 class TokenMixin:
     def check_client(self, client):
