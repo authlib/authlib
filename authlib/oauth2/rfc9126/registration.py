@@ -1,5 +1,3 @@
-from authlib.jose import BaseClaims
-from authlib.jose.errors import InvalidClaimError
 from authlib.oauth2.rfc8414.models import _validate_boolean_value
 
 
@@ -12,7 +10,7 @@ class ClientMetadataClaims(dict):
             ClientRegistrationEndpoint(
                 claims_classes=[
                     rfc7591.ClientMetadataClaims,
-                    rfc9101.ClientMetadataClaims,
+                    rfc9126.ClientMetadataClaims,
                 ]
             )
         )
@@ -21,7 +19,7 @@ class ClientMetadataClaims(dict):
             ClientRegistrationEndpoint(
                 claims_classes=[
                     rfc7591.ClientMetadataClaims,
-                    rfc9101.ClientMetadataClaims,
+                    rfc9126.ClientMetadataClaims,
                 ]
             )
         )
@@ -29,20 +27,20 @@ class ClientMetadataClaims(dict):
     """
 
     REGISTERED_CLAIMS = [
-        "require_signed_request_object",
+        "require_pushed_authorization_requests",
     ]
 
     def validate(self):
-        self.validate_require_signed_request_object()
+        self.validate_require_pushed_authorization_requests()
 
-    def validate_require_signed_request_object(self):
-        """Indicates where authorization request needs to
-        be protected as Request Object and provided through either request
-        or request_uri parameter.
+    def validate_require_pushed_authorization_requests(self):
+        """Boolean parameter indicating whether the only means of initiating
+        an authorization request the client is allowed to use is PAR. If
+        omitted, the default value is false..
         """
-        _validate_boolean_value(self, "require_signed_request_object")
+        _validate_boolean_value(self, "require_pushed_authorization_requests")
 
     @property
-    def require_signed_request_object(self):
+    def require_pushed_authorization_requests(self):
         # If omitted, the default value is false.
-        return self.get("require_signed_request_object", False)
+        return self.get("require_pushed_authorization_requests", False)

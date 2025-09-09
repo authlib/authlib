@@ -152,7 +152,9 @@ class AuthorizationServer(Hookable):
         self._client_auth.register(method, func)
 
     def register_extension(self, extension):
-        self._extensions.append(extension(self))
+        if extension not in self._extensions:
+            extension(self)
+            self._extensions.append(extension)
 
     def get_error_uri(self, request, error):
         """Return a URI for the given error, framework may implement this method."""
@@ -237,6 +239,9 @@ class AuthorizationServer(Hookable):
         :param request: OAuth2Request instance.
         :return: grant instance
         """
+        if not isinstance(request, OAuth2Request):
+            request = self.create_oauth2_request(request)
+
         for grant_cls, extensions in self._authorization_grants:
             if grant_cls.check_authorization_endpoint(request):
                 return _create_grant(grant_cls, extensions, request, self)
@@ -292,6 +297,7 @@ class AuthorizationServer(Hookable):
         endpoints = self._endpoints[name]
         for endpoint in endpoints:
             request = endpoint.create_endpoint_request(request)
+            request.endpoint = endpoint
             try:
                 return self.handle_response(*endpoint(request))
             except ContinueIteration:

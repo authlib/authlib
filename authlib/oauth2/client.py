@@ -1,15 +1,17 @@
 from authlib.common.security import generate_token
-from authlib.common.urls import url_decode
+from authlib.common.urls import add_params_to_qs, add_params_to_uri, url_decode
 
 from .auth import ClientAuth
 from .auth import TokenAuth
 from .base import OAuth2Error
+from .rfc6749 import InvalidRequestError
 from .rfc6749.parameters import parse_authorization_code_response
 from .rfc6749.parameters import parse_implicit_response
-from .rfc6749.parameters import prepare_grant_uri
+from .rfc6749.parameters import prepare_grant_params
 from .rfc6749.parameters import prepare_token_request
 from .rfc7009 import prepare_revoke_token_request
 from .rfc7636 import create_s256_code_challenge
+from .rfc9126.parameters import prepare_grant_uri
 
 DEFAULT_HEADERS = {
     "Accept": "application/json",
@@ -107,6 +109,8 @@ class OAuth2Client:
             "access_token_response": set(),
             "refresh_token_request": set(),
             "refresh_token_response": set(),
+            "pushed_authorization_request": set(),
+            "pushed_authorization_response": set(),
             "revoke_token_request": set(),
             "introspect_token_request": set(),
         }
@@ -141,16 +145,50 @@ class OAuth2Client:
     def token(self, token):
         self.token_auth.set_token(token)
 
-    def create_authorization_url(self, url, state=None, code_verifier=None, **kwargs):
+    def create_authorization_url(self, url, state=None, code_verifier=None, request_uri=None, **kwargs):
         """Generate an authorization URL and state.
 
         :param url: Authorization endpoint url, must be HTTPS.
         :param state: An optional state string for CSRF protection. If not
                       given it will be generated for you.
         :param code_verifier: An optional code_verifier for code challenge.
+        :param request_uri: An optional request_uri for PAR
         :param kwargs: Extra parameters to include.
         :return: authorization_url, state
         """
+        if request_uri:
+            uri = prepare_grant_uri(url, client_id=self.client_id, request_uri=request_uri, **kwargs)
+            return uri, state
+
+        params, state = self._prepare_authorization_params(state=state, code_verifier=code_verifier, **kwargs)
+        uri = add_params_to_uri(url, params)
+        return uri, state
+
+    def pushed_authorization(self, url=None, body="", headers=None, auth=None, state=None, code_verifier=None, **kwargs):
+        if "request_uri" in kwargs:
+            raise InvalidRequestError("The 'request_uri' parameter MUST NOT be present in the pushed authorization request.")
+
+        session_kwargs = self._extract_session_request_params(kwargs)
+        params, state = self._prepare_authorization_params(state=state, code_verifier=code_verifier, **kwargs)
+        body = add_params_to_qs(body, params)
+
+        if auth is None:
+            auth = self.client_auth(self.token_endpoint_auth_method)
+
+        if headers is None:
+            headers = DEFAULT_HEADERS
+
+        if url is None:
+            url = self.metadata.get("pushed_authorization_request_endpoint")
+
+        for hook in self.compliance_hook["pushed_authorization_request"]:
+            url, headers, body = hook(url, headers, body)
+
+        return self._pushed_authorization(
+            url, state, body=body, auth=auth, headers=headers, **session_kwargs
+        )
+
+    def _prepare_authorization_params(self, state=None, code_verifier=None, **kwargs):
         if state is None:
             state = generate_token()
 
@@ -173,14 +211,13 @@ class OAuth2Client:
             if k not in kwargs and k in self.metadata:
                 kwargs[k] = self.metadata[k]
 
-        uri = prepare_grant_uri(
-            url,
+        params = prepare_grant_params(
             client_id=self.client_id,
             response_type=response_type,
             state=state,
             **kwargs,
         )
-        return uri, state
+        return params, state
 
     def fetch_token(
         self,
@@ -397,6 +434,8 @@ class OAuth2Client:
         * access_token_response: invoked before token parsing.
         * refresh_token_request: invoked before refreshing token.
         * refresh_token_response: invoked before refresh token parsing.
+        * pushed_authorization_request: invoked before push authorization request.
+        * pushed_authorization_response: invoked before push authorization request request_uri parsing.
         * protected_request: invoked before making a request.
         * revoke_token_request: invoked before revoking a token.
         * introspect_token_request: invoked before introspecting a token.
@@ -410,6 +449,17 @@ class OAuth2Client:
                 "Hook type %s is not in %s.", hook_type, self.compliance_hook
             )
         self.compliance_hook[hook_type].add(hook)
+
+    def parse_response_request_uri(self, resp):
+        if resp.status_code >= 500:
+            resp.raise_for_status()
+
+        request_uri = resp.json()
+        if "error" in request_uri:
+            raise self.oauth_error_class(
+                error=request_uri["error"], description=request_uri.get("error_description")
+            )
+        return request_uri
 
     def parse_response_token(self, resp):
         if resp.status_code >= 500:
@@ -460,6 +510,16 @@ class OAuth2Client:
             self.update_token(self.token, refresh_token=refresh_token)
 
         return self.token
+
+    def _pushed_authorization(
+        self, url, state, body="", headers=None, auth=None, **kwargs
+    ):
+        resp = self._http_post(url, body=body, auth=auth, headers=headers, **kwargs)
+
+        for hook in self.compliance_hook["pushed_authorization_response"]:
+            resp = hook(resp)
+
+        return self.parse_response_request_uri(resp), state
 
     def _handle_token_hint(
         self,

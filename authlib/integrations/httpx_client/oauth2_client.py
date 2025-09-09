@@ -200,6 +200,18 @@ class AsyncOAuth2Client(_OAuth2Client, httpx.AsyncClient):
 
         return self.token
 
+    async def _pushed_authorization(
+        self, url, state, body="", headers=None, auth=None, **kwargs
+    ):
+        resp = await self.post(
+            url, data=dict(url_decode(body)), headers=headers, auth=auth, **kwargs
+        )
+
+        for hook in self.compliance_hook["pushed_authorization_response"]:
+            resp = hook(resp)
+
+        return self.parse_response_request_uri(resp), state
+
     def _http_post(
         self, url, body=None, auth=USE_CLIENT_DEFAULT, headers=None, **kwargs
     ):

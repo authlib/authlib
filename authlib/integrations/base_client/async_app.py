@@ -1,6 +1,8 @@
 import logging
 import time
 
+from authlib.common.security import generate_token
+
 from authlib.common.urls import urlparse
 
 from .errors import MissingRequestTokenError
@@ -90,28 +92,60 @@ class AsyncOAuth2Mixin(OAuth2Base):
         async with self._get_oauth_client(**metadata) as session:
             return await _http_request(self, session, method, url, token, kwargs)
 
-    async def create_authorization_url(self, redirect_uri=None, **kwargs):
+    async def create_authorization_url(self, redirect_uri=None, authorize_url_params=None, **authorize_params):
         """Generate the authorization url and state for HTTP redirect.
 
         :param redirect_uri: Callback or redirect URI for authorization.
-        :param kwargs: Extra parameters to include.
+        :param authorize_url_params: Extra parameters specifically for the authorize_url endpoint, regardless of method.
+        :param authorize_params: Extra parameters to include for authorization.
         :return: dict
         """
         metadata = await self.load_server_metadata()
+        if self.authorize_params:
+            authorize_params.update(self.authorize_params)
+
+        authorize_url_params = authorize_url_params or {}
+        if self.authorize_url_params:
+            authorize_url_params.update(self.authorize_url_params)
+
         authorization_endpoint = self.authorize_url or metadata.get(
             "authorization_endpoint"
         )
         if not authorization_endpoint:
             raise RuntimeError('Missing "authorize_url" value')
 
-        if self.authorize_params:
-            kwargs.update(self.authorize_params)
+        par_endpoint = self.pushed_authorization_url or metadata.get(
+            "pushed_authorization_request_endpoint"
+        )
+        par_required = metadata.get("require_pushed_authorization_requests")
+        if par_required and not par_endpoint:
+            raise RuntimeError('Missing "pushed_authorization_url" value')
+        par_required = par_required or par_endpoint
 
         async with self._get_oauth_client(**metadata) as client:
-            client.redirect_uri = redirect_uri
-            return self._create_oauth2_authorization_url(
-                client, authorization_endpoint, **kwargs
-            )
+            if redirect_uri is not None:
+                client.redirect_uri = redirect_uri
+
+            if par_required:
+                rv, request_uri = await self._pushed_authorization_request(client, par_endpoint, **authorize_params)
+                url, _ = client.create_authorization_url(
+                    authorization_endpoint,
+                    request_uri=request_uri['request_uri'],
+                    **authorize_url_params)
+                rv['url'] = url
+                return rv
+            else:
+                authorize_params.update(authorize_url_params)
+                return self._create_oauth2_authorization_url(client, authorization_endpoint, **authorize_params)
+
+    async def _pushed_authorization_request(self, client, par_endpoint, **kwargs):
+        rv = {}
+        params = self._get_authorization_params(client, **kwargs)
+        rv.update(params)
+        kwargs.update(params)
+        request_uri, state = await client.pushed_authorization(par_endpoint, **kwargs)
+        rv["state"] = state
+        return rv, request_uri
 
     async def fetch_access_token(self, redirect_uri=None, **kwargs):
         """Fetch access token in the final step.
