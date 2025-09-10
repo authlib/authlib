@@ -1,4 +1,4 @@
-from authlib.oauth2.rfc6750 import BearerTokenGenerator
+from authlib.oauth2.rfc6750.token import BearerTokenGenerator
 
 
 class DPoPTokenGenerator(BearerTokenGenerator):

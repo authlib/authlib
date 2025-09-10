@@ -33,7 +33,6 @@ class AuthorizationServerMetadata(dict):
         "introspection_endpoint_auth_methods_supported",
         "introspection_endpoint_auth_signing_alg_values_supported",
         "code_challenge_methods_supported",
-        "dpop_signing_alg_values_supported",
     ]
 
     def validate_issuer(self):
@@ -318,17 +317,6 @@ class AuthorizationServerMetadata(dict):
         """
         validate_array_value(self, "code_challenge_methods_supported")
 
-    def validate_dpop_signing_alg_values_supported(self):
-        """OPTIONAL.  A JSON array containing a list of the JWS alg values
-         (from the [IANA.JOSE.ALGS] registry) supported by the authorization
-          server for DPoP proof JWTs.
-        """
-        _validate_alg_values(
-            self,
-            "dpop_signing_alg_values_supported",
-            self.dpop_signing_alg_values_supported,
-        )
-
     @property
     def response_modes_supported(self):
         #: If omitted, the default is ["query", "fragment"]
@@ -395,3 +383,10 @@ def validate_array_value(metadata, key):
     values = metadata.get(key)
     if values is not None and not isinstance(values, list):
         raise ValueError(f'"{key}" MUST be JSON array')
+
+
+def _validate_boolean_value(metadata, key):
+    if key not in metadata:
+        return
+    if metadata[key] not in (True, False):
+        raise ValueError(f'"{key}" MUST be boolean')

@@ -9,10 +9,14 @@ Access Token per `Section 6`_.
 
 import logging
 
-from .base import BaseGrant, TokenEndpointMixin
-from ..errors import InvalidGrantError, InvalidRequestError, InvalidScopeError, UnauthorizedClientError
+from ..errors import InvalidGrantError
+from ..errors import InvalidRequestError
+from ..errors import InvalidScopeError
+from ..errors import UnauthorizedClientError
 from ..hooks import hooked
 from ..util import scope_to_list
+from .base import BaseGrant
+from .base import TokenEndpointMixin
 
 log = logging.getLogger(__name__)
 

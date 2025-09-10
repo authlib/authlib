@@ -5,11 +5,16 @@ Validate DPoP Token and Proof.
 """
 from urllib.parse import urlparse
 
-from authlib.jose import JoseError, JsonWebKey, jwt
-from authlib.oauth2.rfc6749 import InvalidGrantError, OAuth2Request, TokenMixin
+from authlib.jose import JoseError
+from authlib.jose import JsonWebKey
+from authlib.jose import jwt
+from authlib.oauth2.rfc6749 import OAuth2Request
 from authlib.oauth2.rfc6750 import BearerTokenValidator
 from authlib.oauth2.rfc7636 import create_s256_code_challenge
-from .errors import InvalidDPoPKeyBindingError, InvalidDPopProofError, UseDPoPNonceError
+from . import InvalidDPoPKeyBindingError
+from .errors import InvalidDPopProofError
+from .errors import UseDPoPNonceError
+from .models import TokenMixin
 from .nonce import DPoPNonceGenerator
 
 
@@ -151,47 +156,6 @@ class DPoPProofValidator:
         if "alg" not in header or header["alg"] not in self.algs:
             raise InvalidDPopProofError(f"DPoP 'alg' header not in {self.algs}", algs=self.algs,
                                         for_resource=for_resource)
-
-
-class DPoP:
-    def __init__(self, proof_validator: DPoPProofValidator):
-        """DPoP extension to Authorization Code Grant and Refresh Token Grant.
-        It enables a client to prove the possession of a public/private key pair
-        by including a DPoP header in an HTTP request.
-
-        The AuthorizationCodeGrant MUST save the ``dpop_jkt`` attribute from the
-        OAuth2Request into database when ``save_authorization_code``.
-
-        Then register this extension via::
-
-            server.register_grant(AuthorizationCodeGrant, [DPoP(proof_validator=dpop_proof_validator)])
-            server.register_grant(RefreshTokenGrant, [DPoP(proof_validator=dpop_proof_validator)])
-        """
-        self.proof_validator = proof_validator
-
-    def __call__(self, grant):
-        grant.register_hook(
-            "after_validate_token_request",
-            self.validate_dpop_jkt,
-        )
-
-    def validate_dpop_jkt(self, grant, _):
-        request: OAuth2Request = grant.request
-
-        existing_jkt = None
-        if hasattr(request, "authorization_code") and request.authorization_code:
-            existing_jkt = request.authorization_code.get_dpop_jkt()
-        elif hasattr(request, "refresh_token") and request.refresh_token:
-            existing_jkt = request.refresh_token.get_dpop_jkt()
-
-        if existing_jkt and "DPoP" not in request.headers:
-            raise InvalidGrantError("DPoP proof is required for this request")
-
-        dpop_header_jkt = self.proof_validator.validate_proof(request)
-
-        if existing_jkt != dpop_header_jkt:
-            raise InvalidGrantError("DPoP proof does not match the expected JKT")
-        request.dpop_jkt = dpop_header_jkt
 
 
 class DPoPTokenValidator(BearerTokenValidator):

@@ -1,11 +1,16 @@
 from authlib.common.security import generate_token
 from authlib.common.urls import url_decode
-from .auth import ClientAuth, TokenAuth
+from . import TokenAuth
+from .auth import ClientAuth
+from .auth import create_auth
 from .base import OAuth2Error
-from .rfc6749.parameters import parse_authorization_code_response, parse_implicit_response, prepare_grant_uri, \
-    prepare_token_request
+from .rfc6749.parameters import parse_authorization_code_response
+from .rfc6749.parameters import parse_implicit_response
+from .rfc6749.parameters import prepare_grant_uri
+from .rfc6749.parameters import prepare_token_request
 from .rfc7009 import prepare_revoke_token_request
 from .rfc7636 import create_s256_code_challenge
+from .rfc9449.auth import DPoPAuth
 
 DEFAULT_HEADERS = {
     "Accept": "application/json",
@@ -39,8 +44,9 @@ class OAuth2Client:
         be refreshed.
     """
 
-    client_auth_class = ClientAuth
+    auth_class = None
     token_auth_class = TokenAuth
+    client_auth_class = ClientAuth
     oauth_error_class = OAuth2Error
 
     EXTRA_AUTHORIZE_PARAMS = ("response_mode", "nonce", "prompt", "login_hint")
@@ -89,10 +95,11 @@ class OAuth2Client:
         self.redirect_uri = redirect_uri
         self.code_challenge_method = code_challenge_method
 
+        self.token_auth = self.token_auth_class(token, token_placement, self)
         self.dpop_proof = dpop_proof
         if self.dpop_proof:
             self.dpop_proof.generate_jwk(token, metadata.get("dpop_signing_alg_values_supported", None))
-        self.token_auth = self.token_auth_class(token, token_placement, self, self.dpop_proof)
+            self.dpop_auth = DPoPAuth(self.dpop_proof)
 
         self.update_token = update_token
 
@@ -128,12 +135,12 @@ class OAuth2Client:
     def client_auth(self, auth_method):
         if isinstance(auth_method, str) and auth_method in self._auth_methods:
             auth_method = self._auth_methods[auth_method]
-        return self.client_auth_class(
-            client_id=self.client_id,
-            client_secret=self.client_secret,
-            auth_method=auth_method,
-            dpop_proof=self.dpop_proof,
-        )
+        client_auth = self.client_auth_class(client_id=self.client_id, client_secret=self.client_secret, auth_method=auth_method)
+        return self.auth_class(create_auth(client_auth, self.dpop_auth))
+
+    @property
+    def protected_auth(self):
+        return self.auth_class(create_auth(self.token_auth, self.dpop_auth))
 
     @property
     def token(self):

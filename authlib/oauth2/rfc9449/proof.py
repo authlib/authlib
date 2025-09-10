@@ -86,12 +86,12 @@ class DPoPProof:
         """
         Initialize the DPoPProof signing with prepopulated values.
 
-        :param jwk: the JWK keypair used to sign this proof
-        :param claims: optional additional payload claims to include
-        :param headers: optional additional header claims to include
-        :param preferred_alg: the preferred algorithm to use when creating the JWK, defaults to ES256
-        :param jwk_options: additional options to provide when creating the JWK
-        :param nonce_cache: a custom DPoPNonceCache to use, defaults to DefaultDPoPNonceCache
+        :param jwk: the JWK keypair used to sign this proof.
+        :param claims: optional additional payload claims to include.
+        :param headers: optional additional header claims to include.
+        :param preferred_alg: the preferred algorithm to use when creating the JWK, defaults to ES256.
+        :param jwk_options: additional options to provide when creating the JWK.
+        :param nonce_cache: a custom DPoPNonceCache to use, defaults to DefaultDPoPNonceCache.
         """
         self.claims = claims
         self.headers = headers
@@ -123,11 +123,8 @@ class DPoPProof:
                 self.alg = self._negotiate_algorithm(supported_algs)
                 self.jwk = JsonWebKey.generate_key_from_jws_alg(self.alg, self.jwk_options, True)
 
-    def prepare(self, method, uri, headers, body, nonce_origin=None, token=None):
+    def prepare(self, method, uri, headers, body, nonce_origin=None, access_token=None):
         nonce = self.nonce_cache[nonce_origin]
-        access_token = None
-        if token:
-            access_token = token["access_token"]
         proof = sign_dpop_proof(self.jwk,
                                 self.alg,
                                 method,

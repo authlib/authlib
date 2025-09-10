@@ -3,85 +3,63 @@ from contextlib import asynccontextmanager
 
 import httpx
 from anyio import Lock  # Import after httpx so import errors refer to httpx
-from httpx import USE_CLIENT_DEFAULT
 from httpx import Auth
 from httpx import Request
 from httpx import Response
+from httpx import USE_CLIENT_DEFAULT
 
 from authlib.common.urls import url_decode
-from authlib.oauth2.auth import ClientAuth, DPoPAuthProtocol
-from authlib.oauth2.auth import TokenAuth
 from authlib.oauth2.client import OAuth2Client as _OAuth2Client
-
+from .utils import HTTPX_CLIENT_KWARGS
+from .utils import build_request
 from ..base_client import InvalidTokenError
 from ..base_client import MissingTokenError
 from ..base_client import OAuthError
-from ..base_client import UnsupportedTokenTypeError
-from .utils import HTTPX_CLIENT_KWARGS
-from .utils import build_request
+from ...oauth2.auth import AuthProtocol
 
 __all__ = [
     "OAuth2Auth",
-    "OAuth2ClientAuth",
     "AsyncOAuth2Client",
     "OAuth2Client",
 ]
 
 
-class OAuth2DPoPAuthMixin(DPoPAuthProtocol):
-    def retry_dpop_if_necessary(self, response: Response):
-        request = response.request
-        if self.is_dpop_error(response):
-            url, headers, body = self.dpop_prepare(
-                request.method, str(request.url), request.headers, request.content
-            )
-            headers["Content-Length"] = str(len(body))
-            yield build_request(
-                url=url, headers=headers, body=body, initial_request=request
-            )
-
-
-class OAuth2Auth(Auth, TokenAuth, OAuth2DPoPAuthMixin):
-    """Sign requests for OAuth 2.0, currently only bearer and dpop token are supported."""
+class OAuth2Auth(Auth):
+    """Sign requests for OAuth 2.0"""
 
     requires_request_body = True
     requires_response_body = True
 
-    def auth_flow(self, request: Request) -> typing.Generator[Request, Response, None]:
-        try:
-            url, headers, body = self.prepare(
-                request.method, str(request.url), request.headers, request.content
-            )
-            headers["Content-Length"] = str(len(body))
-            response = yield build_request(
-                url=url, headers=headers, body=body, initial_request=request
-            )
-            yield from self.retry_dpop_if_necessary(response)
-        except KeyError as error:
-            description = f"Unsupported token_type: {str(error)}"
-            raise UnsupportedTokenTypeError(description=description) from error
-
-
-class OAuth2ClientAuth(Auth, ClientAuth, OAuth2DPoPAuthMixin):
-    requires_request_body = True
-    requires_response_body = True
+    def __init__(self, auth: AuthProtocol):
+        self.auth = auth
 
     def auth_flow(self, request: Request) -> typing.Generator[Request, Response, None]:
-        url, headers, body = self.prepare(
+        url, headers, body = self.auth.prepare(
             request.method, str(request.url), request.headers, request.content
         )
         headers["Content-Length"] = str(len(body))
         response = yield build_request(
             url=url, headers=headers, body=body, initial_request=request
         )
-        yield from self.retry_dpop_if_necessary(response)
+        yield from self.retry_if_necessary(response)
+
+    def retry_if_necessary(self, response: Response):
+        if not self.auth.should_retry(response):
+            return
+        request = response.request
+        url, headers, body = self.auth.prepare_retry(
+            request.method, str(request.url), request.headers, request.content
+        )
+        headers["Content-Length"] = str(len(body))
+        yield build_request(
+            url=url, headers=headers, body=body, initial_request=request
+        )
 
 
 class AsyncOAuth2Client(_OAuth2Client, httpx.AsyncClient):
     SESSION_REQUEST_PARAMS = HTTPX_CLIENT_KWARGS
 
-    client_auth_class = OAuth2ClientAuth
-    token_auth_class = OAuth2Auth
+    auth_class = OAuth2Auth
     oauth_error_class = OAuthError
 
     def __init__(
@@ -133,7 +111,7 @@ class AsyncOAuth2Client(_OAuth2Client, httpx.AsyncClient):
 
             await self.ensure_active_token(self.token)
 
-            auth = self.token_auth
+            auth = self.protected_auth
 
         return await super().request(method, url, auth=auth, **kwargs)
 
@@ -147,7 +125,7 @@ class AsyncOAuth2Client(_OAuth2Client, httpx.AsyncClient):
 
             await self.ensure_active_token(self.token)
 
-            auth = self.token_auth
+            auth = self.protected_auth
 
         async with super().stream(method, url, auth=auth, **kwargs) as resp:
             yield resp
@@ -230,8 +208,7 @@ class AsyncOAuth2Client(_OAuth2Client, httpx.AsyncClient):
 class OAuth2Client(_OAuth2Client, httpx.Client):
     SESSION_REQUEST_PARAMS = HTTPX_CLIENT_KWARGS
 
-    client_auth_class = OAuth2ClientAuth
-    token_auth_class = OAuth2Auth
+    auth_class = OAuth2Auth
     oauth_error_class = OAuthError
 
     def __init__(
@@ -285,7 +262,7 @@ class OAuth2Client(_OAuth2Client, httpx.Client):
             if not self.ensure_active_token(self.token):
                 raise InvalidTokenError()
 
-            auth = self.token_auth
+            auth = self.protected_auth
 
         return super().request(method, url, auth=auth, **kwargs)
 
@@ -299,6 +276,6 @@ class OAuth2Client(_OAuth2Client, httpx.Client):
             if not self.ensure_active_token(self.token):
                 raise InvalidTokenError()
 
-            auth = self.token_auth
+            auth = self.protected_auth
 
         return super().stream(method, url, auth=auth, **kwargs)
