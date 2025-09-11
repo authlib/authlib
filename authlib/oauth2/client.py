@@ -1,8 +1,8 @@
 from authlib.common.security import generate_token
 from authlib.common.urls import url_decode
-
+from . import TokenAuth
 from .auth import ClientAuth
-from .auth import TokenAuth
+from .auth import create_auth
 from .base import OAuth2Error
 from .rfc6749.parameters import parse_authorization_code_response
 from .rfc6749.parameters import parse_implicit_response
@@ -10,6 +10,7 @@ from .rfc6749.parameters import prepare_grant_uri
 from .rfc6749.parameters import prepare_token_request
 from .rfc7009 import prepare_revoke_token_request
 from .rfc7636 import create_s256_code_challenge
+from .rfc9449.auth import DPoPAuth
 
 DEFAULT_HEADERS = {
     "Accept": "application/json",
@@ -43,8 +44,9 @@ class OAuth2Client:
         be refreshed.
     """
 
-    client_auth_class = ClientAuth
+    auth_class = None
     token_auth_class = TokenAuth
+    client_auth_class = ClientAuth
     oauth_error_class = OAuth2Error
 
     EXTRA_AUTHORIZE_PARAMS = ("response_mode", "nonce", "prompt", "login_hint")
@@ -64,6 +66,7 @@ class OAuth2Client:
         token=None,
         token_placement="header",
         update_token=None,
+        dpop_proof=None,
         leeway=60,
         **metadata,
     ):
@@ -93,6 +96,11 @@ class OAuth2Client:
         self.code_challenge_method = code_challenge_method
 
         self.token_auth = self.token_auth_class(token, token_placement, self)
+        self.dpop_proof = dpop_proof
+        if self.dpop_proof:
+            self.dpop_proof.generate_jwk(token, metadata.get("dpop_signing_alg_values_supported", None))
+            self.dpop_auth = DPoPAuth(self.dpop_proof)
+
         self.update_token = update_token
 
         token_updater = metadata.pop("token_updater", None)
@@ -127,11 +135,12 @@ class OAuth2Client:
     def client_auth(self, auth_method):
         if isinstance(auth_method, str) and auth_method in self._auth_methods:
             auth_method = self._auth_methods[auth_method]
-        return self.client_auth_class(
-            client_id=self.client_id,
-            client_secret=self.client_secret,
-            auth_method=auth_method,
-        )
+        client_auth = self.client_auth_class(client_id=self.client_id, client_secret=self.client_secret, auth_method=auth_method)
+        return self.auth_class(create_auth(client_auth, self.dpop_auth))
+
+    @property
+    def protected_auth(self):
+        return self.auth_class(create_auth(self.token_auth, self.dpop_auth))
 
     @property
     def token(self):
@@ -168,6 +177,9 @@ class OAuth2Client:
         ):
             kwargs["code_challenge"] = create_s256_code_challenge(code_verifier)
             kwargs["code_challenge_method"] = self.code_challenge_method
+
+        if self.dpop_proof:
+            kwargs["dpop_jkt"] = self.dpop_proof.jwk.thumbprint()
 
         for k in self.EXTRA_AUTHORIZE_PARAMS:
             if k not in kwargs and k in self.metadata:
@@ -311,7 +323,7 @@ class OAuth2Client:
         elif self.metadata.get("grant_type") == "client_credentials":
             access_token = token["access_token"]
             new_token = self.fetch_token(url, grant_type="client_credentials")
-            if self.update_token:
+            if callable(self.update_token):
                 self.update_token(new_token, access_token=access_token)
             return True
 
@@ -366,7 +378,7 @@ class OAuth2Client:
 
         :param url: Introspection Endpoint, must be HTTPS.
         :param token: The token to be introspected.
-        :param token_type_hint: The type of the token that to be revoked.
+        :param token_type_hint: The type of the token that to be introspected.
                                 It can be "access_token" or "refresh_token".
         :param body: Optional application/x-www-form-urlencoded body to add the
                      include in the token request. Prefer kwargs over body.
@@ -420,6 +432,8 @@ class OAuth2Client:
             raise self.oauth_error_class(
                 error=token["error"], description=token.get("error_description")
             )
+        if self.dpop_proof:
+            token["dpop_jwk"] = self.dpop_proof.get_jwk_as_dict()
         self.token = token
         return self.token
 
@@ -435,6 +449,7 @@ class OAuth2Client:
                 url = "&".join([url, body])
             else:
                 url = "?".join([url, body])
+            # TODO: This should be self.session.get, right?
             resp = self.session.request(
                 method, url, headers=headers, auth=auth, **kwargs
             )

@@ -40,10 +40,12 @@ class InvalidTokenError(OAuth2Error):
         status_code=None,
         state=None,
         realm=None,
+        token_type="Bearer",
         **extra_attributes,
     ):
         super().__init__(description, uri, status_code, state)
         self.realm = realm
+        self.token_type = token_type
         self.extra_attributes = extra_attributes
 
     def get_headers(self):
@@ -67,7 +69,7 @@ class InvalidTokenError(OAuth2Error):
         extras.append(f'error="{self.error}"')
         error_description = self.get_error_description()
         extras.append(f'error_description="{error_description}"')
-        headers.append(("WWW-Authenticate", "Bearer " + ", ".join(extras)))
+        headers.append(("WWW-Authenticate", f"{self.token_type} " + ", ".join(extras)))
         return headers
 
 

@@ -11,6 +11,7 @@ from authlib.oauth2.rfc6749 import OAuth2Request
 
 class FlaskOAuth2Payload(OAuth2Payload):
     def __init__(self, request: Request):
+        super().__init__()
         self._request = request
 
     @property

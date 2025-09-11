@@ -36,6 +36,7 @@ from authlib.oauth2.base import OAuth2Error
 
 __all__ = [
     "OAuth2Error",
+    "ForbiddenError",
     "InsecureTransportError",
     "InvalidRequestError",
     "InvalidClientError",
@@ -195,17 +196,20 @@ class AccessDeniedError(OAuth2Error):
 class ForbiddenError(OAuth2Error):
     status_code = 401
 
-    def __init__(self, auth_type=None, realm=None):
-        super().__init__()
+    def __init__(self, description=None, auth_type=None, realm=None, status_code=None):
+        super().__init__(description=description, status_code=status_code)
         self.auth_type = auth_type
         self.realm = realm
+
+    def get_extras(self):
+        return []
 
     def get_headers(self):
         headers = super().get_headers()
         if not self.auth_type:
             return headers
 
-        extras = []
+        extras = self.get_extras()
         if self.realm:
             extras.append(f'realm="{self.realm}"')
         extras.append(f'error="{self.error}"')

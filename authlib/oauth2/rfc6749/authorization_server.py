@@ -268,6 +268,7 @@ class AuthorizationServer(Hookable):
             raise
         return grant
 
+    @hooked
     def get_token_grant(self, request):
         """Find the token grant for current request.
 
