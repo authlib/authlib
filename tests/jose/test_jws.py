@@ -5,6 +5,9 @@ import pytest
 from authlib.jose import JsonWebSignature
 from authlib.jose import errors
 from tests.util import read_file_path
+import base64
+import hmac
+import hashlib
 
 
 def test_invalid_input():
@@ -252,6 +255,99 @@ def test_validate_crit_header_with_deserialize():
     )
     with pytest.raises(errors.InvalidCritHeaderParameterNameError):
         jws.deserialize(case2, "secret")
+
+
+def _b64url(b: bytes) -> str:
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode("ascii")
+
+
+def _sign_flattened(protected: dict, header: dict, payload_bytes: bytes, key: str) -> dict:
+    protected_bytes = json.dumps(protected).encode()
+    signing_input = f"{_b64url(protected_bytes)}.{_b64url(payload_bytes)}".encode(
+    )
+    sig = hmac.new(key.encode(), signing_input, hashlib.sha256).digest()
+    obj = {
+        "payload": _b64url(payload_bytes),
+        "protected": _b64url(protected_bytes),
+        "signature": _b64url(sig),
+    }
+    if header:
+        obj["header"] = header
+    return obj
+
+
+def test_json_flattened_rejects_unprotected_crit():
+    jws = JsonWebSignature()
+    payload = b"hello"
+    # crit incorrectly placed in unprotected header
+    obj = _sign_flattened(
+        {"alg": "HS256"}, {"crit": ["bork"], "bork": "x"}, payload, "secret")
+    with pytest.raises(errors.InvalidHeaderParameterNameError):
+        jws.deserialize_json(obj, "secret")
+
+
+def test_json_flattened_rejects_protected_unknown_crit():
+    jws = JsonWebSignature()
+    payload = b"hello"
+    # Unknown critical header name listed in protected crit
+    obj = _sign_flattened(
+        {"alg": "HS256", "crit": ["bork"], "bork": "x"}, {}, payload, "secret")
+    with pytest.raises(errors.InvalidCritHeaderParameterNameError):
+        jws.deserialize_json(obj, "secret")
+
+
+def test_json_flattened_rejects_protected_missing_header():
+    jws = JsonWebSignature()
+    payload = b"hello"
+    # 'kid' listed in crit but not present in protected header
+    obj = _sign_flattened(
+        {"alg": "HS256", "crit": ["kid"]}, {}, payload, "secret")
+    with pytest.raises(errors.InvalidCritHeaderParameterNameError):
+        jws.deserialize_json(obj, "secret")
+
+
+def test_json_flattened_accepts_allowlisted_crit():
+    # Allowlist 'cnf' so protected crit:["cnf"] is accepted
+    jws = JsonWebSignature(private_headers=["cnf"])
+    payload = b"hello"
+    obj = _sign_flattened(
+        {"alg": "HS256", "crit": ["cnf"], "cnf": {"jkt": "thumb-42"}},
+        {},
+        payload,
+        "secret",
+    )
+    out = jws.deserialize_json(obj, "secret")
+    assert out["payload"] == payload
+
+
+def test_json_nested_rejects_unprotected_crit_in_any_signature():
+    jws = JsonWebSignature()
+    payload = b"hello"
+    # Build two signature entries: one valid, one with unprotected crit
+    good = _sign_flattened({"alg": "HS256"}, {"kid": "a"}, payload, "secret")
+    bad = _sign_flattened(
+        {"alg": "HS256"}, {"crit": ["bork"], "bork": "x"}, payload, "secret")
+    obj = {"payload": good["payload"], "signatures": [
+        {"protected": good["protected"], "header": {
+            "kid": "a"}, "signature": good["signature"]},
+        {"protected": bad["protected"], "header": {
+            "crit": ["bork"], "bork": "x"}, "signature": bad["signature"]},
+    ]}
+    with pytest.raises(errors.InvalidHeaderParameterNameError):
+        jws.deserialize_json(obj, "secret")
+
+
+def test_json_flattened_rejects_invalid_crit_type():
+    jws = JsonWebSignature()
+    payload = b"hello"
+    # crit must be an array of strings
+    obj = _sign_flattened(
+        {"alg": "HS256", "crit": "kid"}, {}, payload, "secret")
+    with pytest.raises(errors.InvalidHeaderParameterNameError):
+        jws.deserialize_json(obj, "secret")
+    obj = _sign_flattened({"alg": "HS256", "crit": [1]}, {}, payload, "secret")
+    with pytest.raises(errors.InvalidHeaderParameterNameError):
+        jws.deserialize_json(obj, "secret")
 
 
 def test_ES512_alg():

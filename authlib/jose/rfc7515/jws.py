@@ -277,14 +277,28 @@ class JsonWebSignature:
                     raise InvalidHeaderParameterNameError(k)
 
     def _validate_crit_headers(self, header):
+        """Validate RFC 7515 `crit` semantics on the protected header.
+
+        - `crit` MUST be an array of strings.
+        - Each listed name MUST be recognized (registered or allowlisted via
+          private headers).
+        - Each listed name MUST be present in the protected header itself.
+        """
         if "crit" in header:
             crit_headers = header["crit"]
+            # Type enforcement for robustness and predictable errors
+            if not isinstance(crit_headers, list) or not all(isinstance(x, str) for x in crit_headers):
+                raise InvalidHeaderParameterNameError("crit")
+
             names = self.REGISTERED_HEADER_PARAMETER_NAMES.copy()
             if self._private_headers:
                 names = names.union(self._private_headers)
+
             for k in crit_headers:
+                # Unknown/unrecognized critical parameter name
                 if k not in names:
                     raise InvalidCritHeaderParameterNameError(k)
+                # Listed in crit but not present in protected header
                 elif k not in header:
                     raise InvalidCritHeaderParameterNameError(k)
 
@@ -303,6 +317,16 @@ class JsonWebSignature:
         if header and not isinstance(header, dict):
             raise DecodeError('Invalid "header" value')
 
+        # RFC 7515 §4.1.11: 'crit' MUST be integrity-protected. If present in
+        # the unprotected header object, reject the JWS.
+        if header and "crit" in header:
+            # Use header name error to indicate invalid placement of a
+            # registered parameter in the unprotected header.
+            raise InvalidHeaderParameterNameError("crit")
+
+        # Enforce must-understand semantics for names listed in protected
+        # 'crit'. This will also ensure each listed name is present in the
+        # protected header.
         self._validate_crit_headers(protected)
         jws_header = JWSHeader(protected, header)
         algorithm, key = self._prepare_algorithm_key(jws_header, payload, key)
