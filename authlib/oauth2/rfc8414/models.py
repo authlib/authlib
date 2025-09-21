@@ -383,3 +383,10 @@ def validate_array_value(metadata, key):
     values = metadata.get(key)
     if values is not None and not isinstance(values, list):
         raise ValueError(f'"{key}" MUST be JSON array')
+
+
+def _validate_boolean_value(metadata, key):
+    if key not in metadata:
+        return
+    if metadata[key] not in (True, False):
+        raise ValueError(f'"{key}" MUST be boolean')

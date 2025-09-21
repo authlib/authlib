@@ -16,6 +16,8 @@ OAUTH_CLIENT_PARAMS = (
     "refresh_token_params",
     "authorize_url",
     "authorize_params",
+    "authorize_url_params",
+    "pushed_authorization_url",
     "api_base_url",
     "client_kwargs",
     "server_metadata_url",

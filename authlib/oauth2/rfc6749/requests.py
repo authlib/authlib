@@ -90,6 +90,8 @@ class OAuth2Request(OAuth2Payload):
         self.authorization_code = None
         self.refresh_token = None
         self.credential = None
+        self.endpoint = None
+        self.source = None
 
     @property
     def args(self):
