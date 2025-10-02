@@ -13,7 +13,7 @@ __all__ = ["AsyncAssertionClient"]
 
 
 class AsyncAssertionClient(_AssertionClient, httpx.AsyncClient):
-    token_auth_class = OAuth2Auth
+    auth_class = OAuth2Auth
     oauth_error_class = OAuthError
     JWT_BEARER_GRANT_TYPE = JWTBearerGrant.GRANT_TYPE
     ASSERTION_METHODS = {
@@ -58,7 +58,7 @@ class AsyncAssertionClient(_AssertionClient, httpx.AsyncClient):
             if not self.token or self.token.is_expired():
                 await self.refresh_token()
 
-            auth = self.token_auth
+            auth = self.protected_auth
         return await super().request(method, url, auth=auth, **kwargs)
 
     async def _refresh_token(self, data):
@@ -70,7 +70,7 @@ class AsyncAssertionClient(_AssertionClient, httpx.AsyncClient):
 
 
 class AssertionClient(_AssertionClient, httpx.Client):
-    token_auth_class = OAuth2Auth
+    auth_class = OAuth2Auth
     oauth_error_class = OAuthError
     JWT_BEARER_GRANT_TYPE = JWTBearerGrant.GRANT_TYPE
     ASSERTION_METHODS = {
@@ -120,5 +120,5 @@ class AssertionClient(_AssertionClient, httpx.Client):
             if not self.token or self.token.is_expired():
                 self.refresh_token()
 
-            auth = self.token_auth
+            auth = self.protected_auth
         return super().request(method, url, auth=auth, **kwargs)

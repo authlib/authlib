@@ -1,12 +1,15 @@
 import base64
+from typing import Any
+from typing import Protocol
 
 from authlib.common.encoding import to_bytes
 from authlib.common.encoding import to_native
 from authlib.common.urls import add_params_to_qs
 from authlib.common.urls import add_params_to_uri
-
 from .rfc6749 import OAuth2Token
+from .rfc6749 import UnsupportedTokenTypeError
 from .rfc6750 import add_bearer_token
+from .rfc9449 import add_dpop_token
 
 
 def encode_client_secret_basic(client, method, uri, headers, body):
@@ -39,7 +42,25 @@ def encode_none(client, method, uri, headers, body):
     return uri, headers, body
 
 
-class ClientAuth:
+class AuthProtocol(Protocol):
+    def prepare(self, method, uri, headers, body) -> tuple[Any, Any, Any]:
+        ...
+
+    def prepare_retry(self, method, uri, headers, body) -> tuple[Any, Any, Any]:
+        return uri, headers, body
+
+    def should_retry(self, response) -> bool:
+        return False
+
+
+def create_auth(*auths: AuthProtocol):
+    auths = tuple(auth for auth in auths if auth is not None)
+    if len(auths) == 1:
+        return auths[0]
+    return CompositeAuth(*auths)
+
+
+class ClientAuth(AuthProtocol):
     """Attaches OAuth Client Information to HTTP requests.
 
     :param client_id: Client ID, which you get from client registration.
@@ -51,7 +72,6 @@ class ClientAuth:
         * client_secret_post
         * none
     """
-
     DEFAULT_AUTH_METHODS = {
         "client_secret_basic": encode_client_secret_basic,
         "client_secret_post": encode_client_secret_post,
@@ -74,7 +94,7 @@ class ClientAuth:
         return self.auth_method(self, method, uri, headers, body)
 
 
-class TokenAuth:
+class TokenAuth(AuthProtocol):
     """Attach token information to HTTP requests.
 
     :param token: A dict or OAuth2Token instance of an OAuth 2.0 token
@@ -85,31 +105,61 @@ class TokenAuth:
         * body
         * uri
     """
-
     DEFAULT_TOKEN_TYPE = "bearer"
-    SIGN_METHODS = {"bearer": add_bearer_token}
+    SIGN_METHODS = {"bearer": add_bearer_token, "dpop": add_dpop_token}
 
     def __init__(self, token, token_placement="header", client=None):
         self.token = OAuth2Token.from_dict(token)
         self.token_placement = token_placement
-        self.client = client
         self.hooks = set()
+        self.client = client
 
     def set_token(self, token):
         self.token = OAuth2Token.from_dict(token)
 
-    def prepare(self, uri, headers, body):
-        token_type = self.token.get("token_type", self.DEFAULT_TOKEN_TYPE)
-        sign = self.SIGN_METHODS[token_type.lower()]
+    def prepare(self, method, uri, headers, body):
+        token_type = self.token.get("token_type", self.DEFAULT_TOKEN_TYPE).lower()
+        try:
+            sign = self.SIGN_METHODS[token_type]
+        except KeyError as error:
+            description = f"Unsupported token_type: {str(error)}"
+            raise UnsupportedTokenTypeError(description=description) from error
+
         uri, headers, body = sign(
             self.token["access_token"], uri, headers, body, self.token_placement
         )
 
         for hook in self.hooks:
-            uri, headers, body = hook(uri, headers, body)
+            argcount = hook.__code__.co_argcount
+            if argcount == 4:
+                uri, headers, body = hook(method, uri, headers, body)
+            else:
+                uri, headers, body = hook(uri, headers, body)
 
         return uri, headers, body
 
     def __del__(self):
         del self.client
         del self.hooks
+
+
+class CompositeAuth(AuthProtocol):
+    def __init__(self, *auths: AuthProtocol):
+        self.auths = auths
+
+    def prepare(self, method, uri, headers, body) -> tuple[Any, Any, Any]:
+        for auth in self.auths:
+            uri, headers, body = auth.prepare(method, uri, headers, body)
+        return uri, headers, body
+
+    def prepare_retry(self, method, uri, headers, body) -> tuple[Any, Any, Any]:
+        for auth in self.auths:
+            uri, headers, body = auth.prepare_retry(method, uri, headers, body)
+        return uri, headers, body
+
+    def should_retry(self, response) -> bool:
+        for auth in self.auths:
+            if auth.should_retry(response):
+                return True
+        return False
+

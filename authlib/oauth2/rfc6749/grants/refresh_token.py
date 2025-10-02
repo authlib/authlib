@@ -70,6 +70,7 @@ class RefreshTokenGrant(BaseGrant, TokenEndpointMixin):
         if not original_scope.issuperset(set(scope_to_list(scope))):
             raise InvalidScopeError()
 
+    @hooked
     def validate_token_request(self):
         """If the authorization server issued a refresh token to the client, the
         client makes a refresh request to the token endpoint by adding the
