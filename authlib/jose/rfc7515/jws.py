@@ -12,6 +12,7 @@ from authlib.jose.util import ensure_dict
 from authlib.jose.util import extract_header
 from authlib.jose.util import extract_segment
 
+from .models import JWSAlgorithm
 from .models import JWSHeader
 from .models import JWSObject
 
@@ -48,6 +49,12 @@ class JsonWebSignature:
         if not algorithm or algorithm.algorithm_type != "JWS":
             raise ValueError(f"Invalid algorithm for JWS, {algorithm!r}")
         cls.ALGORITHMS_REGISTRY[algorithm.name] = algorithm
+
+    @classmethod
+    def get_algorithm(cls, alg: str) -> JWSAlgorithm:
+        if alg not in cls.ALGORITHMS_REGISTRY:
+            raise UnsupportedAlgorithmError()
+        return cls.ALGORITHMS_REGISTRY[alg]
 
     def serialize_compact(self, protected, payload, key):
         """Generate a JWS Compact Serialization. The JWS Compact Serialization

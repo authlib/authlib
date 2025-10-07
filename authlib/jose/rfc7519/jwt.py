@@ -168,6 +168,9 @@ def find_encode_key(key, header):
 
 
 def create_load_key(key):
+    if not key:
+        return key
+
     def load_key(header, payload):
         if isinstance(key, KeySet):
             return key.find_by_kid(header.get("kid"))

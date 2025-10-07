@@ -1,46 +1,59 @@
+from requests import Response
 from requests import Session
 from requests.auth import AuthBase
 
-from authlib.oauth2.auth import ClientAuth
-from authlib.oauth2.auth import TokenAuth
 from authlib.oauth2.client import OAuth2Client
-
+from .utils import update_session_configure
 from ..base_client import InvalidTokenError
 from ..base_client import MissingTokenError
 from ..base_client import OAuthError
-from ..base_client import UnsupportedTokenTypeError
-from .utils import update_session_configure
+from ...oauth2 import TokenAuth
+from ...oauth2.auth import AuthProtocol
 
 __all__ = ["OAuth2Session", "OAuth2Auth"]
 
 
-class OAuth2Auth(AuthBase, TokenAuth):
-    """Sign requests for OAuth 2.0, currently only bearer token is supported."""
+class OAuth2TokenAuth(TokenAuth):
 
     def ensure_active_token(self):
         if self.client and not self.client.ensure_active_token(self.token):
             raise InvalidTokenError()
 
-    def __call__(self, req):
+    def prepare(self, method, uri, headers, body):
         self.ensure_active_token()
-        try:
-            req.url, req.headers, req.body = self.prepare(
-                req.url, req.headers, req.body
-            )
-        except KeyError as error:
-            description = f"Unsupported token_type: {str(error)}"
-            raise UnsupportedTokenTypeError(description=description) from error
-        return req
+        return super().prepare(method, uri, headers, body)
 
 
-class OAuth2ClientAuth(AuthBase, ClientAuth):
-    """Attaches OAuth Client Authentication to the given Request object."""
+class OAuth2Auth(AuthBase):
+    """Sign requests for OAuth 2.0"""
 
-    def __call__(self, req):
-        req.url, req.headers, req.body = self.prepare(
-            req.method, req.url, req.headers, req.body
+    def __init__(self, auth: AuthProtocol):
+        self.auth = auth
+
+    def __call__(self, request):
+        request.url, request.headers, request.body = self.auth.prepare(
+            request.method, request.url, request.headers, request.body
         )
-        return req
+        request.register_hook("response", self.retry_if_necessary)
+        return request
+
+    def retry_if_necessary(self, response: Response, **kwargs):
+        if not self.auth.should_retry(response):
+            return response
+
+        # Consume content and release the original connection
+        # to allow our new request to reuse the same one.
+        response.content()
+        response.close()
+        new_request = response.request.copy()
+
+        new_request.url, new_request.headers, new_request.body = self.auth.prepare_retry(
+            new_request.method, new_request.url, new_request.headers, new_request.body
+        )
+        new_response = response.connection.send(new_request, **kwargs)
+        new_response.history.append(response)
+        new_response.request = new_request
+        return new_response
 
 
 class OAuth2Session(OAuth2Client, Session):
@@ -72,8 +85,8 @@ class OAuth2Session(OAuth2Client, Session):
     :param default_timeout: If settled, every requests will have a default timeout.
     """
 
-    client_auth_class = OAuth2ClientAuth
-    token_auth_class = OAuth2Auth
+    auth_class = OAuth2Auth
+    token_auth_class = OAuth2TokenAuth
     oauth_error_class = OAuthError
     SESSION_REQUEST_PARAMS = (
         "allow_redirects",
@@ -136,5 +149,7 @@ class OAuth2Session(OAuth2Client, Session):
         if not withhold_token and auth is None:
             if not self.token:
                 raise MissingTokenError()
-            auth = self.token_auth
+            if not self.ensure_active_token(self.token):
+                raise InvalidTokenError()
+            auth = self.protected_auth
         return super().request(method, url, auth=auth, **kwargs)
