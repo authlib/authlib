@@ -172,6 +172,8 @@ class ClientAuth:
 
         if CONTENT_TYPE_FORM_URLENCODED in content_type:
             headers["Content-Type"] = CONTENT_TYPE_FORM_URLENCODED
+            if isinstance(body, bytes):
+                body = body.decode()
             uri, headers, body = self.sign(method, uri, headers, body)
         elif self.force_include_body:
             # To allow custom clients to work on non form encoded bodies.
