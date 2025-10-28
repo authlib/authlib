@@ -241,3 +241,13 @@ class TokenMixin:
                 return Client.get(self.client_id)
         """
         raise NotImplementedError()
+
+    def get_token_type(self):
+        """A method to get the token type associated with this token:
+
+        .. code-block::
+
+            def get_token_type(self):
+                return self.token_type
+        """
+        raise NotImplementedError()

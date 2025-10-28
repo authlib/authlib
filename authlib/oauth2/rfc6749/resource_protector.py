@@ -6,8 +6,7 @@ Implementation of Accessing Protected Resources per `Section 7`_.
 .. _`Section 7`: https://tools.ietf.org/html/rfc6749#section-7
 """
 
-from .errors import MissingAuthorizationError
-from .errors import UnsupportedTokenTypeError
+from .errors import MissingAuthorizationError, UnsupportedTokenTypeError
 from .util import scope_to_list
 
 
@@ -39,6 +38,31 @@ class TokenValidator:
 
         return True
 
+    def validate_token_type(self, token, request):
+        from ..rfc6750.errors import InvalidTokenError
+        from ..rfc9449 import DPoPTokenValidator
+        if token.get_dpop_jkt():
+            if self.TOKEN_TYPE != DPoPTokenValidator.TOKEN_TYPE:
+                raise InvalidTokenError(description=f"Access token is bound to a DPoP proof, but token type is {self.TOKEN_TYPE}",
+                                        token_type="DPoP",
+                                        realm=self.realm,
+                                        extra_attributes=self.extra_attributes)
+        else:
+            if "DPoP" in request.headers and self.TOKEN_TYPE != DPoPTokenValidator.TOKEN_TYPE:
+                raise InvalidTokenError(
+                    token_type=self.TOKEN_TYPE,
+                    description=f"DPoP proof not expected for {self.TOKEN_TYPE} token type",
+                    realm=self.realm,
+                    extra_attributes=self.extra_attributes
+                )
+
+        saved_token_type = token.get_token_type()
+        if saved_token_type.lower() != self.TOKEN_TYPE:
+            raise InvalidTokenError(description=f"Access token is of type {saved_token_type}, but token type is {self.TOKEN_TYPE}",
+                                    token_type=saved_token_type,
+                                    realm=self.realm,
+                                    extra_attributes=self.extra_attributes)
+
     def authenticate_token(self, token_string):
         """A method to query token from database with the given token string.
         Developers MUST re-implement this method. For instance::
@@ -52,7 +76,7 @@ class TokenValidator:
         raise NotImplementedError()
 
     def validate_request(self, request):
-        """A method to validate if the HTTP request is valid or not. Developers MUST
+        """A method to validate if the HTTP request is valid or not. Developers MAY
         re-implement this method.  For instance, your server requires a
         "X-Device-Version" in the header::
 
@@ -144,5 +168,6 @@ class ResourceProtector:
         validator, token_string = self.parse_request_authorization(request)
         validator.validate_request(request)
         token = validator.authenticate_token(token_string)
+        validator.validate_token_type(token, request)
         validator.validate_token(token, scopes, request, **kwargs)
         return token

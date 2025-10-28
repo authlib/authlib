@@ -11,6 +11,7 @@ from .requests import FlaskJsonRequest
 from .requests import FlaskOAuth2Request
 from .signals import client_authenticated
 from .signals import token_revoked
+from ...oauth2.rfc9449.token import DPoPTokenGenerator
 
 
 class AuthorizationServer(_AuthorizationServer):
@@ -131,7 +132,7 @@ class AuthorizationServer(_AuthorizationServer):
 
         expires_conf = config.get("OAUTH2_TOKEN_EXPIRES_IN")
         expires_generator = create_token_expires_in_generator(expires_conf)
-        return BearerTokenGenerator(
+        return DPoPTokenGenerator(
             access_token_generator, refresh_token_generator, expires_generator
         )
 
