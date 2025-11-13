@@ -1,4 +1,6 @@
 from authlib.common.encoding import to_native
+from authlib.oauth2 import TokenAuth
+from authlib.oauth2.auth import create_auth
 from authlib.oauth2.base import OAuth2Error
 
 
@@ -11,7 +13,8 @@ class AssertionClient:
 
     DEFAULT_GRANT_TYPE = None
     ASSERTION_METHODS = {}
-    token_auth_class = None
+    auth_class = None
+    token_auth_class = TokenAuth
     oauth_error_class = OAuth2Error
 
     def __init__(
@@ -46,10 +49,13 @@ class AssertionClient:
         self.audience = audience
         self.claims = claims
         self.scope = scope
-        if self.token_auth_class is not None:
-            self.token_auth = self.token_auth_class(None, token_placement, self)
+        self.token_auth = self.token_auth_class(None, token_placement)
         self._kwargs = kwargs
         self.leeway = leeway
+
+    @property
+    def protected_auth(self):
+        return self.auth_class(create_auth(self.token_auth))
 
     @property
     def token(self):

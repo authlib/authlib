@@ -7,9 +7,13 @@ class JWSAlgorithm:
     description = None
     algorithm_type = "JWS"
     algorithm_location = "alg"
+    key_cls = None
 
     def prepare_key(self, raw_data):
         """Prepare key for signing and verifying signature."""
+        raise NotImplementedError()
+
+    def generate_key(self, options=None, is_private=False):
         raise NotImplementedError()
 
     def sign(self, msg, key):
