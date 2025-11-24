@@ -4,7 +4,14 @@ import time
 class OAuth2Token(dict):
     def __init__(self, params):
         if params.get("expires_at"):
-            params["expires_at"] = int(params["expires_at"])
+                        try:
+
+                                            params["expires_at"] = int(params["expires_at"])
+                                        except (ValueError, TypeError):
+                                                            # If expires_at cannot be parsed, fall back to expires_in
+                                                            if params.get("expires_in"):
+                                                                                    params["expires_at"] = int(time.time()) + int(params["expires_in"])
+
         elif params.get("expires_in"):
             params["expires_at"] = int(time.time()) + int(params["expires_in"])
         super().__init__(params)
