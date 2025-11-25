@@ -323,6 +323,42 @@ def test_token_status3():
     assert not sess.token.is_expired(sess.leeway)
 
 
+def test_expires_in_used_when_expires_at_unparseable():
+    """Test that expires_in is used as fallback when expires_at is unparseable."""
+    token = dict(
+        access_token="a",
+        token_type="bearer",
+        expires_in=3600,  # 1 hour from now
+        expires_at="2024-01-01T00:00:00Z",  # Unparseable - should fall back to expires_in
+    )
+    sess = OAuth2Session("foo", token=token)
+
+    # The token should use expires_in since expires_at is unparseable
+    # So it should be considered expired with leeway > 3600
+    assert sess.token.is_expired(leeway=3700) is True
+    # And not expired with leeway < 3600
+    assert sess.token.is_expired(leeway=0) is False
+    # expires_at should be calculated from expires_in
+    assert isinstance(sess.token["expires_at"], int)
+
+
+def test_unparseable_expires_at_returns_none():
+    """Test that is_expired returns None when expires_at is unparsable and no expires_in."""
+    token = dict(
+        access_token="a",
+        token_type="bearer",
+        expires_at="2024-01-01T00:00:00Z",  # Unparsable date string
+    )
+    sess = OAuth2Session("foo", token=token)
+
+    # Should return None since we can't determine expiration
+    assert sess.token.is_expired() is None
+    # The unparsable expires_at should be preserved in the token
+    assert sess.token["expires_at"] == "2024-01-01T00:00:00Z"
+    # No expires_in should be calculated
+    assert "expires_in" not in sess.token
+
+
 def test_token_expired():
     token = dict(access_token="a", token_type="bearer", expires_at=100)
     sess = OAuth2Session("foo", token=token)
