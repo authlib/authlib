@@ -1,6 +1,6 @@
-from ..rfc6749 import TokenValidator
-from ..rfc6750 import InsufficientScopeError
-from ..rfc6750 import InvalidTokenError
+from ..rfc6749.resource_protector import TokenValidator
+from ..rfc6750.errors import InsufficientScopeError
+from ..rfc6750.errors import InvalidTokenError
 
 
 class IntrospectTokenValidator(TokenValidator):

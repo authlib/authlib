@@ -12,6 +12,7 @@ from authlib.oauth2.rfc6749 import OAuth2Request
 
 class DjangoOAuth2Payload(OAuth2Payload):
     def __init__(self, request: HttpRequest):
+        super().__init__()
         self._request = request
 
     @cached_property

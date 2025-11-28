@@ -1,11 +1,13 @@
 from collections import defaultdict
 
 from authlib.deprecate import deprecate
-
 from .errors import InsecureTransportError
 
 
 class OAuth2Payload:
+    def __init__(self):
+        self._dpop_jkt = None
+
     @property
     def data(self):
         raise NotImplementedError()
@@ -49,9 +51,20 @@ class OAuth2Payload:
     def state(self):
         return self.data.get("state")
 
+    @property
+    def dpop_jkt(self):
+        if self._dpop_jkt:
+            return self._dpop_jkt
+        return self.data.get("dpop_jkt")
+
+    @dpop_jkt.setter
+    def dpop_jkt(self, value):
+        self._dpop_jkt = value
+
 
 class BasicOAuth2Payload(OAuth2Payload):
     def __init__(self, payload):
+        super().__init__()
         self._data = payload
         self._datalist = {key: [value] for key, value in payload.items()}
 
@@ -66,6 +79,7 @@ class BasicOAuth2Payload(OAuth2Payload):
 
 class OAuth2Request(OAuth2Payload):
     def __init__(self, method: str, uri: str, body=None, headers=None):
+        super().__init__()
         InsecureTransportError.check(uri)
         #: HTTP method
         self.method = method

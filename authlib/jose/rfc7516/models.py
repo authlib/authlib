@@ -15,6 +15,9 @@ class JWEAlgorithmBase(metaclass=ABCMeta):  # noqa: B024
     def prepare_key(self, raw_data):
         raise NotImplementedError
 
+    def generate_key(self, options=None, is_private=False):
+        raise NotImplementedError
+
     def generate_preset(self, enc_alg, key):
         raise NotImplementedError
 

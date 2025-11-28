@@ -2,12 +2,11 @@ from requests import Session
 
 from authlib.oauth2.rfc7521 import AssertionClient
 from authlib.oauth2.rfc7523 import JWTBearerGrant
-
-from .oauth2_session import OAuth2Auth
 from .utils import update_session_configure
+from ...oauth2 import TokenAuth
 
 
-class AssertionAuth(OAuth2Auth):
+class AssertionAuth(TokenAuth):
     def ensure_active_token(self):
         if self.client and (
             not self.token or self.token.is_expired(self.client.leeway)
@@ -66,5 +65,5 @@ class AssertionSession(AssertionClient, Session):
         if self.default_timeout:
             kwargs.setdefault("timeout", self.default_timeout)
         if not withhold_token and auth is None:
-            auth = self.token_auth
+            auth = self.protected_auth
         return super().request(method, url, auth=auth, **kwargs)

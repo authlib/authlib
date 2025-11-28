@@ -1,3 +1,5 @@
+from authlib.jose import JsonWebSignature
+
 from authlib.common.encoding import json_loads
 
 from ._cryptography_key import load_pem_key
@@ -19,6 +21,11 @@ class JsonWebKey:
         """
         key_cls = cls.JWK_KEY_CLS[kty]
         return key_cls.generate_key(crv_or_size, options, is_private)
+
+    @classmethod
+    def generate_key_from_jws_alg(cls, alg, options=None, is_private=False):
+        algorithm = JsonWebSignature.get_algorithm(alg)
+        return algorithm.generate_key(options=options, is_private=is_private)
 
     @classmethod
     def import_key(cls, raw, options=None):
