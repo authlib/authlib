@@ -1,5 +1,7 @@
-from authlib.jose import JsonWebKey
-from authlib.jose import JsonWebToken
+from joserfc import jwt
+from joserfc.errors import InvalidKeyIdError
+from joserfc.jwk import KeySet
+
 from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core import UserInfo
@@ -57,27 +59,24 @@ class AsyncOpenIDMixin:
         if not alg_values:
             alg_values = ["RS256"]
 
-        jwt = JsonWebToken(alg_values)
-
-        jwk_set = await self.fetch_jwk_set()
+        jwks = await self.fetch_jwk_set()
+        key_set = KeySet.import_key_set(jwks)
         try:
-            claims = jwt.decode(
+            token = jwt.decode(
                 token["id_token"],
-                key=JsonWebKey.import_key_set(jwk_set),
-                claims_cls=claims_cls,
-                claims_options=claims_options,
-                claims_params=claims_params,
+                key=key_set,
+                algorithms=alg_values,
             )
-        except ValueError:
-            jwk_set = await self.fetch_jwk_set(force=True)
-            claims = jwt.decode(
+        except InvalidKeyIdError:
+            jwks = await self.fetch_jwk_set(force=True)
+            key_set = KeySet.import_key_set(jwks)
+            token = jwt.decode(
                 token["id_token"],
-                key=JsonWebKey.import_key_set(jwk_set),
-                claims_cls=claims_cls,
-                claims_options=claims_options,
-                claims_params=claims_params,
+                key=key_set,
+                algorithms=alg_values,
             )
 
+        claims = claims_cls(token.claims, token.header, claims_options, claims_params)
         # https://github.com/authlib/authlib/issues/259
         if claims.get("nonce_supported") is False:
             claims.params["nonce"] = None
