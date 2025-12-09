@@ -1,7 +1,8 @@
 import time
 
-from authlib.common.encoding import to_native
-from authlib.jose import jwt
+from joserfc import jwt
+
+from authlib._joserfc_helpers import import_any_key
 
 
 class JWTBearerTokenGenerator:
@@ -29,7 +30,7 @@ class JWTBearerTokenGenerator:
     DEFAULT_EXPIRES_IN = 3600
 
     def __init__(self, secret_key, issuer=None, alg="RS256"):
-        self.secret_key = secret_key
+        self.secret_key = import_any_key(secret_key)
         self.issuer = issuer
         self.alg = alg
 
@@ -80,11 +81,14 @@ class JWTBearerTokenGenerator:
 
         token_data = self.get_token_data(grant_type, client, expires_in, user, scope)
         access_token = jwt.encode(
-            {"alg": self.alg}, token_data, key=self.secret_key, check=False
+            {"alg": self.alg},
+            claims=token_data,
+            key=self.secret_key,
+            algorithms=[self.alg],
         )
         token = {
             "token_type": "Bearer",
-            "access_token": to_native(access_token),
+            "access_token": access_token,
             "expires_in": expires_in,
         }
         if scope:
