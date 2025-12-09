@@ -1,6 +1,7 @@
 import logging
 import time
 
+from authlib._joserfc_helpers import import_any_key
 from authlib.jose import JoseError
 from authlib.jose import JWTClaims
 from authlib.jose import jwt
@@ -34,7 +35,7 @@ class JWTBearerTokenValidator(BearerTokenValidator):
 
     def __init__(self, public_key, issuer=None, realm=None, **extra_attributes):
         super().__init__(realm, **extra_attributes)
-        self.public_key = public_key
+        self.public_key = import_any_key(public_key)
         claims_options = {
             "exp": {"essential": True},
             "client_id": {"essential": True},
