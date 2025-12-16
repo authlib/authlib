@@ -2,18 +2,21 @@ import binascii
 import os
 import time
 
+from joserfc import jwt
+from joserfc.errors import JoseError
+
+from authlib._joserfc_helpers import import_any_key
 from authlib.common.security import generate_token
 from authlib.consts import default_json_headers
 from authlib.deprecate import deprecate
-from authlib.jose import JoseError
-from authlib.jose import JsonWebToken
 
 from ..rfc6749 import AccessDeniedError
 from ..rfc6749 import InvalidRequestError
-from .claims import ClientMetadataClaims
 from .errors import InvalidClientMetadataError
 from .errors import InvalidSoftwareStatementError
 from .errors import UnapprovedSoftwareStatementError
+from .legacy import run_legacy_claims_validation
+from .validators import ClientMetadataValidator
 
 
 class ClientRegistrationEndpoint:
@@ -27,9 +30,17 @@ class ClientRegistrationEndpoint:
     #: e.g. ``software_statement_alg_values_supported = ['RS256']``
     software_statement_alg_values_supported = None
 
-    def __init__(self, server=None, claims_classes=None):
+    def __init__(self, server=None, claims_classes=None, validator_classes=None):
         self.server = server
-        self.claims_classes = claims_classes or [ClientMetadataClaims]
+        self.claims_classes = claims_classes
+        if claims_classes:
+            deprecate(
+                "Please use 'validator_classes' instead of 'claims_classes'.",
+                version="2.0",
+            )
+        elif validator_classes is None:
+            validator_classes = [ClientMetadataValidator]
+        self.validator_classes = validator_classes
 
     def __call__(self, request):
         return self.create_registration_response(request)
@@ -62,21 +73,21 @@ class ClientRegistrationEndpoint:
             data = self.extract_software_statement(software_statement, request)
             json_data.update(data)
 
-        client_metadata = {}
+        client_metadata = {**json_data}
         server_metadata = self.get_server_metadata()
-        for claims_class in self.claims_classes:
-            options = (
-                claims_class.get_claims_options(server_metadata)
-                if hasattr(claims_class, "get_claims_options") and server_metadata
-                else {}
+        if self.claims_classes:
+            return run_legacy_claims_validation(
+                client_metadata, server_metadata, self.claims_classes
             )
-            claims = claims_class(json_data, {}, options, server_metadata)
-            try:
-                claims.validate()
-            except JoseError as error:
-                raise InvalidClientMetadataError(error.description) from error
 
-            client_metadata.update(**claims.get_registered_claims())
+        if self.validator_classes:
+            for validator_class in self.validator_classes:
+                validator = validator_class.create_validator(server_metadata)
+                validator.set_default_claims(client_metadata)
+                try:
+                    validator.validate(client_metadata)
+                except JoseError as error:
+                    raise InvalidClientMetadataError(error.description) from error
         return client_metadata
 
     def extract_software_statement(self, software_statement, request):
@@ -85,10 +96,14 @@ class ClientRegistrationEndpoint:
             raise UnapprovedSoftwareStatementError()
 
         try:
-            jwt = JsonWebToken(self.software_statement_alg_values_supported)
-            claims = jwt.decode(software_statement, key)
+            key = import_any_key(key)
+            token = jwt.decode(
+                software_statement,
+                key,
+                algorithms=self.software_statement_alg_values_supported,
+            )
             # there is no need to validate claims
-            return claims
+            return token.claims
         except JoseError as exc:
             raise InvalidSoftwareStatementError() from exc
 
