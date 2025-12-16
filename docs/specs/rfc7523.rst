@@ -31,7 +31,7 @@ registered with :meth:`~authlib.oauth2.rfc6749.AuthorizationServer.register_gran
 The base class is :class:`JWTBearerGrant`, you need to implement the missing
 methods in order to use it. Here is an example::
 
-    from authlib.jose import JsonWebKey
+    from joserfc.jwk import KeySet
     from authlib.oauth2.rfc7523 import JWTBearerGrant as _JWTBearerGrant
 
     class JWTBearerGrant(_JWTBearerGrant):
@@ -41,9 +41,8 @@ methods in order to use it. Here is an example::
 
         def resolve_client_key(self, client, headers, payload):
             # if client has `jwks` column
-            key_set = JsonWebKey.import_key_set(client.jwks)
-
-            return key_set.find_by_kid(headers['kid'])
+            key_set = KeySet.import_key_set(client.jwks)
+            return key_set
 
         def authenticate_user(self, subject):
             # when assertion contains `sub` value, if this `sub` is email

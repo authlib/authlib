@@ -1,7 +1,9 @@
 import time
 
+from joserfc import jwt
+
+from authlib._joserfc_helpers import import_any_key
 from authlib.common.security import generate_token
-from authlib.jose import jwt
 
 
 def sign_jwt_bearer_assertion(
@@ -42,7 +44,7 @@ def sign_jwt_bearer_assertion(
     if claims:
         payload.update(claims)
 
-    return jwt.encode(header, payload, key)
+    return jwt.encode(header, payload, import_any_key(key))
 
 
 def client_secret_jwt_sign(
