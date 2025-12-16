@@ -209,20 +209,20 @@ def get_claims_options(metadata: dict[str, t.Any]):
     if scopes_supported is not None:
         scopes_supported = set(scopes_supported)
 
-        def _validate_scope(claims, value):
+        def _validate_scope(_, value):
             if not value:
                 return True
             scopes = set(scope_to_list(value))
             return scopes_supported.issuperset(scopes)
 
-        options["scope"] = {"validate": _validate_scope}
+        options["scope"] = {"allow_blank": True, "validate": _validate_scope}
 
     if response_types_supported is not None:
         response_types_supported = [
             set(items.split()) for items in response_types_supported
         ]
 
-        def _validate_response_types(claims, value):
+        def _validate_response_types(_, value):
             # If omitted, the default is that the client will use only the "code"
             # response type.
             response_types = (
