@@ -1,50 +1,39 @@
+from __future__ import annotations
+
+import typing as t
+
+from joserfc.errors import InvalidClaimError
+from joserfc.jwk import KeySet
+from joserfc.jwk import KeySetSerialization
+from joserfc.jwt import JWTClaimsRegistry
+
 from authlib.common.urls import is_valid_url
-from authlib.jose import BaseClaims
-from authlib.jose import JsonWebKey
-from authlib.jose.errors import InvalidClaimError
 
-from .validators import get_claims_options
+from ..rfc6749 import scope_to_list
 
 
-class ClientMetadataClaims(BaseClaims):
-    # https://tools.ietf.org/html/rfc7591#section-2
-    REGISTERED_CLAIMS = [
-        "redirect_uris",
-        "token_endpoint_auth_method",
-        "grant_types",
-        "response_types",
-        "client_name",
-        "client_uri",
-        "logo_uri",
-        "scope",
-        "contacts",
-        "tos_uri",
-        "policy_uri",
-        "jwks_uri",
-        "jwks",
-        "software_id",
-        "software_version",
-    ]
+class ClientMetadataValidator(JWTClaimsRegistry):
+    @classmethod
+    def create_validator(cls, metadata: dict[str, t.Any]):
+        return cls(leeway=60, **get_claims_options(metadata))
 
-    def validate(self):
-        self._validate_essential_claims()
-        self.validate_redirect_uris()
-        self.validate_token_endpoint_auth_method()
-        self.validate_grant_types()
-        self.validate_response_types()
-        self.validate_client_name()
-        self.validate_client_uri()
-        self.validate_logo_uri()
-        self.validate_scope()
-        self.validate_contacts()
-        self.validate_tos_uri()
-        self.validate_policy_uri()
-        self.validate_jwks_uri()
-        self.validate_jwks()
-        self.validate_software_id()
-        self.validate_software_version()
+    @staticmethod
+    def set_default_claims(claims: dict[str, t.Any]):
+        claims.setdefault("token_endpoint_auth_method", "client_secret_basic")
 
-    def validate_redirect_uris(self):
+    def _validate_uri(self, key: str, uri: str):
+        if uri and not is_valid_url(uri, fragments_allowed=False):
+            raise InvalidClaimError(key)
+
+    def _validate_claim_value(self, claim_name: str, value: t.Any):
+        self.check_value(claim_name, value)
+        option = self.options.get(claim_name)
+        if option and "validate" in option:
+            validate = option["validate"]
+            if validate and not validate(self, value):
+                raise InvalidClaimError(claim_name)
+
+    def validate_redirect_uris(self, uris: list[str]):
         """Array of redirection URI strings for use in redirect-based flows
         such as the authorization code and implicit flows.  As required by
         Section 2 of OAuth 2.0 [RFC6749], clients using flows with
@@ -53,33 +42,29 @@ class ClientMetadataClaims(BaseClaims):
         redirect-based flows MUST implement support for this metadata
         value.
         """
-        uris = self.get("redirect_uris")
-        if uris:
-            for uri in uris:
-                self._validate_uri("redirect_uris", uri)
+        for uri in uris:
+            self._validate_uri("redirect_uris", uri)
 
-    def validate_token_endpoint_auth_method(self):
+    def validate_token_endpoint_auth_method(self, method: str):
         """String indicator of the requested authentication method for the
         token endpoint.
         """
         # If unspecified or omitted, the default is "client_secret_basic"
-        if "token_endpoint_auth_method" not in self:
-            self["token_endpoint_auth_method"] = "client_secret_basic"
-        self._validate_claim_value("token_endpoint_auth_method")
+        self._validate_claim_value("token_endpoint_auth_method", method)
 
-    def validate_grant_types(self):
+    def validate_grant_types(self, grant_types: list[str]):
         """Array of OAuth 2.0 grant type strings that the client can use at
         the token endpoint.
         """
-        self._validate_claim_value("grant_types")
+        self._validate_claim_value("grant_types", grant_types)
 
-    def validate_response_types(self):
+    def validate_response_types(self, response_types: list[str]):
         """Array of the OAuth 2.0 response type strings that the client can
         use at the authorization endpoint.
         """
-        self._validate_claim_value("response_types")
+        self._validate_claim_value("response_types", response_types)
 
-    def validate_client_name(self):
+    def validate_client_name(self, name: str):
         """Human-readable string name of the client to be presented to the
         end-user during authorization.  If omitted, the authorization
         server MAY display the raw "client_id" value to the end-user
@@ -88,7 +73,7 @@ class ClientMetadataClaims(BaseClaims):
         Section 2.2.
         """
 
-    def validate_client_uri(self):
+    def validate_client_uri(self, client_uri: str):
         """URL string of a web page providing information about the client.
         If present, the server SHOULD display this URL to the end-user in
         a clickable fashion.  It is RECOMMENDED that clients always send
@@ -96,37 +81,37 @@ class ClientMetadataClaims(BaseClaims):
         page.  The value of this field MAY be internationalized, as
         described in Section 2.2.
         """
-        self._validate_uri("client_uri")
+        self._validate_uri("client_uri", client_uri)
 
-    def validate_logo_uri(self):
+    def validate_logo_uri(self, logo_uri: str):
         """URL string that references a logo for the client.  If present, the
         server SHOULD display this image to the end-user during approval.
         The value of this field MUST point to a valid image file.  The
         value of this field MAY be internationalized, as described in
         Section 2.2.
         """
-        self._validate_uri("logo_uri")
+        self._validate_uri("logo_uri", logo_uri)
 
-    def validate_scope(self):
+    def validate_scope(self, scope: str):
         """String containing a space-separated list of scope values (as
         described in Section 3.3 of OAuth 2.0 [RFC6749]) that the client
         can use when requesting access tokens.  The semantics of values in
         this list are service specific.  If omitted, an authorization
         server MAY register a client with a default set of scopes.
         """
-        self._validate_claim_value("scope")
+        self._validate_claim_value("scope", scope)
 
-    def validate_contacts(self):
+    def validate_contacts(self, contacts: list[str]):
         """Array of strings representing ways to contact people responsible
         for this client, typically email addresses.  The authorization
         server MAY make these contact addresses available to end-users for
         support requests for the client.  See Section 6 for information on
         Privacy Considerations.
         """
-        if "contacts" in self and not isinstance(self["contacts"], list):
+        if not isinstance(contacts, list):
             raise InvalidClaimError("contacts")
 
-    def validate_tos_uri(self):
+    def validate_tos_uri(self, tos_uri: str):
         """URL string that points to a human-readable terms of service
         document for the client that describes a contractual relationship
         between the end-user and the client that the end-user accepts when
@@ -135,9 +120,9 @@ class ClientMetadataClaims(BaseClaims):
         field MUST point to a valid web page.  The value of this field MAY
         be internationalized, as described in Section 2.2.
         """
-        self._validate_uri("tos_uri")
+        self._validate_uri("tos_uri", tos_uri)
 
-    def validate_policy_uri(self):
+    def validate_policy_uri(self, policy_uri: str):
         """URL string that points to a human-readable privacy policy document
         that describes how the deployment organization collects, uses,
         retains, and discloses personal data.  The authorization server
@@ -145,9 +130,9 @@ class ClientMetadataClaims(BaseClaims):
         value of this field MUST point to a valid web page.  The value of
         this field MAY be internationalized, as described in Section 2.2.
         """
-        self._validate_uri("policy_uri")
+        self._validate_uri("policy_uri", policy_uri)
 
-    def validate_jwks_uri(self):
+    def validate_jwks_uri(self, jwks_uri: str):
         """URL string referencing the client's JSON Web Key (JWK) Set
         [RFC7517] document, which contains the client's public keys.  The
         value of this field MUST point to a valid JWK Set document.  These
@@ -161,9 +146,9 @@ class ClientMetadataClaims(BaseClaims):
         response.
         """
         # TODO: use real HTTP library
-        self._validate_uri("jwks_uri")
+        self._validate_uri("jwks_uri", jwks_uri)
 
-    def validate_jwks(self):
+    def validate_jwks(self, jwks: KeySetSerialization):
         """Client's JSON Web Key Set [RFC7517] document value, which contains
         the client's public keys.  The value of this field MUST be a JSON
         object containing a valid JWK Set.  These keys can be used by
@@ -178,15 +163,14 @@ class ClientMetadataClaims(BaseClaims):
                 #  The "jwks_uri" and "jwks" parameters MUST NOT both  be present
                 raise InvalidClaimError("jwks")
 
-            jwks = self["jwks"]
             try:
-                key_set = JsonWebKey.import_key_set(jwks)
+                key_set = KeySet.import_key_set(jwks)
                 if not key_set:
                     raise InvalidClaimError("jwks")
             except ValueError as exc:
                 raise InvalidClaimError("jwks") from exc
 
-    def validate_software_id(self):
+    def validate_software_id(self, software_id: str):
         """A unique identifier string (e.g., a Universally Unique Identifier
         (UUID)) assigned by the client developer or software publisher
         used by registration endpoints to identify the client software to
@@ -199,7 +183,7 @@ class ClientMetadataClaims(BaseClaims):
         usually opaque to the client and authorization server.
         """
 
-    def validate_software_version(self):
+    def validate_software_version(self, software_version: str):
         """A version identifier string for the client software identified by
         "software_id".  The value of the "software_version" SHOULD change
         on any update to the client software identified by the same
@@ -214,12 +198,55 @@ class ClientMetadataClaims(BaseClaims):
         of this specification.
         """
 
-    def _validate_uri(self, key, uri=None):
-        if uri is None:
-            uri = self.get(key)
-        if uri and not is_valid_url(uri, fragments_allowed=False):
-            raise InvalidClaimError(key)
 
-    @classmethod
-    def get_claims_options(cls, metadata):
-        return get_claims_options(metadata)
+def get_claims_options(metadata: dict[str, t.Any]):
+    """Generate claims options validation from Authorization Server metadata."""
+    scopes_supported = metadata.get("scopes_supported")
+    response_types_supported = metadata.get("response_types_supported")
+    grant_types_supported = metadata.get("grant_types_supported")
+    auth_methods_supported = metadata.get("token_endpoint_auth_methods_supported")
+    options = {}
+    if scopes_supported is not None:
+        scopes_supported = set(scopes_supported)
+
+        def _validate_scope(claims, value):
+            if not value:
+                return True
+            scopes = set(scope_to_list(value))
+            return scopes_supported.issuperset(scopes)
+
+        options["scope"] = {"validate": _validate_scope}
+
+    if response_types_supported is not None:
+        response_types_supported = [
+            set(items.split()) for items in response_types_supported
+        ]
+
+        def _validate_response_types(claims, value):
+            # If omitted, the default is that the client will use only the "code"
+            # response type.
+            response_types = (
+                [set(items.split()) for items in value] if value else [{"code"}]
+            )
+            return all(
+                response_type in response_types_supported
+                for response_type in response_types
+            )
+
+        options["response_types"] = {"validate": _validate_response_types}
+
+    if grant_types_supported is not None:
+        grant_types_supported = set(grant_types_supported)
+
+        def _validate_grant_types(claims, value):
+            # If omitted, the default behavior is that the client will use only
+            # the "authorization_code" Grant Type.
+            grant_types = set(value) if value else {"authorization_code"}
+            return grant_types_supported.issuperset(grant_types)
+
+        options["grant_types"] = {"validate": _validate_grant_types}
+
+    if auth_methods_supported is not None:
+        options["token_endpoint_auth_method"] = {"values": auth_methods_supported}
+
+    return options
