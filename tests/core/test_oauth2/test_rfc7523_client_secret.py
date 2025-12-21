@@ -1,7 +1,9 @@
 import time
 from unittest import mock
 
-from authlib.jose import jwt
+from joserfc import jwt
+from joserfc.jwk import OctKey
+
 from authlib.oauth2.rfc7523 import ClientSecretJWT
 
 
@@ -73,14 +75,12 @@ def sign_and_decode(jwt_signer, client_id, client_secret, token_endpoint):
 
     pre_sign_time = int(time.time())
 
-    data = jwt_signer.sign(auth, token_endpoint).decode("utf-8")
-    decoded = jwt.decode(
-        data, client_secret
-    )  # , claims_cls=None, claims_options=None, claims_params=None):
+    data = jwt_signer.sign(auth, token_endpoint)
+    decoded = jwt.decode(data, OctKey.import_key(client_secret))
 
-    iat = decoded.pop("iat")
-    exp = decoded.pop("exp")
-    jti = decoded.pop("jti")
+    iat = decoded.claims.pop("iat")
+    exp = decoded.claims.pop("exp")
+    jti = decoded.claims.pop("jti")
 
     return decoded, pre_sign_time, iat, exp, jti
 
@@ -104,7 +104,7 @@ def test_sign_nothing_set():
         "iss": "client_id_1",
         "aud": "https://provider.test/oauth/access_token",
         "sub": "client_id_1",
-    } == decoded
+    } == decoded.claims
 
     assert {"alg": "HS256", "typ": "JWT"} == decoded.header
 
@@ -124,7 +124,7 @@ def test_sign_custom_jti():
     assert exp <= iat + 3600 + 2
     assert "custom_jti" == jti
 
-    assert decoded == {
+    assert decoded.claims == {
         "iss": "client_id_1",
         "aud": "https://provider.test/oauth/access_token",
         "sub": "client_id_1",
@@ -147,7 +147,7 @@ def test_sign_with_additional_header():
     assert exp <= iat + 3600 + 2
     assert jti is not None
 
-    assert decoded == {
+    assert decoded.claims == {
         "iss": "client_id_1",
         "aud": "https://provider.test/oauth/access_token",
         "sub": "client_id_1",
@@ -172,7 +172,7 @@ def test_sign_with_additional_headers():
     assert exp <= iat + 3600 + 2
     assert jti is not None
 
-    assert decoded == {
+    assert decoded.claims == {
         "iss": "client_id_1",
         "aud": "https://provider.test/oauth/access_token",
         "sub": "client_id_1",
@@ -200,7 +200,7 @@ def test_sign_with_additional_claim():
     assert exp <= iat + 3600 + 2
     assert jti is not None
 
-    assert decoded == {
+    assert decoded.claims == {
         "iss": "client_id_1",
         "aud": "https://provider.test/oauth/access_token",
         "sub": "client_id_1",
@@ -224,7 +224,7 @@ def test_sign_with_additional_claims():
     assert exp <= iat + 3600 + 2
     assert jti is not None
 
-    assert decoded == {
+    assert decoded.claims == {
         "iss": "client_id_1",
         "aud": "https://provider.test/oauth/access_token",
         "sub": "client_id_1",
