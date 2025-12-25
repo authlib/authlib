@@ -1,10 +1,15 @@
-from authlib.jose import jwt
-from authlib.jose.errors import JoseError
+from joserfc import jwt
+from joserfc.errors import DecodeError
+from joserfc.errors import JoseError
+from joserfc.errors import UnsupportedAlgorithmError
+from joserfc.jws import JWSRegistry
+
+from authlib._joserfc_helpers import import_any_key
 
 from ..rfc6749 import AuthorizationServer
 from ..rfc6749 import ClientMixin
+from ..rfc6749 import InvalidClientError
 from ..rfc6749 import InvalidRequestError
-from ..rfc6749.authenticate_client import _validate_client
 from ..rfc6749.requests import BasicOAuth2Payload
 from ..rfc6749.requests import OAuth2Request
 from .errors import InvalidRequestObjectError
@@ -46,6 +51,10 @@ class JWTAuthenticationRequest:
         authorization_server.register_extension(JWTAuthenticationRequest())
     """
 
+    claims_validator = jwt.JWTClaimsRegistry(
+        client_id={"essential": True},
+    )
+
     def __init__(self, support_request: bool = True, support_request_uri: bool = True):
         self.support_request = support_request
         self.support_request_uri = support_request_uri
@@ -58,24 +67,32 @@ class JWTAuthenticationRequest:
     def parse_authorization_request(
         self, authorization_server: AuthorizationServer, request: OAuth2Request
     ):
-        client = _validate_client(
-            authorization_server.query_client, request.payload.client_id
-        )
-        if not self._shoud_proceed_with_request_object(
-            authorization_server, request, client
-        ):
+        client_id = request.payload.client_id
+        if client_id is None:
+            raise InvalidClientError(
+                status_code=404,
+                description="Missing 'client_id' parameter.",
+            )
+
+        client = authorization_server.query_client(client_id)
+        if not client:
+            raise InvalidClientError(
+                status_code=404,
+                description="The client does not exist on this server.",
+            )
+
+        if not self._shoud_proceed_with_request_object(request, client):
             return
 
-        raw_request_object = self._get_raw_request_object(authorization_server, request)
+        raw_request_object = self._get_raw_request_object(request)
         request_object = self._decode_request_object(
             request, client, raw_request_object
         )
-        payload = BasicOAuth2Payload(request_object)
+        payload = BasicOAuth2Payload(request_object.claims)
         request.payload = payload
 
     def _shoud_proceed_with_request_object(
         self,
-        authorization_server: AuthorizationServer,
         request: OAuth2Request,
         client: ClientMixin,
     ) -> bool:
@@ -116,9 +133,7 @@ class JWTAuthenticationRequest:
 
         return False
 
-    def _get_raw_request_object(
-        self, authorization_server: AuthorizationServer, request: OAuth2Request
-    ) -> str:
+    def _get_raw_request_object(self, request: OAuth2Request) -> str:
         if "request_uri" in request.payload.data:
             raw_request_object = self.get_request_object(
                 request.payload.data["request_uri"]
@@ -135,45 +150,37 @@ class JWTAuthenticationRequest:
         self, request, client: ClientMixin, raw_request_object: str
     ):
         jwks = self.resolve_client_public_key(client)
+        key = import_any_key(jwks)
+        metadata = self.get_server_metadata()
+
+        algorithms = metadata.get("request_object_signing_alg_values_supported")
+        if not algorithms:
+            require_signed1 = self.get_client_require_signed_request_object(client)
+            require_signed2 = metadata.get("require_signed_request_object", False)
+            if require_signed1 or require_signed2:
+                algorithms = JWSRegistry.recommended
+            else:
+                algorithms = [*JWSRegistry.recommended, "none"]
 
         try:
-            request_object = jwt.decode(raw_request_object, jwks)
-            request_object.validate()
-
+            request_object = jwt.decode(raw_request_object, key, algorithms=algorithms)
+            self.claims_validator.validate(request_object.claims)
+        except UnsupportedAlgorithmError as error:
+            raise InvalidRequestError(
+                "Authorization requests must be signed with supported algorithms.",
+                state=request.payload.state,
+            ) from error
+        except DecodeError as error:
+            raise InvalidRequestObjectError(state=request.payload.state) from error
         except JoseError as error:
             raise InvalidRequestObjectError(
                 description=error.description or InvalidRequestObjectError.description,
                 state=request.payload.state,
             ) from error
 
-        # It MUST also reject the request if the Request Object uses an
-        # alg value of none when this server metadata value is true.
-        # If omitted, the default value is false.
-        if (
-            self.get_client_require_signed_request_object(client)
-            and request_object.header["alg"] == "none"
-        ):
-            raise InvalidRequestError(
-                "Authorization requests for this client must use signed request objects.",
-                state=request.payload.state,
-            )
-
-        # It MUST also reject the request if the Request Object uses an
-        # alg value of none. If omitted, the default value is false.
-        metadata = self.get_server_metadata()
-        if (
-            metadata
-            and metadata.get("require_signed_request_object", False)
-            and request_object.header["alg"] == "none"
-        ):
-            raise InvalidRequestError(
-                "Authorization requests for this server must use signed request objects.",
-                state=request.payload.state,
-            )
-
         # The client ID values in the client_id request parameter and in
         # the Request Object client_id claim MUST be identical.
-        if request_object["client_id"] != request.payload.client_id:
+        if request_object.claims["client_id"] != request.payload.client_id:
             raise InvalidRequestError(
                 "The 'client_id' claim from the request parameters "
                 "and the request object claims don't match.",
@@ -183,7 +190,7 @@ class JWTAuthenticationRequest:
         # The Request Object MAY be sent by value, as described in Section 5.1,
         # or by reference, as described in Section 5.2. request and
         # request_uri parameters MUST NOT be included in Request Objects.
-        if "request" in request_object or "request_uri" in request_object:
+        if "request" in request_object.claims or "request_uri" in request_object.claims:
             raise InvalidRequestError(
                 "The 'request' and 'request_uri' parameters must not be included in the request object.",
                 state=request.payload.state,
@@ -205,7 +212,7 @@ class JWTAuthenticationRequest:
         """
         raise NotImplementedError()
 
-    def resolve_client_public_keys(self, client: ClientMixin):
+    def resolve_client_public_key(self, client: ClientMixin):
         """Resolve the client public key for verifying the JWT signature.
         A client may have many public keys, in this case, we can retrieve it
         via ``kid`` value in headers. Developers MUST implement this method::
@@ -234,6 +241,7 @@ class JWTAuthenticationRequest:
                         "issuer": ...,
                         "authorization_endpoint": ...,
                         "require_signed_request_object": ...,
+                        "request_object_signing_alg_values_supported": ["RS256", ...],
                     }
 
         """

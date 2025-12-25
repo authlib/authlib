@@ -1,9 +1,10 @@
 import json
 
 import pytest
+from joserfc import jwk
+from joserfc import jwt
 
 from authlib.common.urls import add_params_to_uri
-from authlib.jose import jwt
 from authlib.oauth2 import rfc7591
 from authlib.oauth2 import rfc9101
 from authlib.oauth2.rfc6749.grants import (
@@ -126,7 +127,7 @@ def test_request_parameter_get(test_client, server):
     register_request_object_extension(server)
     payload = {"response_type": "code", "client_id": "client-id"}
     request_obj = jwt.encode(
-        {"alg": "RS256"}, payload, read_file_path("jwk_private.json")
+        {"alg": "RS256"}, payload, jwk.import_key(read_file_path("jwk_private.json"))
     )
     url = add_params_to_uri(
         authorize_url, {"client_id": "client-id", "request": request_obj}
@@ -139,7 +140,7 @@ def test_request_uri_parameter_get(test_client, server):
     """Pass the authentication payload in a JWT in the request_uri query parameter."""
     payload = {"response_type": "code", "client_id": "client-id"}
     request_obj = jwt.encode(
-        {"alg": "RS256"}, payload, read_file_path("jwk_private.json")
+        {"alg": "RS256"}, payload, jwk.import_key(read_file_path("jwk_private.json"))
     )
     register_request_object_extension(server, request_object=request_obj)
 
@@ -159,7 +160,7 @@ def test_request_and_request_uri_parameters(test_client, server):
 
     payload = {"response_type": "code", "client_id": "client-id"}
     request_obj = jwt.encode(
-        {"alg": "RS256"}, payload, read_file_path("jwk_private.json")
+        {"alg": "RS256"}, payload, jwk.import_key(read_file_path("jwk_private.json"))
     )
     register_request_object_extension(server, request_object=request_obj)
 
@@ -214,7 +215,10 @@ def test_server_require_request_object_alg_none(test_client, server, metadata):
     register_request_object_extension(server, metadata=metadata)
     payload = {"response_type": "code", "client_id": "client-id"}
     request_obj = jwt.encode(
-        {"alg": "none"}, payload, read_file_path("jwk_private.json")
+        {"alg": "none"},
+        payload,
+        jwk.import_key(read_file_path("jwk_private.json")),
+        algorithms=["none"],
     )
     url = add_params_to_uri(
         authorize_url, {"client_id": "client-id", "request": request_obj}
@@ -224,7 +228,7 @@ def test_server_require_request_object_alg_none(test_client, server, metadata):
     assert params["error"] == "invalid_request"
     assert (
         params["error_description"]
-        == "Authorization requests for this server must use signed request objects."
+        == "Authorization requests must be signed with supported algorithms."
     )
 
 
@@ -277,7 +281,9 @@ def test_client_require_signed_request_object_alg_none(test_client, client, serv
     db.session.commit()
 
     payload = {"response_type": "code", "client_id": "client-id"}
-    request_obj = jwt.encode({"alg": "none"}, payload, "")
+    request_obj = jwt.encode(
+        {"alg": "none"}, payload, jwk.generate_key("oct"), algorithms=["none"]
+    )
     url = add_params_to_uri(
         authorize_url, {"client_id": "client-id", "request": request_obj}
     )
@@ -286,7 +292,7 @@ def test_client_require_signed_request_object_alg_none(test_client, client, serv
     assert params["error"] == "invalid_request"
     assert (
         params["error_description"]
-        == "Authorization requests for this client must use signed request objects."
+        == "Authorization requests must be signed with supported algorithms."
     )
 
 
@@ -296,7 +302,7 @@ def test_unsupported_request_parameter(test_client, server):
     register_request_object_extension(server, support_request=False)
     payload = {"response_type": "code", "client_id": "client-id"}
     request_obj = jwt.encode(
-        {"alg": "RS256"}, payload, read_file_path("jwk_private.json")
+        {"alg": "RS256"}, payload, jwk.import_key(read_file_path("jwk_private.json"))
     )
     url = add_params_to_uri(
         authorize_url, {"client_id": "client-id", "request": request_obj}
@@ -315,7 +321,7 @@ def test_unsupported_request_uri_parameter(test_client, server):
 
     payload = {"response_type": "code", "client_id": "client-id"}
     request_obj = jwt.encode(
-        {"alg": "RS256"}, payload, read_file_path("jwk_private.json")
+        {"alg": "RS256"}, payload, jwk.import_key(read_file_path("jwk_private.json"))
     )
     register_request_object_extension(
         server, request_object=request_obj, support_request_uri=False
@@ -383,7 +389,7 @@ def test_missing_client_id(test_client, server):
     register_request_object_extension(server)
     payload = {"response_type": "code", "client_id": "client-id"}
     request_obj = jwt.encode(
-        {"alg": "RS256"}, payload, read_file_path("jwk_private.json")
+        {"alg": "RS256"}, payload, jwk.import_key(read_file_path("jwk_private.json"))
     )
     url = add_params_to_uri(authorize_url, {"request": request_obj})
 
@@ -399,7 +405,7 @@ def test_invalid_client_id(test_client, server):
     register_request_object_extension(server)
     payload = {"response_type": "code", "client_id": "invalid"}
     request_obj = jwt.encode(
-        {"alg": "RS256"}, payload, read_file_path("jwk_private.json")
+        {"alg": "RS256"}, payload, jwk.import_key(read_file_path("jwk_private.json"))
     )
     url = add_params_to_uri(
         authorize_url, {"client_id": "invalid", "request": request_obj}
@@ -417,7 +423,7 @@ def test_different_client_id(test_client, server):
     register_request_object_extension(server)
     payload = {"response_type": "code", "client_id": "other-code-client"}
     request_obj = jwt.encode(
-        {"alg": "RS256"}, payload, read_file_path("jwk_private.json")
+        {"alg": "RS256"}, payload, jwk.import_key(read_file_path("jwk_private.json"))
     )
     url = add_params_to_uri(
         authorize_url, {"client_id": "client-id", "request": request_obj}
@@ -441,7 +447,7 @@ def test_request_param_in_request_object(test_client, server):
         "request_uri": "https://client.test/request_object",
     }
     request_obj = jwt.encode(
-        {"alg": "RS256"}, payload, read_file_path("jwk_private.json")
+        {"alg": "RS256"}, payload, jwk.import_key(read_file_path("jwk_private.json"))
     )
     url = add_params_to_uri(
         authorize_url, {"client_id": "client-id", "request": request_obj}
