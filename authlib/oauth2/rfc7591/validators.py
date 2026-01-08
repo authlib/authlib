@@ -29,7 +29,7 @@ class ClientMetadataValidator(JWTClaimsRegistry):
         self.check_value(claim_name, value)
         option = self.options.get(claim_name)
         if option and "validate" in option:
-            validate = option["validate"]
+            validate = option["validate"]  # type: ignore
             if validate and not validate(self, value):
                 raise InvalidClaimError(claim_name)
 
