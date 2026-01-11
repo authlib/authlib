@@ -1,7 +1,9 @@
 import time
 
+from joserfc import jwt
+
+from authlib._joserfc_helpers import import_any_key
 from authlib.common.security import generate_token
-from authlib.jose import jwt
 from authlib.oauth2.rfc6750.token import BearerTokenGenerator
 
 
@@ -206,11 +208,10 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         # SHOULD be 'at+jwt'.
 
         header = {"alg": self.alg, "typ": "at+jwt"}
-
+        key = import_any_key(self.get_jwks())
         access_token = jwt.encode(
             header,
             token_data,
-            key=self.get_jwks(),
-            check=False,
+            key=key,
         )
-        return access_token.decode()
+        return access_token
