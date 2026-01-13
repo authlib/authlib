@@ -5,9 +5,17 @@ from joserfc.jwk import import_key
 
 from authlib.common.encoding import json_loads
 from authlib.deprecate import deprecate
+from authlib.jose import ECKey
+from authlib.jose import OctKey
+from authlib.jose import OKPKey
+from authlib.jose import RSAKey
 
 
 def import_any_key(data: Any):
+    if isinstance(data, (OctKey, RSAKey, ECKey, OKPKey)):
+        deprecate("Please use joserfc to import keys.")
+        return import_key(data.as_dict(is_private=not data.public_only))
+
     if (
         isinstance(data, str)
         and data.strip().startswith("{")

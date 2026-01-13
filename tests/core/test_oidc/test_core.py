@@ -1,7 +1,7 @@
 import pytest
+from joserfc.errors import InvalidClaimError
+from joserfc.errors import MissingClaimError
 
-from authlib.jose.errors import InvalidClaimError
-from authlib.jose.errors import MissingClaimError
 from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core import HybridIDToken
 from authlib.oidc.core import ImplicitIDToken
@@ -100,10 +100,10 @@ def test_validate_at_hash():
     claims.params = {"access_token": "a"}
 
     # invalid alg won't raise
-    claims.header = {"alg": "HS222"}
+    claims.token.header = {"alg": "HS222"}
     claims.validate(1000)
 
-    claims.header = {"alg": "HS256"}
+    claims.token.header = {"alg": "HS256"}
     with pytest.raises(InvalidClaimError):
         claims.validate(1000)
 
@@ -144,11 +144,11 @@ def test_hybrid_id_token():
         claims.validate(1000)
 
     # invalid alg won't raise
-    claims.header = {"alg": "HS222"}
+    claims.token.header = {"alg": "HS222"}
     claims["c_hash"] = "a"
     claims.validate(1000)
 
-    claims.header = {"alg": "HS256"}
+    claims.token.header = {"alg": "HS256"}
     with pytest.raises(InvalidClaimError):
         claims.validate(1000)
 

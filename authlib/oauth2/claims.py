@@ -44,6 +44,8 @@ class BaseClaims(dict):
             raise error
 
     def _run_validate_hooks(self):
+        if not self.options:
+            return
         for key in self.options:
             validate = self.options[key].get("validate")
             if validate and key in self.claims and not validate(self, self.claims[key]):
@@ -60,6 +62,9 @@ class JWTClaims(BaseClaims):
     REGISTERED_CLAIMS = ["iss", "sub", "aud", "exp", "nbf", "iat", "jti"]
 
     def validate(self, now=None, leeway=0):
-        validator = self.registry_cls(now, leeway, **self.options)
+        if self.options:
+            validator = self.registry_cls(now, leeway, **self.options)
+        else:
+            validator = self.registry_cls(now, leeway)
         validator.validate(self.claims)
         self._run_validate_hooks()
