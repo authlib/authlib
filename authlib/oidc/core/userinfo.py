@@ -1,4 +1,5 @@
 from joserfc import jwt
+from joserfc.jws import JWSRegistry
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.consts import default_json_headers
@@ -75,10 +76,14 @@ class UserInfoEndpoint:
             user_info["aud"] = client.client_id
 
             key = import_any_key(self.resolve_private_key())
-            data = jwt.encode({"alg": alg}, user_info, key)
+            algorithms = self.get_supported_algorithems()
+            data = jwt.encode({"alg": alg}, user_info, key, algorithms)
             return 200, data, [("Content-Type", "application/jwt")]
 
         return 200, user_info, default_json_headers
+
+    def get_supported_algorithems(self) -> list[str]:
+        return JWSRegistry.recommended
 
     def generate_user_info(self, user, scope: str) -> UserInfo:
         """

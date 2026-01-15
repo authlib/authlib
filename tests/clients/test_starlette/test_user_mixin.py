@@ -1,17 +1,17 @@
 import pytest
 from httpx import ASGITransport
+from joserfc import jwk
+from joserfc.errors import InvalidClaimError
 from starlette.requests import Request
 
 from authlib.integrations.starlette_client import OAuth
-from authlib.jose import JsonWebKey
-from authlib.jose.errors import InvalidClaimError
 from authlib.oidc.core.grants.util import generate_id_token
 
 from ..asgi_helper import AsyncPathMapDispatch
 from ..util import get_bearer_token
 from ..util import read_key_file
 
-secret_key = JsonWebKey.import_key("secret", {"kty": "oct", "kid": "f"})
+secret_key = jwk.import_key("secret", "oct", {"kid": "f"})
 
 
 async def run_fetch_userinfo(payload):

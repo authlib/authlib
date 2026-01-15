@@ -1,10 +1,11 @@
 import pytest
 from flask import json
+from joserfc import jwt
+from joserfc.jwk import KeySet
 
 import authlib.oidc.core as oidc_core
 from authlib.integrations.flask_oauth2 import ResourceProtector
 from authlib.integrations.sqla_oauth2 import create_bearer_token_validator
-from authlib.jose import jwt
 from tests.util import read_file_path
 
 from .models import Token
@@ -13,6 +14,9 @@ from .models import Token
 @pytest.fixture(autouse=True)
 def server(server, app, db):
     class UserInfoEndpoint(oidc_core.UserInfoEndpoint):
+        def get_supported_algorithems(self) -> list[str]:
+            return ["RS256", "none"]
+
         def get_issuer(self) -> str:
             return "https://provider.test"
 
@@ -285,8 +289,9 @@ def test_scope_signed_unsecured(test_client, db, token, client):
     rv = test_client.get("/oauth/userinfo", headers=headers)
     assert rv.headers["Content-Type"] == "application/jwt"
 
-    claims = jwt.decode(rv.data, None)
-    assert claims == {
+    # specify that we support "none"
+    token = jwt.decode(rv.data, None, algorithms=["none"])
+    assert token.claims == {
         "sub": "1",
         "iss": "https://provider.test",
         "aud": "client-id",
@@ -315,9 +320,9 @@ def test_scope_signed_secured(test_client, client, token, db):
     rv = test_client.get("/oauth/userinfo", headers=headers)
     assert rv.headers["Content-Type"] == "application/jwt"
 
-    pub_key = read_file_path("jwks_public.json")
-    claims = jwt.decode(rv.data, pub_key)
-    assert claims == {
+    pub_key = KeySet.import_key_set(read_file_path("jwks_public.json"))
+    token = jwt.decode(rv.data, pub_key)
+    assert token.claims == {
         "sub": "1",
         "iss": "https://provider.test",
         "aud": "client-id",

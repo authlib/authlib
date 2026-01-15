@@ -11,6 +11,7 @@ from joserfc.errors import DecodeError
 from joserfc.errors import JoseError
 
 from authlib._joserfc_helpers import import_any_key
+from authlib.oauth2.claims import ClaimsOption
 from authlib.oauth2.rfc6750.errors import InsufficientScopeError
 from authlib.oauth2.rfc6750.errors import InvalidTokenError
 from authlib.oauth2.rfc6750.validator import BearerTokenValidator
@@ -83,7 +84,7 @@ class JWTBearerTokenValidator(BearerTokenValidator):
         """"""
         # empty docstring avoids to display the irrelevant parent docstring
 
-        claims_options = {
+        claims_options: dict[str, ClaimsOption] = {
             "iss": {"essential": True, "validate": self.validate_iss},
             "exp": {"essential": True},
             "aud": {"essential": True, "value": self.resource_server},
@@ -113,7 +114,7 @@ class JWTBearerTokenValidator(BearerTokenValidator):
         # authorization server.
         try:
             token = jwt.decode(token_string, key=key)
-            return JWTAccessTokenClaims(token, claims_options)
+            return JWTAccessTokenClaims(token.claims, token.header, claims_options)
         except DecodeError as exc:
             raise InvalidTokenError(
                 realm=self.realm, extra_attributes=self.extra_attributes

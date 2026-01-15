@@ -6,8 +6,10 @@ from typing import TypedDict
 
 from joserfc.errors import InvalidClaimError
 from joserfc.jwt import BaseClaimsRegistry
+from joserfc.jwt import Claims
 from joserfc.jwt import JWTClaimsRegistry
 from joserfc.jwt import Token
+from joserfc.registry import Header
 
 
 class ClaimsOption(TypedDict, total=False):
@@ -22,10 +24,17 @@ class BaseClaims(dict):
     registry_cls = BaseClaimsRegistry
     REGISTERED_CLAIMS = []
 
-    def __init__(self, token: Token, options: dict[str, ClaimsOption]):
-        super().__init__(token.claims)
-        self.token = token
+    def __init__(
+        self,
+        claims: Claims,
+        header: Header,
+        options: dict[str, ClaimsOption] | None = None,
+        params: dict[str, Any] = None,
+    ):
+        super().__init__(claims)
+        self.token = Token(header, claims)
         self.options = options
+        self.params = params or {}
 
     @property
     def header(self):

@@ -120,6 +120,7 @@ def test_runtime_error_fetch_jwks_uri():
         aud="dev",
         exp=3600,
         nonce="n",
+        kid="not-found",
     )
 
     app = Flask(__name__)

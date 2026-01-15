@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 import hmac
-from typing import Any
 
 from joserfc.errors import InvalidClaimError
 from joserfc.errors import MissingClaimError
-from joserfc.jwt import Token
 
 from authlib.common.encoding import to_bytes
-from authlib.deprecate import deprecate
-from authlib.oauth2.claims import ClaimsOption
 from authlib.oauth2.claims import JWTClaims
 from authlib.oauth2.rfc6749.util import scope_to_list
 
@@ -42,18 +38,6 @@ _REGISTERED_CLAIMS = [
 
 class IDToken(JWTClaims):
     ESSENTIAL_CLAIMS = ["iss", "sub", "aud", "exp", "iat"]
-
-    def __init__(
-        self,
-        token: Token | dict,
-        options: dict[str, ClaimsOption],
-        params: dict[str, Any] = None,
-    ):
-        if isinstance(token, dict):
-            deprecate("Please pass a Token instance instead of dict.")
-            token = Token({}, token)
-        super().__init__(token, options)
-        self.params = params or {}
 
     def validate(self, now=None, leeway=0):
         for k in self.ESSENTIAL_CLAIMS:
