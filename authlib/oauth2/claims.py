@@ -1,14 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
-from typing import Callable
 from typing import TypedDict
 
 from joserfc.errors import InvalidClaimError
 from joserfc.jwt import BaseClaimsRegistry
 from joserfc.jwt import Claims
 from joserfc.jwt import JWTClaimsRegistry
-from joserfc.jwt import Token
 from joserfc.registry import Header
 
 
@@ -32,17 +31,10 @@ class BaseClaims(dict):
         params: dict[str, Any] = None,
     ):
         super().__init__(claims)
-        self.token = Token(header, claims)
+        self.header = header
+        self.claims = claims
         self.options = options
         self.params = params or {}
-
-    @property
-    def header(self):
-        return self.token.header
-
-    @property
-    def claims(self):
-        return self.token.claims
 
     def __getattr__(self, key):
         try:
