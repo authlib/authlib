@@ -137,6 +137,7 @@ async def test_force_fetch_jwks_uri():
         client_id="dev",
         client_secret="dev",
         fetch_token=get_bearer_token,
+        jwks={"keys": [secret_key.as_dict()]},
         jwks_uri="https://provider.test/jwks",
         issuer="https://provider.test",
         client_kwargs={

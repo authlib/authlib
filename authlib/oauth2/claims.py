@@ -36,14 +36,6 @@ class BaseClaims(dict):
         self.options = options or {}
         self.params = params or {}
 
-    def __getattr__(self, key):
-        try:
-            return object.__getattribute__(self, key)
-        except AttributeError as error:
-            if key in self.REGISTERED_CLAIMS:
-                return self.get(key)
-            raise error
-
     def _run_validate_hooks(self):
         if not self.options:
             return
