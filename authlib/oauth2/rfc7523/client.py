@@ -58,8 +58,13 @@ class JWTBearerClientAssertion:
 
         if claims["sub"] != claims["iss"]:
             raise InvalidClientError(description="Issuer and Subject MUST match.")
-        if self._validate_jti and not self.validate_jti(claims, claims["jti"]):
-            raise InvalidClientError(description="JWT ID is used before.")
+
+        if self._validate_jti:
+            if "jti" not in claims:
+                raise InvalidClientError(description="Missing JWT ID.")
+
+            if not self.validate_jti(claims, claims["jti"]):
+                raise InvalidClientError(description="JWT ID is used before.")
 
     def process_assertion_claims(self, assertion, resolve_key):
         """Extract JWT payload claims from request "assertion", per
@@ -133,7 +138,3 @@ class JWTBearerClientAssertion:
                 return client.public_key
         """
         raise NotImplementedError()
-
-
-def _validate_iss(claims, iss):
-    return claims["sub"] == iss

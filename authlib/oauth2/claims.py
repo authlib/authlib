@@ -33,7 +33,7 @@ class BaseClaims(dict):
         super().__init__(claims)
         self.header = header
         self.claims = claims
-        self.options = options
+        self.options = options or {}
         self.params = params or {}
 
     def __getattr__(self, key):

@@ -64,6 +64,27 @@ class JWTAuthenticationRequest:
             "before_get_authorization_grant", self.parse_authorization_request
         )
 
+    def get_request_object_signing_algorithms(self, client):
+        """Return the supported algorithms for verifying the ``request_object`` JWT signature.
+        By default, this method will only return the recommended algorithms. If signed request
+        object is not required, "none" algorithm will be included.
+
+        Developers can override this method to customize the supported algorithms::
+
+            def get_request_object_signing_algorithms(self, client):
+                return ["RS256"]
+        """
+        metadata = self.get_server_metadata()
+        algorithms = metadata.get("request_object_signing_alg_values_supported")
+        if not algorithms:
+            require_signed1 = self.get_client_require_signed_request_object(client)
+            require_signed2 = metadata.get("require_signed_request_object", False)
+            if require_signed1 or require_signed2:
+                algorithms = JWSRegistry.recommended
+            else:
+                algorithms = [*JWSRegistry.recommended, "none"]
+        return algorithms
+
     def parse_authorization_request(
         self, authorization_server: AuthorizationServer, request: OAuth2Request
     ):
@@ -151,16 +172,7 @@ class JWTAuthenticationRequest:
     ):
         jwks = self.resolve_client_public_key(client)
         key = import_any_key(jwks)
-        metadata = self.get_server_metadata()
-
-        algorithms = metadata.get("request_object_signing_alg_values_supported")
-        if not algorithms:
-            require_signed1 = self.get_client_require_signed_request_object(client)
-            require_signed2 = metadata.get("require_signed_request_object", False)
-            if require_signed1 or require_signed2:
-                algorithms = JWSRegistry.recommended
-            else:
-                algorithms = [*JWSRegistry.recommended, "none"]
+        algorithms = self.get_request_object_signing_algorithms(client)
 
         try:
             request_object = jwt.decode(raw_request_object, key, algorithms=algorithms)
@@ -217,12 +229,16 @@ class JWTAuthenticationRequest:
         A client may have many public keys, in this case, we can retrieve it
         via ``kid`` value in headers. Developers MUST implement this method::
 
+            from joserfc import KeySet
+
+
             class JWTAuthenticationRequest(rfc9101.JWTAuthenticationRequest):
                 def resolve_client_public_key(self, client):
                     if client.jwks_uri:
-                        return requests.get(client.jwks_uri).json
+                        data = requests.get(client.jwks_uri).json()
+                        return KeySet.import_key_set(data)
 
-                    return client.jwks
+                    return KeySet.import_key_set(client.jwks)
         """
         raise NotImplementedError()
 

@@ -14,7 +14,7 @@ from .models import Token
 @pytest.fixture(autouse=True)
 def server(server, app, db):
     class UserInfoEndpoint(oidc_core.UserInfoEndpoint):
-        def get_supported_algorithems(self) -> list[str]:
+        def get_supported_algorithms(self) -> list[str]:
             return ["RS256", "none"]
 
         def get_issuer(self) -> str:
