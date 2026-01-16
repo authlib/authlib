@@ -1,4 +1,10 @@
+import warnings
+
 import authlib
+from authlib.deprecate import AuthlibDeprecationWarning
+
+# we will keep authlib.jose module until 2.0.0
+warnings.simplefilter("ignore", AuthlibDeprecationWarning)
 
 project = "Authlib"
 copyright = "&copy; 2017, Hsiaoming Ltd"

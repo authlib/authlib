@@ -33,6 +33,7 @@ libraries such as Flask, Django, Requests, HTTPX, Starlette, FastAPI, and etc.
     flask/index
     django/index
     specs/index
+    upgrades/index
     community/index
 
 

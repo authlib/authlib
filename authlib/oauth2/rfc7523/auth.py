@@ -1,3 +1,6 @@
+from joserfc.jwk import OctKey
+from joserfc.jwk import RSAKey
+
 from authlib.common.urls import add_params_to_qs
 
 from .assertion import client_secret_jwt_sign
@@ -40,8 +43,12 @@ class ClientSecretJWT:
             self.alg = alg
 
     def sign(self, auth, token_endpoint):
+        if isinstance(auth.client_secret, OctKey):
+            key = auth.client_secret
+        else:
+            key = OctKey.import_key(auth.client_secret)
         return client_secret_jwt_sign(
-            auth.client_secret,
+            key,
             client_id=auth.client_id,
             token_endpoint=token_endpoint,
             claims=self.claims,
@@ -93,8 +100,12 @@ class PrivateKeyJWT(ClientSecretJWT):
     alg = "RS256"
 
     def sign(self, auth, token_endpoint):
+        if isinstance(auth.client_secret, RSAKey):
+            key = auth.client_secret
+        else:
+            key = RSAKey.import_key(auth.client_secret)
         return private_key_jwt_sign(
-            auth.client_secret,
+            key,
             client_id=auth.client_id,
             token_endpoint=token_endpoint,
             claims=self.claims,

@@ -3,6 +3,8 @@ from copy import deepcopy
 from unittest import mock
 
 import pytest
+from joserfc.jwk import OctKey
+from joserfc.jwk import RSAKey
 
 from authlib.common.security import generate_token
 from authlib.common.urls import add_params_to_uri
@@ -501,7 +503,7 @@ def test_client_secret_jwt(token):
 def test_client_secret_jwt2(token):
     sess = OAuth2Session(
         "id",
-        "secret",
+        OctKey.import_key("secret"),
         token_endpoint_auth_method=ClientSecretJWT(),
     )
     mock_assertion_response(token, sess)
@@ -515,6 +517,18 @@ def test_private_key_jwt(token):
         "id", client_secret, token_endpoint_auth_method="private_key_jwt"
     )
     sess.register_client_auth_method(PrivateKeyJWT())
+    mock_assertion_response(token, sess)
+    token = sess.fetch_token("https://provider.test/token")
+    assert token == token
+
+
+def test_private_key_jwt2(token):
+    client_secret = RSAKey.import_key(read_key_file("rsa_private.pem"))
+    sess = OAuth2Session(
+        "id",
+        client_secret,
+        token_endpoint_auth_method=PrivateKeyJWT(),
+    )
     mock_assertion_response(token, sess)
     token = sess.fetch_token("https://provider.test/token")
     assert token == token

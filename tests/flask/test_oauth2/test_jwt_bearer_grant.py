@@ -134,7 +134,8 @@ def test_token_generator(test_client, app, server):
 def test_jwt_bearer_token_generator(test_client, server):
     private_key = read_file_path("jwks_private.json")
     server.register_token_generator(
-        JWTBearerGrant.GRANT_TYPE, JWTBearerTokenGenerator(private_key)
+        JWTBearerGrant.GRANT_TYPE,
+        JWTBearerTokenGenerator(private_key),
     )
     assertion = JWTBearerGrant.sign(
         "foo",

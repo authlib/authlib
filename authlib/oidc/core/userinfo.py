@@ -1,5 +1,8 @@
+from joserfc import jwt
+from joserfc.jws import JWSRegistry
+
+from authlib._joserfc_helpers import import_any_key
 from authlib.consts import default_json_headers
-from authlib.jose import jwt
 from authlib.oauth2.rfc6749.authorization_server import AuthorizationServer
 from authlib.oauth2.rfc6749.authorization_server import OAuth2Request
 from authlib.oauth2.rfc6749.resource_protector import ResourceProtector
@@ -72,10 +75,22 @@ class UserInfoEndpoint:
             user_info["iss"] = self.get_issuer()
             user_info["aud"] = client.client_id
 
-            data = jwt.encode({"alg": alg}, user_info, self.resolve_private_key())
+            key = import_any_key(self.resolve_private_key())
+            algorithms = self.get_supported_algorithms()
+            data = jwt.encode({"alg": alg}, user_info, key, algorithms)
             return 200, data, [("Content-Type", "application/jwt")]
 
         return 200, user_info, default_json_headers
+
+    def get_supported_algorithms(self) -> list[str]:
+        """Return the supported algorithms for userinfo signing.
+        By default, it uses the recommended algorithms from ``joserfc``.
+        Developer can override this method to customize the supported algorithms::
+
+            def get_supported_algorithms(self) -> list[str]:
+                return ["RS256"]
+        """
+        return JWSRegistry.recommended
 
     def generate_user_info(self, user, scope: str) -> UserInfo:
         """

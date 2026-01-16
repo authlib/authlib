@@ -2,16 +2,16 @@ from unittest import mock
 
 import pytest
 from flask import Flask
+from joserfc.errors import InvalidClaimError
+from joserfc.jwk import OctKey
 
 from authlib.integrations.flask_client import OAuth
-from authlib.jose import JsonWebKey
-from authlib.jose.errors import InvalidClaimError
 from authlib.oidc.core.grants.util import generate_id_token
 
 from ..util import get_bearer_token
 from ..util import read_key_file
 
-secret_key = JsonWebKey.import_key("secret", {"kty": "oct", "kid": "f"})
+secret_key = OctKey.import_key("secret", {"kty": "oct", "kid": "f"})
 
 
 def test_fetch_userinfo():
@@ -120,6 +120,7 @@ def test_runtime_error_fetch_jwks_uri():
         aud="dev",
         exp=3600,
         nonce="n",
+        kid="not-found",
     )
 
     app = Flask(__name__)
