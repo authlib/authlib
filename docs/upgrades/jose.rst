@@ -1,5 +1,5 @@
-Upgrade to joserfc
-=================
+1.7: Upgrade to joserfc
+=======================
 
 joserfc_ is derived from Authlib and provides a cleaner design along with
 first-class type hints. We strongly recommend using ``joserfc`` instead of
@@ -29,7 +29,7 @@ Since these modules now use ``joserfc``, all exceptions are ``joserfc``-based.
 If your code previously caught exceptions from ``authlib.jose``, you should
 update it to catch the corresponding exceptions from ``joserfc`` instead.
 
-.. code-block:: python
+.. code-block:: diff
 
     -from authlib.jose.errors import JoseError
     +from joserfc.errors import JoseError

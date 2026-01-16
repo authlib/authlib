@@ -416,15 +416,17 @@ This ``id_token`` is a JWT text, it can not be used unless it is parsed.
 Authlib has provided tools for parsing and validating OpenID Connect id_token::
 
     >>> from authlib.oidc.core import CodeIDToken
-    >>> from authlib.jose import jwt
+    >>> from joserfc import jwt
     >>> # GET keys from https://www.googleapis.com/oauth2/v3/certs
-    >>> claims = jwt.decode(resp['id_token'], keys, claims_cls=CodeIDToken)
+    >>> token = jwt.decode(resp['id_token'], keys)
+    >>> claims = CodeIDToken(token.claims, token.header)
     >>> claims.validate()
 
-Get deep inside with :class:`~authlib.jose.JsonWebToken` and
-:class:`~authlib.oidc.core.CodeIDToken`. Learn how to validate JWT claims
-at :ref:`jwt_guide`.
+.. versionchanged:: 1.7
+    We use joserfc_ for JWT encoding and decoding. Checkout the JWT guide
+    on https://jose.authlib.org/en/guide/jwt/
 
+.. _joserfc: https://jose.authlib.org/en/
 
 .. _assertion_session:
 
