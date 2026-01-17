@@ -11,6 +11,9 @@ Version 1.6.7
 
 **Unreleased**
 
+- Add support for `OpenID Connect RP-Initiated Logout 1.0
+  <https://openid.net/specs/openid-connect-rpinitiated-1_0.html>`_.
+  See :ref:`specs/rpinitiated` for details. :issue:`500`
 - Per RFC 6749 Section 3.3, the ``scope`` parameter is now optional at both
   authorization and token endpoints. ``client.get_allowed_scope()`` is called
   to determine the default scope when omitted. :issue:`845`

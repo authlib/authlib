@@ -3,7 +3,9 @@ import os
 import pytest
 from flask import Flask
 
+from authlib.jose import jwt
 from tests.flask.test_oauth2.oauth2_server import create_authorization_server
+from tests.util import read_file_path
 
 from .models import Client
 from .models import Token
@@ -101,3 +103,39 @@ def token(db):
     db.session.commit()
     yield token
     db.session.delete(token)
+
+
+def create_id_token(claims):
+    """Create a signed ID token for testing."""
+    priv_key = read_file_path("jwks_private.json")
+    header = {"alg": "RS256"}
+    token = jwt.encode(header, claims, priv_key)
+    return token.decode("utf-8")
+
+
+@pytest.fixture
+def id_token():
+    """Create a valid ID token for testing."""
+    return create_id_token(
+        {
+            "iss": "https://provider.test",
+            "sub": "user-1",
+            "aud": "client-id",
+            "exp": 9999999999,
+            "iat": 1000000000,
+        }
+    )
+
+
+@pytest.fixture
+def id_token_wrong_issuer():
+    """Create an ID token with wrong issuer."""
+    return create_id_token(
+        {
+            "iss": "https://other-provider.test",
+            "sub": "user-1",
+            "aud": "client-id",
+            "exp": 9999999999,
+            "iat": 1000000000,
+        }
+    )
