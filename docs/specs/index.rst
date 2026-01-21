@@ -30,3 +30,4 @@ works.
     rfc9101
     rfc9207
     oidc
+    rpinitiated

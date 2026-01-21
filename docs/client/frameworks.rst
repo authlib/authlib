@@ -582,3 +582,49 @@ provide the value of ``jwks`` instead of ``jwks_uri``::
         authorize_url='https://example.com/oauth/authorize',
         jwks={"keys": [...]}
     )
+
+
+RP-Initiated Logout
+-------------------
+
+`OpenID Connect RP-Initiated Logout`_ allows users to log out from the
+OpenID Provider when they log out from your application. This is useful
+to ensure that the user's session at the provider is also terminated.
+
+.. _OpenID Connect RP-Initiated Logout: https://openid.net/specs/openid-connect-rpinitiated-1_0.html
+
+To use RP-Initiated Logout, the provider must support the ``end_session_endpoint``
+in its OpenID Connect discovery document. Authlib provides a ``logout_redirect``
+method to redirect users to this endpoint::
+
+    def logout(request):
+        client = oauth.create_client('google')
+        # Retrieve the ID token you stored during login
+        id_token = get_stored_id_token(request.user)
+        return client.logout_redirect(
+            request,
+            post_logout_redirect_uri='https://example.com/logged-out',
+            id_token_hint=id_token,
+        )
+
+The ``logout_redirect`` method accepts:
+
+- ``post_logout_redirect_uri``: Where to redirect after logout (must be registered with the provider)
+- ``id_token_hint``: The ID token previously issued (recommended)
+- ``state``: Opaque value for CSRF protection (auto-generated if not provided)
+- ``client_id``: OAuth 2.0 Client Identifier (optional)
+- ``logout_hint``: Hint about the user logging out (optional)
+- ``ui_locales``: Preferred languages for the logout UI (optional)
+
+.. important::
+
+    You must store the ``id_token`` during login to use it later for logout.
+    The ``id_token`` is available in ``token['id_token']`` after calling
+    ``authorize_access_token()``.
+
+Each framework has slightly different syntax. See the framework-specific documentation
+for detailed examples:
+
+- :ref:`flask_client`
+- :ref:`django_client`
+- :ref:`starlette_client`

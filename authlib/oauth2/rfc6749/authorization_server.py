@@ -2,6 +2,8 @@ from authlib.common.errors import ContinueIteration
 from authlib.deprecate import deprecate
 
 from .authenticate_client import ClientAuthentication
+from .endpoint import Endpoint
+from .endpoint import EndpointRequest
 from .errors import InvalidScopeError
 from .errors import OAuth2Error
 from .errors import UnsupportedGrantTypeError
@@ -214,13 +216,13 @@ class AuthorizationServer(Hookable):
         if hasattr(grant_cls, "check_token_endpoint"):
             self._token_grants.append((grant_cls, extensions))
 
-    def register_endpoint(self, endpoint):
+    def register_endpoint(self, endpoint: type[Endpoint] | Endpoint):
         """Add extra endpoint to authorization server. e.g.
         RevocationEndpoint::
 
             authorization_server.register_endpoint(RevocationEndpoint)
 
-        :param endpoint_cls: A endpoint class or instance.
+        :param endpoint: An endpoint class or instance.
         """
         if isinstance(endpoint, type):
             endpoint = endpoint(self)
@@ -279,21 +281,67 @@ class AuthorizationServer(Hookable):
                 return _create_grant(grant_cls, extensions, request, self)
         raise UnsupportedGrantTypeError(request.payload.grant_type)
 
+    def validate_endpoint_request(self, name, request=None) -> EndpointRequest:
+        """Validate endpoint request and return the validated request object.
+
+        Use this for interactive endpoints where you need to handle UI
+        between validation and response creation.
+
+        :param name: Endpoint name
+        :param request: HTTP request instance
+        :returns: Validated EndpointRequest object
+        :raises OAuth2Error: If validation fails
+        :raises RuntimeError: If endpoint not found
+
+        Example::
+
+            req = server.validate_endpoint_request("end_session")
+            if req.needs_confirmation:
+                return render_template("confirm_logout.html", ...)
+            return server.create_endpoint_response("end_session", req)
+        """
+        if name not in self._endpoints:
+            raise RuntimeError(f"There is no '{name}' endpoint.")
+
+        endpoint = self._endpoints[name][0]
+        request = endpoint.create_endpoint_request(request)
+        return endpoint.validate_request(request)
+
     def create_endpoint_response(self, name, request=None):
         """Validate endpoint request and create endpoint response.
 
+        Can be called with:
+        - A raw HTTP request or None: validates and responds in one step
+        - A validated EndpointRequest: skips validation, creates response directly
+
         :param name: Endpoint name
-        :param request: HTTP request instance.
-        :return: Response
+        :param request: HTTP request instance or validated EndpointRequest
+        :return: Response, or None if the endpoint returns None
         """
         if name not in self._endpoints:
             raise RuntimeError(f"There is no '{name}' endpoint.")
 
         endpoints = self._endpoints[name]
+
+        # If request is already validated, create response directly
+        if isinstance(request, EndpointRequest):
+            endpoint = endpoints[0]
+            try:
+                result = endpoint.create_response(request)
+                if result is None:
+                    return None
+                return self.handle_response(*result)
+            except OAuth2Error as error:
+                return self.handle_error_response(request.request, error)
+
+        # Otherwise, validate and respond (existing behavior)
         for endpoint in endpoints:
             request = endpoint.create_endpoint_request(request)
             try:
-                return self.handle_response(*endpoint(request))
+                result = endpoint(request)
+                if result is None:
+                    return None
+                return self.handle_response(*result)
             except ContinueIteration:
                 continue
             except OAuth2Error as error:

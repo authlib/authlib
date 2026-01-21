@@ -62,6 +62,61 @@ class StarletteOAuth2App(
 ):
     client_cls = AsyncOAuth2Client
 
+    async def logout_redirect(
+        self, request, post_logout_redirect_uri=None, id_token_hint=None, **kwargs
+    ):
+        """Create a HTTP Redirect for End Session Endpoint (RP-Initiated Logout).
+
+        :param request: HTTP request instance from Starlette view.
+        :param post_logout_redirect_uri: URI to redirect after logout.
+        :param id_token_hint: ID Token previously issued to the RP.
+        :param kwargs: Extra parameters (state, client_id, logout_hint, ui_locales).
+        :return: A HTTP redirect response.
+        """
+        if post_logout_redirect_uri and isinstance(post_logout_redirect_uri, URL):
+            post_logout_redirect_uri = str(post_logout_redirect_uri)
+        result = await self.create_logout_url(
+            post_logout_redirect_uri=post_logout_redirect_uri,
+            id_token_hint=id_token_hint,
+            **kwargs,
+        )
+        if result.get("state"):
+            if self.framework.cache:
+                session = None
+            else:
+                session = request.session
+            await self.framework.set_state_data(
+                session,
+                result["state"],
+                {
+                    "post_logout_redirect_uri": post_logout_redirect_uri,
+                },
+            )
+        return RedirectResponse(result["url"], status_code=302)
+
+    async def validate_logout_response(self, request):
+        """Validate the state parameter from the logout callback.
+
+        :param request: HTTP request instance from Starlette view.
+        :return: The state data dict.
+        :raises OAuthError: If state is missing or invalid.
+        """
+        state = request.query_params.get("state")
+        if not state:
+            raise OAuthError(description='Missing "state" parameter')
+
+        if self.framework.cache:
+            session = None
+        else:
+            session = request.session
+
+        state_data = await self.framework.get_state_data(session, state)
+        if not state_data:
+            raise OAuthError(description='Invalid "state" parameter')
+
+        await self.framework.clear_state_data(session, state)
+        return state_data
+
     async def authorize_access_token(self, request, **kwargs):
         if request.scope.get("method", "GET") == "GET":
             error = request.query_params.get("error")

@@ -9,6 +9,8 @@ https://tools.ietf.org/html/rfc6749
 
 from .authenticate_client import ClientAuthentication
 from .authorization_server import AuthorizationServer
+from .endpoint import Endpoint
+from .endpoint import EndpointRequest
 from .errors import AccessDeniedError
 from .errors import InsecureTransportError
 from .errors import InvalidClientError
@@ -76,6 +78,8 @@ __all__ = [
     "AuthorizationServer",
     "ResourceProtector",
     "TokenValidator",
+    "Endpoint",
+    "EndpointRequest",
     "TokenEndpoint",
     "BaseGrant",
     "AuthorizationEndpointMixin",

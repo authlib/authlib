@@ -57,6 +57,50 @@ class DjangoOAuth1App(DjangoAppMixin, OAuth1Mixin, BaseApp):
 class DjangoOAuth2App(DjangoAppMixin, OAuth2Mixin, OpenIDMixin, BaseApp):
     client_cls = OAuth2Session
 
+    def logout_redirect(
+        self, request, post_logout_redirect_uri=None, id_token_hint=None, **kwargs
+    ):
+        """Create a HTTP Redirect for End Session Endpoint (RP-Initiated Logout).
+
+        :param request: HTTP request instance from Django view.
+        :param post_logout_redirect_uri: URI to redirect after logout.
+        :param id_token_hint: ID Token previously issued to the RP.
+        :param kwargs: Extra parameters (state, client_id, logout_hint, ui_locales).
+        :return: A HTTP redirect response.
+        """
+        result = self.create_logout_url(
+            post_logout_redirect_uri=post_logout_redirect_uri,
+            id_token_hint=id_token_hint,
+            **kwargs,
+        )
+        if result.get("state"):
+            self.framework.set_state_data(
+                request.session,
+                result["state"],
+                {
+                    "post_logout_redirect_uri": post_logout_redirect_uri,
+                },
+            )
+        return HttpResponseRedirect(result["url"])
+
+    def validate_logout_response(self, request):
+        """Validate the state parameter from the logout callback.
+
+        :param request: HTTP request instance from Django view.
+        :return: The state data dict.
+        :raises OAuthError: If state is missing or invalid.
+        """
+        state = request.GET.get("state")
+        if not state:
+            raise OAuthError(description='Missing "state" parameter')
+
+        state_data = self.framework.get_state_data(request.session, state)
+        if not state_data:
+            raise OAuthError(description='Invalid "state" parameter')
+
+        self.framework.clear_state_data(request.session, state)
+        return state_data
+
     def authorize_access_token(self, request, **kwargs):
         """Fetch access token in one step.
 
