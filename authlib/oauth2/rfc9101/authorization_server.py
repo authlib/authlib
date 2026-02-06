@@ -1,4 +1,5 @@
-from authlib.jose import jwt
+from authlib.jose import JsonWebSignature
+from authlib.jose import JsonWebToken
 from authlib.jose.errors import JoseError
 
 from ..rfc6749 import AuthorizationServer
@@ -135,8 +136,8 @@ class JWTAuthenticationRequest:
         self, request, client: ClientMixin, raw_request_object: str
     ):
         jwks = self.resolve_client_public_key(client)
-
         try:
+            jwt = JsonWebToken(list(JsonWebSignature.ALGORITHMS_REGISTRY.keys()))
             request_object = jwt.decode(raw_request_object, jwks)
             request_object.validate()
 

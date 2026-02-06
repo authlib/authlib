@@ -1,7 +1,7 @@
 from typing import Optional
 
 from authlib.consts import default_json_headers
-from authlib.jose import jwt
+from authlib.jose import JsonWebToken
 from authlib.oauth2.rfc6749.authorization_server import AuthorizationServer
 from authlib.oauth2.rfc6749.authorization_server import OAuth2Request
 from authlib.oauth2.rfc6749.resource_protector import ResourceProtector
@@ -74,7 +74,9 @@ class UserInfoEndpoint:
             user_info["iss"] = self.get_issuer()
             user_info["aud"] = client.client_id
 
-            data = jwt.encode({"alg": alg}, user_info, self.resolve_private_key())
+            data = JsonWebToken([alg]).encode(
+                {"alg": alg}, user_info, self.resolve_private_key()
+            )
             return 200, data, [("Content-Type", "application/jwt")]
 
         return 200, user_info, default_json_headers

@@ -7,6 +7,7 @@ from flask import json
 from authlib.common.urls import url_decode
 from authlib.common.urls import url_encode
 from authlib.common.urls import urlparse
+from authlib.jose import JsonWebToken
 from authlib.jose import jwt
 from authlib.oauth2.rfc6749.grants import (
     AuthorizationCodeGrant as _AuthorizationCodeGrant,
@@ -340,7 +341,8 @@ def test_client_metadata_alg_none(test_client, server, app, db, client):
         headers=headers,
     )
     resp = json.loads(rv.data)
-    claims = jwt.decode(
+    jwt_none = JsonWebToken(["none"])
+    claims = jwt_none.decode(
         resp["id_token"],
         "secret",
         claims_cls=CodeIDToken,

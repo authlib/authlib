@@ -4,6 +4,7 @@ from flask import json
 import authlib.oidc.core as oidc_core
 from authlib.integrations.flask_oauth2 import ResourceProtector
 from authlib.integrations.sqla_oauth2 import create_bearer_token_validator
+from authlib.jose import JsonWebToken
 from authlib.jose import jwt
 from tests.util import read_file_path
 
@@ -285,7 +286,8 @@ def test_scope_signed_unsecured(test_client, db, token, client):
     rv = test_client.get("/oauth/userinfo", headers=headers)
     assert rv.headers["Content-Type"] == "application/jwt"
 
-    claims = jwt.decode(rv.data, None)
+    jwt_none = JsonWebToken(["none"])
+    claims = jwt_none.decode(rv.data, None)
     assert claims == {
         "sub": "1",
         "iss": "https://provider.test",

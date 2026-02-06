@@ -3,6 +3,7 @@ import json
 import pytest
 
 from authlib.common.urls import add_params_to_uri
+from authlib.jose import JsonWebToken
 from authlib.jose import jwt
 from authlib.oauth2 import rfc7591
 from authlib.oauth2 import rfc9101
@@ -213,7 +214,8 @@ def test_server_require_request_object_alg_none(test_client, server, metadata):
     metadata["require_signed_request_object"] = True
     register_request_object_extension(server, metadata=metadata)
     payload = {"response_type": "code", "client_id": "client-id"}
-    request_obj = jwt.encode(
+    jwt_none = JsonWebToken(["none"])
+    request_obj = jwt_none.encode(
         {"alg": "none"}, payload, read_file_path("jwk_private.json")
     )
     url = add_params_to_uri(
@@ -277,7 +279,8 @@ def test_client_require_signed_request_object_alg_none(test_client, client, serv
     db.session.commit()
 
     payload = {"response_type": "code", "client_id": "client-id"}
-    request_obj = jwt.encode({"alg": "none"}, payload, "")
+    jwt_none = JsonWebToken(["none"])
+    request_obj = jwt_none.encode({"alg": "none"}, payload, "")
     url = add_params_to_uri(
         authorize_url, {"client_id": "client-id", "request": request_obj}
     )

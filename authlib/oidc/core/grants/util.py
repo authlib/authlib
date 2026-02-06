@@ -3,7 +3,7 @@ import time
 from authlib.common.encoding import to_native
 from authlib.common.urls import add_params_to_uri
 from authlib.common.urls import quote_url
-from authlib.jose import jwt
+from authlib.jose import JsonWebToken
 from authlib.oauth2.rfc6749 import InvalidRequestError
 from authlib.oauth2.rfc6749 import scope_to_list
 
@@ -111,7 +111,7 @@ def generate_id_token(
             payload["at_hash"] = to_native(at_hash)
 
     payload.update(user_info)
-    return to_native(jwt.encode(header, payload, key))
+    return to_native(JsonWebToken([alg]).encode(header, payload, key))
 
 
 def create_response_mode_response(redirect_uri, params, response_mode):
