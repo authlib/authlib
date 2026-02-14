@@ -3,11 +3,15 @@ import time
 import pytest
 from flask import current_app
 from flask import json
+from joserfc import jwt
+from joserfc.jwk import ECKey
+from joserfc.jwk import KeySet
+from joserfc.jwk import OctKey
+from joserfc.jwk import RSAKey
 
 from authlib.common.urls import url_decode
 from authlib.common.urls import url_encode
 from authlib.common.urls import urlparse
-from authlib.jose import jwt
 from authlib.oauth2.rfc6749.grants import (
     AuthorizationCodeGrant as _AuthorizationCodeGrant,
 )
@@ -108,11 +112,11 @@ def test_authorize_token(test_client, server):
     assert "access_token" in resp
     assert "id_token" in resp
 
-    claims = jwt.decode(
-        resp["id_token"],
-        "secret",
-        claims_cls=CodeIDToken,
-        claims_options={"iss": {"value": "Authlib"}},
+    token = jwt.decode(resp["id_token"], key=OctKey.import_key("secret"))
+    claims = CodeIDToken(
+        token.claims,
+        token.header,
+        {"iss": {"value": "Authlib"}},
     )
     claims.validate()
     assert claims["auth_time"] >= int(auth_request_time)
@@ -287,11 +291,15 @@ def test_client_metadata_custom_alg(test_client, server, client, db, app):
         headers=headers,
     )
     resp = json.loads(rv.data)
-    claims = jwt.decode(
+    token = jwt.decode(
         resp["id_token"],
-        "secret",
-        claims_cls=CodeIDToken,
-        claims_options={"iss": {"value": "Authlib"}},
+        key=OctKey.import_key("secret"),
+        algorithms=["HS384"],
+    )
+    claims = CodeIDToken(
+        token.claims,
+        token.header,
+        {"iss": {"value": "Authlib"}},
     )
     claims.validate()
     assert claims.header["alg"] == "HS384"
@@ -340,11 +348,15 @@ def test_client_metadata_alg_none(test_client, server, app, db, client):
         headers=headers,
     )
     resp = json.loads(rv.data)
-    claims = jwt.decode(
+    token = jwt.decode(
         resp["id_token"],
-        "secret",
-        claims_cls=CodeIDToken,
-        claims_options={"iss": {"value": "Authlib"}},
+        key=OctKey.import_key("secret"),
+        algorithms=["none"],
+    )
+    claims = CodeIDToken(
+        token.claims,
+        token.header,
+        {"iss": {"value": "Authlib"}},
     )
     claims.validate()
     assert claims.header["alg"] == "none"
@@ -355,23 +367,23 @@ def test_client_metadata_alg_none(test_client, server, app, db, client):
     [
         (
             "RS256",
-            read_file_path("jwk_private.json"),
-            read_file_path("jwk_public.json"),
+            RSAKey.import_key(read_file_path("jwk_private.json")),
+            RSAKey.import_key(read_file_path("jwk_public.json")),
         ),
         (
             "PS256",
-            read_file_path("jwks_private.json"),
-            read_file_path("jwks_public.json"),
+            KeySet.import_key_set(read_file_path("jwks_private.json")),
+            KeySet.import_key_set(read_file_path("jwks_public.json")),
         ),
         (
             "ES512",
-            read_file_path("secp521r1-private.json"),
-            read_file_path("secp521r1-public.json"),
+            ECKey.import_key(read_file_path("secp521r1-private.json")),
+            ECKey.import_key(read_file_path("secp521r1-public.json")),
         ),
         (
             "RS256",
-            read_file_path("rsa_private.pem"),
-            read_file_path("rsa_public.pem"),
+            RSAKey.import_key(read_file_path("rsa_private.pem")),
+            RSAKey.import_key(read_file_path("rsa_public.pem")),
         ),
     ],
 )
@@ -413,11 +425,15 @@ def test_authorize_token_algs(test_client, server, app, alg, private_key, public
     assert "access_token" in resp
     assert "id_token" in resp
 
-    claims = jwt.decode(
+    token = jwt.decode(
         resp["id_token"],
-        public_key,
-        claims_cls=CodeIDToken,
-        claims_options={"iss": {"value": "Authlib"}},
+        key=public_key,
+        algorithms=[alg],
+    )
+    claims = CodeIDToken(
+        token.claims,
+        token.header,
+        {"iss": {"value": "Authlib"}},
     )
     claims.validate()
 
