@@ -2,6 +2,7 @@ import pytest
 from flask import json
 from joserfc import jws
 from joserfc import jwt
+from joserfc.jwk import KeySet
 from joserfc.jwk import OctKey
 
 from authlib.oauth2.rfc7523 import JWTBearerGrant as _JWTBearerGrant
@@ -16,9 +17,13 @@ class JWTBearerGrant(_JWTBearerGrant):
     def resolve_issuer_client(self, issuer):
         return Client.query.filter_by(client_id=issuer).first()
 
-    def resolve_client_key(self, client, headers, payload):
-        keys = {"1": "foo", "2": "bar"}
-        return keys[headers["kid"]]
+    def resolve_client_public_key(self, client):
+        return KeySet(
+            [
+                OctKey.import_key("foo", {"kid": "1"}),
+                OctKey.import_key("bar", {"kid": "2"}),
+            ]
+        )
 
     def authenticate_user(self, subject):
         return None

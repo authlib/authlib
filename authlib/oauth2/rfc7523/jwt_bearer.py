@@ -1,11 +1,14 @@
 import logging
 
+from joserfc import jwk
 from joserfc import jws
 from joserfc import jwt
 from joserfc.errors import JoseError
+from joserfc.util import to_bytes
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.encoding import json_loads
+from authlib.deprecate import deprecate
 
 from ..rfc6749 import BaseGrant
 from ..rfc6749 import InvalidClientError
@@ -69,8 +72,20 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
 
         .. _`Section 3.1`: https://tools.ietf.org/html/rfc7523#section-3.1
         """
+        headers, claims = self.extract_assertion(assertion)
+        client = self.resolve_issuer_client(claims["iss"])
+
+        if hasattr(self, "resolve_client_key"):  # pragma: no cover
+            key = import_any_key(self.resolve_client_key(client, headers, claims))
+            deprecate(
+                "Use resolve_client_public_key instead of resolve_client_key.",
+                version="1.8",
+            )
+        else:
+            key = import_any_key(self.resolve_client_public_key(client))
+
         try:
-            token = jwt.decode(assertion, self.resolve_public_key)
+            token = jwt.decode(assertion, key)
         except JoseError as e:
             log.debug("Assertion Error: %r", e)
             raise InvalidGrantError(description=e.description) from e
@@ -81,11 +96,13 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
         self.verify_claims(token.claims)
         return token.claims
 
-    def resolve_public_key(self, obj: jws.CompactSignature):
-        claims = json_loads(obj.payload)
-        client = self.resolve_issuer_client(claims["iss"])
-        key = self.resolve_client_key(client, obj.headers(), claims)
-        return import_any_key(key)
+    def extract_assertion(self, assertion: str):
+        obj = jws.extract_compact(to_bytes(assertion))
+        try:
+            claims = json_loads(obj.payload)
+        except ValueError:
+            raise InvalidGrantError(description="Invalid JWT payload.") from None
+        return obj.headers(), claims
 
     def validate_token_request(self):
         """The client makes a request to the token endpoint by sending the
@@ -172,20 +189,18 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
         """
         raise NotImplementedError()
 
-    def resolve_client_key(self, client, headers, payload):
+    def resolve_client_public_key(self, client) -> jwk.Key | jwk.KeySet:
         """Resolve client key to decode assertion data. Developers MUST
         implement this method in subclass. For instance, there is a
         "jwks" column on client table, e.g.::
 
-            def resolve_client_key(self, client, headers, payload):
+            def resolve_client_public_key(self, client):
                 from joserfc import KeySet
 
                 key_set = KeySet.import_key_set(client.jwks)
                 return key_set
 
         :param client: instance of OAuth client model
-        :param headers: headers part of the JWT
-        :param payload: payload part of the JWT
         :return: OctKey, RSAKey, ECKey, OKPKey or KeySet instance
         """
         raise NotImplementedError()
