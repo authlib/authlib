@@ -1,4 +1,4 @@
-import os
+import secrets
 import struct
 
 from cryptography.hazmat.backends import default_backend
@@ -41,7 +41,7 @@ class DirectAlgorithm(JWEAlgorithm):
     def unwrap(self, enc_alg, ek, headers, key):
         cek = key.get_op_key("decrypt")
         if len(cek) * 8 != enc_alg.CEK_SIZE:
-            raise ValueError('Invalid "cek" length')
+            cek = secrets.token_bytes(enc_alg.CEK_SIZE // 8)
         return cek
 
 
@@ -76,11 +76,10 @@ class RSAAlgorithm(JWEAlgorithm):
         return {"ek": ek, "cek": cek}
 
     def unwrap(self, enc_alg, ek, headers, key):
-        # it will raise ValueError if failed
         op_key = key.get_op_key("unwrapKey")
         cek = op_key.decrypt(ek, self.padding)
         if len(cek) * 8 != enc_alg.CEK_SIZE:
-            raise ValueError('Invalid "cek" length')
+            cek = secrets.token_bytes(enc_alg.CEK_SIZE // 8)
         return cek
 
 
@@ -119,7 +118,7 @@ class AESAlgorithm(JWEAlgorithm):
         self._check_key(op_key)
         cek = aes_key_unwrap(op_key, ek, default_backend())
         if len(cek) * 8 != enc_alg.CEK_SIZE:
-            raise ValueError('Invalid "cek" length')
+            cek = secrets.token_bytes(enc_alg.CEK_SIZE // 8)
         return cek
 
 
@@ -155,7 +154,7 @@ class AESGCMAlgorithm(JWEAlgorithm):
         #: The "iv" (initialization vector) Header Parameter value is the
         #: base64url-encoded representation of the 96-bit IV value
         iv_size = 96
-        iv = os.urandom(iv_size // 8)
+        iv = secrets.token_bytes(iv_size // 8)
 
         cipher = Cipher(AES(op_key), GCM(iv), backend=default_backend())
         enc = cipher.encryptor()
@@ -186,7 +185,7 @@ class AESGCMAlgorithm(JWEAlgorithm):
         d = cipher.decryptor()
         cek = d.update(ek) + d.finalize()
         if len(cek) * 8 != enc_alg.CEK_SIZE:
-            raise ValueError('Invalid "cek" length')
+            cek = secrets.token_bytes(enc_alg.CEK_SIZE // 8)
         return cek
 
 

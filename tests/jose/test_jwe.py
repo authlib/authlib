@@ -1143,7 +1143,7 @@ def test_dir_alg():
     assert rv["payload"] == b"hello"
 
     key2 = OctKey.generate_key(256, is_private=True)
-    with pytest.raises(ValueError):
+    with pytest.raises(InvalidTag):
         jwe.deserialize_compact(data, key2)
 
     with pytest.raises(ValueError):
