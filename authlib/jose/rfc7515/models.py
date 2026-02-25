@@ -5,6 +5,7 @@ class JWSAlgorithm:
 
     name = None
     description = None
+    deprecated = False
     algorithm_type = "JWS"
     algorithm_location = "alg"
 

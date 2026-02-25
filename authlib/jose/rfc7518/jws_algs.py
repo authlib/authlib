@@ -27,6 +27,7 @@ from .util import encode_int
 class NoneAlgorithm(JWSAlgorithm):
     name = "none"
     description = "No digital signature or MAC performed"
+    deprecated = True
 
     def prepare_key(self, raw_data):
         return None

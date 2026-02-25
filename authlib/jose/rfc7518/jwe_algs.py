@@ -52,6 +52,7 @@ class RSAAlgorithm(JWEAlgorithm):
 
     def __init__(self, name, description, pad_fn):
         self.name = name
+        self.deprecated = name == "RSA1_5"
         self.description = description
         self.padding = pad_fn
 

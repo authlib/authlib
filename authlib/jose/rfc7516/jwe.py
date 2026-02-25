@@ -697,11 +697,19 @@ class JsonWebEncryption:
             raise MissingAlgorithmError()
 
         alg = header["alg"]
-        if self._algorithms is not None and alg not in self._algorithms:
-            raise UnsupportedAlgorithmError()
         if alg not in self.ALG_REGISTRY:
             raise UnsupportedAlgorithmError()
-        return self.ALG_REGISTRY[alg]
+
+        instance = self.ALG_REGISTRY[alg]
+
+        # use all ALG_REGISTRY algorithms
+        if self._algorithms is None:
+            # do not use deprecated algorithms
+            if instance.deprecated:
+                raise UnsupportedAlgorithmError()
+        elif alg not in self._algorithms:
+            raise UnsupportedAlgorithmError()
+        return instance
 
     def get_header_enc(self, header):
         if "enc" not in header:

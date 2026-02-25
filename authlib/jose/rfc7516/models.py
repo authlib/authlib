@@ -9,6 +9,7 @@ class JWEAlgorithmBase(metaclass=ABCMeta):  # noqa: B024
 
     name = None
     description = None
+    deprecated = False
     algorithm_type = "JWE"
     algorithm_location = "alg"
 
