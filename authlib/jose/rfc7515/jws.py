@@ -269,8 +269,6 @@ class JsonWebSignature:
         algorithm = self.ALGORITHMS_REGISTRY[alg]
         if callable(key):
             key = key(header, payload)
-        elif key is None and "jwk" in header:
-            key = header["jwk"]
         key = algorithm.prepare_key(key)
         return algorithm, key
 

@@ -754,6 +754,4 @@ class JsonWebEncryption:
 def prepare_key(alg, header, key):
     if callable(key):
         key = key(header, None)
-    elif key is None and "jwk" in header:
-        key = header["jwk"]
     return alg.prepare_key(key)
