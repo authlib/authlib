@@ -109,11 +109,16 @@ using :class:`JWTBearerClientAssertion` to create a new client authentication::
 
     authorization_server.register_client_auth_method(
         JWTClientAuth.CLIENT_AUTH_METHOD,
-        JWTClientAuth('https://example.com/oauth/token')
+        JWTClientAuth(
+            'https://example.com/oauth/token',
+            issuer='https://example.com',
+        )
     )
 
-The value ``https://example.com/oauth/token`` is your authorization server's
-token endpoint, which is used as ``aud`` value in JWT.
+The ``token_url`` and optional ``issuer`` values are used as valid ``aud``
+values in the client assertion JWT. Per RFC 7523 Section 3,
+both the token endpoint URL and the
+authorization server's issuer identifier are valid audience values.
 
 Now we have added this client auth method to authorization server, but no
 grant types support this authentication method, you need to add it to the

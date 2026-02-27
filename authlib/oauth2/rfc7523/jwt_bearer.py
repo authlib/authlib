@@ -53,9 +53,12 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
         )
 
     def verify_claims(self, claims: jwt.Claims):
-        claims_requests = jwt.JWTClaimsRegistry(
-            leeway=self.LEEWAY, **self.CLAIMS_OPTIONS
-        )
+        options = dict(self.CLAIMS_OPTIONS)
+        audiences = self.get_audiences()
+        if audiences:
+            options["aud"] = {"essential": True, "values": audiences}
+
+        claims_requests = jwt.JWTClaimsRegistry(leeway=self.LEEWAY, **options)
         try:
             claims_requests.validate(claims)
         except JoseError as e:
@@ -216,6 +219,27 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
         :return: User instance
         """
         raise NotImplementedError()
+
+    def get_audiences(self):
+        """Return a list of valid audience identifiers for this authorization
+        server. Per RFC 7523 Section 3:
+
+            The authorization server MUST reject any JWT that does not
+            contain its own identity as the intended audience.
+
+        Developers SHOULD implement this method to return the list of valid
+        audience values, typically including the token endpoint URL and/or
+        the issuer identifier. For example::
+
+            def get_audiences(self):
+                return ["https://example.com/oauth/token", "https://example.com"]
+
+        If this method returns an empty list, audience value validation is
+        skipped (only presence is checked).
+
+        :return: list of valid audience strings
+        """
+        return []
 
     def has_granted_permission(self, client, user):
         """Check if the client has permission to access the given user's resource.

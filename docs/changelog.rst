@@ -22,6 +22,7 @@ Version 1.7.0
 - Fix ``expires_at=0`` being incorrectly treated as ``None``. :issue:`530`
 - Allow ``ResourceProtector`` decorator to be used without parentheses. :issue:`604`
 - Implement RFC9700 PKCE downgrade countermeasure.
+- RFC7523 accepts the issuer URL as a valid audience. :issue:`730`
 
 Upgrade Guide: :ref:`joserfc_upgrade`.
 

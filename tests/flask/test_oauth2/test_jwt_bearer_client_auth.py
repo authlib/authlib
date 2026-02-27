@@ -39,7 +39,7 @@ def client(client, db):
     return client
 
 
-def register_jwt_client_auth(server, validate_jti=True):
+def register_jwt_client_auth(server, validate_jti=True, issuer=None):
     class JWTClientAuth(JWTBearerClientAssertion):
         def validate_jti(self, claims, jti):
             return jti != "used"
@@ -51,7 +51,7 @@ def register_jwt_client_auth(server, validate_jti=True):
 
     server.register_client_auth_method(
         JWTClientAuth.CLIENT_AUTH_METHOD,
-        JWTClientAuth("https://provider.test/oauth/token", validate_jti),
+        JWTClientAuth("https://provider.test/oauth/token", validate_jti, issuer=issuer),
     )
 
 
@@ -299,3 +299,28 @@ def test_missing_jti(test_client, server):
     resp = json.loads(rv.data)
     assert "error" in resp
     assert resp["error_description"] == "Missing JWT ID."
+
+
+def test_issuer_as_audience(test_client, server):
+    """Per RFC 7523 Section 3 and draft-ietf-oauth-rfc7523bis, the AS issuer
+    identifier should be a valid audience value for client assertion JWTs."""
+    register_jwt_client_auth(server, issuer="https://provider.test")
+    key = OctKey.import_key("client-secret")
+    claims = {
+        "iss": "client-id",
+        "sub": "client-id",
+        "aud": "https://provider.test",
+        "exp": int(time.time() + 3600),
+        "jti": "nonce",
+    }
+    client_assertion = jwt.encode({"alg": "HS256"}, claims, key)
+    rv = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "client_credentials",
+            "client_assertion_type": JWTBearerClientAssertion.CLIENT_ASSERTION_TYPE,
+            "client_assertion": client_assertion,
+        },
+    )
+    resp = json.loads(rv.data)
+    assert "access_token" in resp

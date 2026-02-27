@@ -28,8 +28,9 @@ class JWTBearerClientAssertion:
     #: Name of the client authentication method
     CLIENT_AUTH_METHOD = "client_assertion_jwt"
 
-    def __init__(self, token_url, validate_jti=True, leeway=60):
+    def __init__(self, token_url, validate_jti=True, leeway=60, issuer=None):
         self.token_url = token_url
+        self.issuer = issuer
         self._validate_jti = validate_jti
         # A small allowance of time, typically no more than a few minutes,
         # to account for clock skew. The default is 60 seconds.
@@ -64,10 +65,16 @@ class JWTBearerClientAssertion:
 
     def verify_claims(self, claims: jwt.Claims):
         # iss and sub MUST be the client_id
+        # Per RFC 7523 Section 3 and draft-ietf-oauth-rfc7523bis, both the
+        # token endpoint URL and the AS issuer identifier are valid audiences.
+        aud_values = [self.token_url]
+        if self.issuer:
+            aud_values.append(self.issuer)
+
         options = {
             "iss": {"essential": True},
             "sub": {"essential": True},
-            "aud": {"essential": True, "value": self.token_url},
+            "aud": {"essential": True, "values": aud_values},
             "exp": {"essential": True},
         }
         claims_requests = jwt.JWTClaimsRegistry(leeway=self.leeway, **options)
