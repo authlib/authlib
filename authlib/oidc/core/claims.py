@@ -303,6 +303,6 @@ def get_claim_cls_by_response_type(response_type):
 
 def _verify_hash(signature, s, alg):
     hash_value = create_half_hash(s, alg)
-    if not hash_value:
-        return True
+    if hash_value is None:
+        return False
     return hmac.compare_digest(hash_value, to_bytes(signature))

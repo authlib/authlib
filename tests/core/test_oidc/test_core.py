@@ -99,9 +99,10 @@ def test_validate_at_hash():
     )
     claims.params = {"access_token": "a"}
 
-    # invalid alg won't raise
+    # invalid alg will raise too
     claims.header = {"alg": "HS222"}
-    claims.validate(1000)
+    with pytest.raises(InvalidClaimError):
+        claims.validate(1000)
 
     claims.header = {"alg": "HS256"}
     with pytest.raises(InvalidClaimError):
@@ -143,10 +144,11 @@ def test_hybrid_id_token():
     with pytest.raises(MissingClaimError):
         claims.validate(1000)
 
-    # invalid alg won't raise
+    # invalid alg will raise too
     claims.header = {"alg": "HS222"}
     claims["c_hash"] = "a"
-    claims.validate(1000)
+    with pytest.raises(InvalidClaimError):
+        claims.validate(1000)
 
     claims.header = {"alg": "HS256"}
     with pytest.raises(InvalidClaimError):
