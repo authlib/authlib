@@ -187,3 +187,28 @@ def test_missing_assertion_claims(test_client):
     )
     resp = json.loads(rv.data)
     assert "Missing claim" in resp["error_description"]
+
+
+def test_invalid_audience(test_client, server):
+    """RFC 7523 Section 3: The authorization server MUST reject any JWT that
+    does not contain its own identity as the intended audience."""
+
+    class StrictAudienceGrant(JWTBearerGrant):
+        def get_audiences(self):
+            return ["https://provider.test/token"]
+
+    server._token_grants.clear()
+    server.register_grant(StrictAudienceGrant)
+    assertion = StrictAudienceGrant.sign(
+        "foo",
+        issuer="client-id",
+        audience="https://evil.test/token",
+        subject=None,
+        header={"alg": "HS256", "kid": "1"},
+    )
+    rv = test_client.post(
+        "/oauth/token",
+        data={"grant_type": StrictAudienceGrant.GRANT_TYPE, "assertion": assertion},
+    )
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_grant"

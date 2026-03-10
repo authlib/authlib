@@ -35,6 +35,11 @@ methods in order to use it. Here is an example::
     from authlib.oauth2.rfc7523 import JWTBearerGrant as _JWTBearerGrant
 
     class JWTBearerGrant(_JWTBearerGrant):
+        def get_audiences(self):
+            # Per RFC 7523 Section 3, both the token endpoint URL and the
+            # authorization server's issuer identifier are valid audience values.
+            return ['https://example.com/oauth/token', 'https://example.com']
+
         def resolve_issuer_client(self, issuer):
             # if using client_id as issuer
             return Client.objects.get(client_id=issuer)
@@ -90,6 +95,11 @@ In Authlib, ``client_secret_jwt`` and ``private_key_jwt`` share the same API,
 using :class:`JWTBearerClientAssertion` to create a new client authentication::
 
     class JWTClientAuth(JWTBearerClientAssertion):
+        def get_audiences(self):
+            # Per RFC 7523 Section 3, both the token endpoint URL and the
+            # authorization server's issuer identifier are valid audience values.
+            return ['https://example.com/oauth/token', 'https://example.com']
+
         def validate_jti(self, claims, jti):
             # validate_jti is required by OpenID Connect
             # but it is optional by RFC7523
@@ -109,11 +119,13 @@ using :class:`JWTBearerClientAssertion` to create a new client authentication::
 
     authorization_server.register_client_auth_method(
         JWTClientAuth.CLIENT_AUTH_METHOD,
-        JWTClientAuth('https://example.com/oauth/token')
+        JWTClientAuth()
     )
 
-The value ``https://example.com/oauth/token`` is your authorization server's
-token endpoint, which is used as ``aud`` value in JWT.
+The ``get_audiences`` method returns the list of valid ``aud`` values
+accepted in client assertion JWTs. Per RFC 7523 Section 3,
+both the token endpoint URL and the authorization server's issuer
+identifier are valid audience values.
 
 Now we have added this client auth method to authorization server, but no
 grant types support this authentication method, you need to add it to the
