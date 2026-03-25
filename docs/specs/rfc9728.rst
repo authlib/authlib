@@ -1,0 +1,147 @@
+.. _specs/rfc9728:
+
+RFC9728: OAuth 2.0 Protected Resource Metadata
+================================================
+
+.. meta::
+    :description: Python API references on RFC9728 OAuth 2.0 Protected Resource
+        Metadata with Authlib implementation, including well-known discovery,
+        metadata validation, signed metadata, and WWW-Authenticate integration.
+
+.. module:: authlib.oauth2.rfc9728
+
+This section contains the implementation of :rfc:`9728`. This specification defines
+a metadata format for OAuth 2.0 protected resources, allowing them to advertise
+their capabilities: which authorization servers they trust, what scopes they
+accept, how bearer tokens should be presented, etc. Clients and authorization
+servers can discover this metadata via a well-known URL or a ``WWW-Authenticate``
+header parameter.
+
+It introduces the concept of **resource identifier**, that is an HTTPS URL (with
+no fragment) that identifies a protected resource — for instance
+``https://api.example.com/`` or ``https://api.example.com/v2``. It plays the same
+role as ``issuer`` in :ref:`RFC 8414 <specs/rfc8414>` for authorization servers. A single resource
+identifier can cover multiple API endpoints, and the well-known metadata URL is
+derived from it.
+
+
+Resource Server
+---------------
+
+A minimal example serving metadata at the well-known URL::
+
+    from authlib.oauth2.rfc9728 import ProtectedResourceMetadata, get_well_known_url
+
+    metadata = ProtectedResourceMetadata({
+        'resource': 'https://api.example.com/',
+        'authorization_servers': ['https://auth.example.com'],
+        'scopes_supported': ['read', 'write'],
+    })
+    metadata.validate()
+
+    @app.route(get_well_known_url('https://api.example.com/'))
+    def resource_metadata():
+        return jsonify(metadata)
+
+
+Signed metadata
+~~~~~~~~~~~~~~~
+
+The metadata can optionally be signed as a JWT so that consumers can verify its
+authenticity independently of TLS, with
+:meth:`~ProtectedResourceMetadata.sign_metadata`. Consumers use ``jwks_uri`` to
+fetch the public key and verify the signature::
+
+    from joserfc.jwk import KeySet, RSAKey
+    from authlib.oauth2.rfc9728 import ProtectedResourceMetadata, get_well_known_url
+
+    key = RSAKey.generate_key(2048)
+    keyset = KeySet(keys=[key])
+
+    metadata = ProtectedResourceMetadata({
+        'resource': 'https://api.example.com/',
+        'authorization_servers': ['https://auth.example.com'],
+        'scopes_supported': ['read', 'write'],
+        'jwks_uri': 'https://api.example.com/.well-known/jwks.json',
+    })
+    metadata.sign_metadata(key)
+    metadata.validate()
+
+    @app.route(get_well_known_url('https://api.example.com/'))
+    def resource_metadata():
+        return jsonify(metadata)
+
+    @app.route('/.well-known/jwks.json')
+    def jwks():
+        return jsonify(keyset.as_dict())
+
+
+WWW-Authenticate header
+~~~~~~~~~~~~~~~~~~~~~~~
+
+When a protected resource returns a 401 response, it can include a
+``resource_metadata`` parameter in the ``WWW-Authenticate`` header so that
+clients can discover its metadata endpoint. Use
+:class:`~ResourceMetadataExtension` to wire this automatically::
+
+    from authlib.integrations.flask_oauth2 import ResourceProtector
+    from authlib.oauth2.rfc9728 import ProtectedResourceMetadata, ResourceMetadataExtension
+
+    metadata = ProtectedResourceMetadata({
+        'resource': 'https://api.example.com/',
+        'authorization_servers': ['https://auth.example.com'],
+        'scopes_supported': ['read', 'write'],
+    })
+
+    require_oauth = ResourceProtector()
+    require_oauth.register_extension(ResourceMetadataExtension(metadata))
+    require_oauth.register_token_validator(MyBearerTokenValidator())
+
+    @app.route('/api/userinfo')
+    @require_oauth(['read'])
+    def userinfo():
+        ...
+
+An unauthenticated request to ``/api/userinfo`` will receive::
+
+    HTTP/1.1 401 Unauthorized
+    WWW-Authenticate: Bearer resource_metadata="https://api.example.com/.well-known/oauth-protected-resource", error="missing_authorization", ...
+
+
+Authorization Server
+--------------------
+
+:rfc:`9728` defines an optional ``protected_resources`` parameter for
+authorization server metadata (:ref:`RFC 8414 <specs/rfc8414>`), listing the
+resource identifiers that accept tokens from this authorization server:
+
+.. code-block:: json
+   :caption: Authorization Server metadata example
+
+    {
+        "issuer": "https://auth.example.com",
+        "protected_resources": [
+            "https://api.example.com/",
+            "https://files.example.com/"
+        ]
+    }
+
+You can validate this field using the extension class::
+
+    from authlib.oauth2 import rfc8414, rfc9728
+
+    metadata = rfc8414.AuthorizationServerMetadata(data)
+    metadata.validate(metadata_classes=[rfc9728.AuthorizationServerMetadata])
+
+
+API Reference
+-------------
+
+.. autoclass:: ProtectedResourceMetadata
+    :member-order: bysource
+    :members:
+
+.. autoclass:: ResourceMetadataExtension
+    :members:
+
+.. autofunction:: get_well_known_url

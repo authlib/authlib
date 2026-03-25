@@ -26,6 +26,8 @@ Version 1.7.0
 - RFC7523 accepts the issuer URL as a valid audience. :issue:`730`
 - Fix ``InvalidTokenError`` extra attributes being wrapped instead of passed as
   individual key=value pairs in the ``WWW-Authenticate`` header. :pr:`872`
+- Add support for :rfc:`9728` OAuth 2.0 Protected Resource Metadata for
+  resource servers and authorization servers.
 
 Upgrade Guide: :ref:`joserfc_upgrade`.
 
