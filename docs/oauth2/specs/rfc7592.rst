@@ -1,0 +1,99 @@
+.. _specs/rfc7592:
+
+RFC7592: OAuth 2.0 Dynamic Client Registration Management Protocol
+==================================================================
+
+This section contains the generic implementation of RFC7592_. OAuth 2.0 Dynamic
+Client Registration Management Protocol allows developers edit and delete OAuth
+client via API through Authorization Server. This specification is an extension
+of :ref:`specs/rfc7591`.
+
+
+.. meta::
+    :description: Python API references on RFC7592 OAuth 2.0 Dynamic Client
+        Registration Management Protocol in Python with Authlib implementation.
+
+.. module:: authlib.oauth2.rfc7592
+
+.. _RFC7592: https://tools.ietf.org/html/rfc7592
+
+Client Configuration Endpoint
+-----------------------------
+
+Before register the endpoint, developers MUST implement the missing methods::
+
+    from authlib.oauth2.rfc7592 import ClientConfigurationEndpoint
+
+
+    class MyClientConfigurationEndpoint(ClientConfigurationEndpoint):
+        def authenticate_token(self, request):
+            # this method is used to authenticate the registration access
+            # token returned by the RFC7591 registration endpoint
+            auth_header = request.headers.get('Authorization')
+            bearer_token = auth_header.split()[1]
+            token = Token.get(bearer_token)
+            return token
+
+        def authenticate_client(self, request):
+            client_id = request.payload.data.get('client_id')
+            return Client.get(client_id=client_id)
+
+        def revoke_access_token(self, token, request):
+            token.revoked = True
+            token.save()
+
+        def check_permission(self, client, request):
+            return client.editable
+
+        def delete_client(self, client, request):
+            client.delete()
+
+        def save_client(self, client_info, client_metadata, request):
+            client = OAuthClient(
+                user_id=request.credential.user_id,
+                client_id=client_info['client_id'],
+                client_secret=client_info['client_secret'],
+                **client_metadata,
+            )
+            client.save()
+            return client
+
+        def generate_client_registration_info(self, client, request):
+            access_token = request.headers['Authorization'].split(' ')[1]
+            return {
+                'registration_client_uri': request.uri,
+                'registration_access_token': access_token,
+            }
+
+        def get_server_metadata(self):
+            return {
+                'issuer': ...,
+                'authorization_endpoint': ...,
+                'token_endpoint': ...,
+                'jwks_uri': ...,
+                'registration_endpoint': ...,
+                'scopes_supported': ...,
+                'response_types_supported': ...,
+                'response_modes_supported': ...,
+                'grant_types_supported': ...,
+                'token_endpoint_auth_methods_supported': ...,
+                'token_endpoint_auth_signing_alg_values_supported': ...,
+                'service_documentation': ...,
+                'ui_locales_supported': ...,
+                'op_policy_uri': ...,
+                'op_tos_uri': ...,
+                'revocation_endpoint': ...,
+                'revocation_endpoint_auth_methods_supported': ...,
+                'revocation_endpoint_auth_signing_alg_values_supported': ...,
+                'introspection_endpoint': ...,
+                'introspection_endpoint_auth_methods_supported': ...,
+                'introspection_endpoint_auth_signing_alg_values_supported': ...,
+                'code_challenge_methods_supported': ...,
+            }
+
+API Reference
+-------------
+
+.. autoclass:: ClientConfigurationEndpoint
+    :member-order: bysource
+    :members:

@@ -1,5 +1,5 @@
-from django.test import TestCase as _TestCase, RequestFactory
 from django.conf import settings
+from django.test import RequestFactory
 from django.utils.module_loading import import_module
 
 
@@ -15,8 +15,3 @@ class RequestClient(RequestFactory):
         session.save()
         self.cookies[settings.SESSION_COOKIE_NAME] = session.session_key
         return session
-
-
-class TestCase(_TestCase):
-    def setUp(self):
-        self.factory = RequestClient()

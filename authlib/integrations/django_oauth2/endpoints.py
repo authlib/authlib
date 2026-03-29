@@ -14,20 +14,20 @@ class RevocationEndpoint(_RevocationEndpoint):
         # see register into authorization server instance
         server.register_endpoint(RevocationEndpoint)
 
+
         @require_http_methods(["POST"])
         def revoke_token(request):
             return server.create_endpoint_response(
-                RevocationEndpoint.ENDPOINT_NAME,
-                request
+                RevocationEndpoint.ENDPOINT_NAME, request
             )
     """
 
     def query_token(self, token, token_type_hint):
         """Query requested token from database."""
         token_model = self.server.token_model
-        if token_type_hint == 'access_token':
+        if token_type_hint == "access_token":
             rv = _query_access_token(token_model, token)
-        elif token_type_hint == 'refresh_token':
+        elif token_type_hint == "refresh_token":
             rv = _query_refresh_token(token_model, token)
         else:
             rv = _query_access_token(token_model, token)

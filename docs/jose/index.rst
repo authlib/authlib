@@ -1,7 +1,7 @@
 .. _jose:
 
-JOSE Guide
-==========
+JOSE
+====
 
 This part of the documentation contains information on the JOSE implementation.
 It includes:
@@ -11,6 +11,15 @@ It includes:
 3. JSON Web Key (JWK)
 4. JSON Web Algorithm (JWA)
 5. JSON Web Token (JWT)
+
+.. versionchanged:: 1.7
+    We are deprecating ``authlib.jose`` module in favor of joserfc_.
+    It will be removed in Authlib 1.8.
+
+.. _joserfc: https://jose.authlib.org/en/
+
+Usage
+-----
 
 A simple example on how to use JWT with Authlib::
 
@@ -23,6 +32,9 @@ A simple example on how to use JWT with Authlib::
     header = {'alg': 'RS256'}
     s = jwt.encode(header, payload, key)
 
+Guide
+-----
+
 Follow the documentation below to find out more in detail.
 
 .. toctree::
@@ -32,3 +44,4 @@ Follow the documentation below to find out more in detail.
     jwe
     jwk
     jwt
+    specs/index

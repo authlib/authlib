@@ -1,22 +1,35 @@
+<!--
 > DO NOT SEND ANY SECURITY FIX HERE. Please read "Security Reporting" section
 > on README.
+-->
 
-**What kind of change does this PR introduce?** (check at least one)
+**What kind of change does this PR introduce?**
 
-- [ ] Bugfix
-- [ ] Feature
-- [ ] Code style update
-- [ ] Refactor
-- [ ] Other, please describe:
+<!--
+Describe whether your change is:
+- a bugfix
+- a feature implementation
+- a code style update
+- a refactoring
+- or anything else
 
-**Does this PR introduce a breaking change?** (check one)
+Please indicate if this PR is related to other issues or PRs.
+-->
 
-- [ ] Yes
-- [ ] No
+**Does this PR introduce a breaking change?**
 
-If yes, please describe the impact and migration path for existing applications:
+<!--
+- If yes, please describe the impact and migration path for existing applications:
+- If no, please delete the above question and this text message.
+-->
 
-(If no, please delete the above question and this text message.)
+**Checklist**
+
+- [ ] The commits follow the [conventional commits](https://www.conventionalcommits.org) specification.
+- [ ] You ran the linters with ``prek``.
+- [ ] You wrote unit test to demonstrate the bug you are fixing, or to stress the feature you are bringing.
+- [ ] You reached 100% of code coverage on the code you edited, without abusive use of `pragma: no cover`
+- [ ] If this PR is about a new feature, or a behavior change, you have updated the documentation accordingly.
 
 ---
 

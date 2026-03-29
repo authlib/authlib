@@ -1,9 +1,10 @@
 from authlib.common.encoding import json_loads
-from .key_set import KeySet
+
 from ._cryptography_key import load_pem_key
+from .key_set import KeySet
 
 
-class JsonWebKey(object):
+class JsonWebKey:
     JWK_KEY_CLS = {}
 
     @classmethod
@@ -27,10 +28,10 @@ class JsonWebKey(object):
         """
         kty = None
         if options is not None:
-            kty = options.get('kty')
+            kty = options.get("kty")
 
         if kty is None and isinstance(raw, dict):
-            kty = raw.get('kty')
+            kty = raw.get("kty")
 
         if kty is None:
             raw_key = load_pem_key(raw)
@@ -49,16 +50,15 @@ class JsonWebKey(object):
         :return: KeySet instance
         """
         raw = _transform_raw_key(raw)
-        if isinstance(raw, dict) and 'keys' in raw:
-            keys = raw.get('keys')
+        if isinstance(raw, dict) and "keys" in raw:
+            keys = raw.get("keys")
             return KeySet([cls.import_key(k) for k in keys])
-        raise ValueError('Invalid key set format')
+        raise ValueError("Invalid key set format")
 
 
 def _transform_raw_key(raw):
-    if isinstance(raw, str) and \
-            raw.startswith('{') and raw.endswith('}'):
+    if isinstance(raw, str) and raw.startswith("{") and raw.endswith("}"):
         return json_loads(raw)
     elif isinstance(raw, (tuple, list)):
-        return {'keys': raw}
+        return {"keys": raw}
     return raw

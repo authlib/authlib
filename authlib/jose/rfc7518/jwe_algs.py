@@ -1,30 +1,30 @@
 import os
 import struct
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.primitives import hashes
+
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.keywrap import (
-    aes_key_wrap,
-    aes_key_unwrap
-)
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.ciphers import Cipher
 from cryptography.hazmat.primitives.ciphers.algorithms import AES
 from cryptography.hazmat.primitives.ciphers.modes import GCM
 from cryptography.hazmat.primitives.kdf.concatkdf import ConcatKDFHash
-from authlib.common.encoding import (
-    to_bytes, to_native,
-    urlsafe_b64decode,
-    urlsafe_b64encode
-)
+from cryptography.hazmat.primitives.keywrap import aes_key_unwrap
+from cryptography.hazmat.primitives.keywrap import aes_key_wrap
+
+from authlib.common.encoding import to_bytes
+from authlib.common.encoding import to_native
+from authlib.common.encoding import urlsafe_b64decode
+from authlib.common.encoding import urlsafe_b64encode
 from authlib.jose.rfc7516 import JWEAlgorithm
-from .rsa_key import RSAKey
+
 from .ec_key import ECKey
 from .oct_key import OctKey
+from .rsa_key import RSAKey
 
 
 class DirectAlgorithm(JWEAlgorithm):
-    name = 'dir'
-    description = 'Direct use of a shared symmetric key'
+    name = "dir"
+    description = "Direct use of a shared symmetric key"
 
     def prepare_key(self, raw_data):
         return OctKey.import_key(raw_data)
@@ -33,13 +33,13 @@ class DirectAlgorithm(JWEAlgorithm):
         return {}
 
     def wrap(self, enc_alg, headers, key, preset=None):
-        cek = key.get_op_key('encrypt')
+        cek = key.get_op_key("encrypt")
         if len(cek) * 8 != enc_alg.CEK_SIZE:
             raise ValueError('Invalid "cek" length')
-        return {'ek': b'', 'cek': cek}
+        return {"ek": b"", "cek": cek}
 
     def unwrap(self, enc_alg, ek, headers, key):
-        cek = key.get_op_key('decrypt')
+        cek = key.get_op_key("decrypt")
         if len(cek) * 8 != enc_alg.CEK_SIZE:
             raise ValueError('Invalid "cek" length')
         return cek
@@ -60,23 +60,23 @@ class RSAAlgorithm(JWEAlgorithm):
 
     def generate_preset(self, enc_alg, key):
         cek = enc_alg.generate_cek()
-        return {'cek': cek}
+        return {"cek": cek}
 
     def wrap(self, enc_alg, headers, key, preset=None):
-        if preset and 'cek' in preset:
-            cek = preset['cek']
+        if preset and "cek" in preset:
+            cek = preset["cek"]
         else:
             cek = enc_alg.generate_cek()
 
-        op_key = key.get_op_key('wrapKey')
+        op_key = key.get_op_key("wrapKey")
         if op_key.key_size < self.key_size:
-            raise ValueError('A key of size 2048 bits or larger MUST be used')
+            raise ValueError("A key of size 2048 bits or larger MUST be used")
         ek = op_key.encrypt(cek, self.padding)
-        return {'ek': ek, 'cek': cek}
+        return {"ek": ek, "cek": cek}
 
     def unwrap(self, enc_alg, ek, headers, key):
         # it will raise ValueError if failed
-        op_key = key.get_op_key('unwrapKey')
+        op_key = key.get_op_key("unwrapKey")
         cek = op_key.decrypt(ek, self.padding)
         if len(cek) * 8 != enc_alg.CEK_SIZE:
             raise ValueError('Invalid "cek" length')
@@ -85,8 +85,8 @@ class RSAAlgorithm(JWEAlgorithm):
 
 class AESAlgorithm(JWEAlgorithm):
     def __init__(self, key_size):
-        self.name = 'A{}KW'.format(key_size)
-        self.description = 'AES Key Wrap using {}-bit key'.format(key_size)
+        self.name = f"A{key_size}KW"
+        self.description = f"AES Key Wrap using {key_size}-bit key"
         self.key_size = key_size
 
     def prepare_key(self, raw_data):
@@ -94,28 +94,27 @@ class AESAlgorithm(JWEAlgorithm):
 
     def generate_preset(self, enc_alg, key):
         cek = enc_alg.generate_cek()
-        return {'cek': cek}
+        return {"cek": cek}
 
     def _check_key(self, key):
         if len(key) * 8 != self.key_size:
-            raise ValueError(
-                'A key of size {} bits is required.'.format(self.key_size))
+            raise ValueError(f"A key of size {self.key_size} bits is required.")
 
     def wrap_cek(self, cek, key):
-        op_key = key.get_op_key('wrapKey')
+        op_key = key.get_op_key("wrapKey")
         self._check_key(op_key)
         ek = aes_key_wrap(op_key, cek, default_backend())
-        return {'ek': ek, 'cek': cek}
+        return {"ek": ek, "cek": cek}
 
     def wrap(self, enc_alg, headers, key, preset=None):
-        if preset and 'cek' in preset:
-            cek = preset['cek']
+        if preset and "cek" in preset:
+            cek = preset["cek"]
         else:
             cek = enc_alg.generate_cek()
         return self.wrap_cek(cek, key)
 
     def unwrap(self, enc_alg, ek, headers, key):
-        op_key = key.get_op_key('unwrapKey')
+        op_key = key.get_op_key("unwrapKey")
         self._check_key(op_key)
         cek = aes_key_unwrap(op_key, ek, default_backend())
         if len(cek) * 8 != enc_alg.CEK_SIZE:
@@ -124,11 +123,11 @@ class AESAlgorithm(JWEAlgorithm):
 
 
 class AESGCMAlgorithm(JWEAlgorithm):
-    EXTRA_HEADERS = frozenset(['iv', 'tag'])
+    EXTRA_HEADERS = frozenset(["iv", "tag"])
 
     def __init__(self, key_size):
-        self.name = 'A{}GCMKW'.format(key_size)
-        self.description = 'Key wrapping with AES GCM using {}-bit key'.format(key_size)
+        self.name = f"A{key_size}GCMKW"
+        self.description = f"Key wrapping with AES GCM using {key_size}-bit key"
         self.key_size = key_size
 
     def prepare_key(self, raw_data):
@@ -136,20 +135,19 @@ class AESGCMAlgorithm(JWEAlgorithm):
 
     def generate_preset(self, enc_alg, key):
         cek = enc_alg.generate_cek()
-        return {'cek': cek}
+        return {"cek": cek}
 
     def _check_key(self, key):
         if len(key) * 8 != self.key_size:
-            raise ValueError(
-                'A key of size {} bits is required.'.format(self.key_size))
+            raise ValueError(f"A key of size {self.key_size} bits is required.")
 
     def wrap(self, enc_alg, headers, key, preset=None):
-        if preset and 'cek' in preset:
-            cek = preset['cek']
+        if preset and "cek" in preset:
+            cek = preset["cek"]
         else:
             cek = enc_alg.generate_cek()
 
-        op_key = key.get_op_key('wrapKey')
+        op_key = key.get_op_key("wrapKey")
         self._check_key(op_key)
 
         #: https://tools.ietf.org/html/rfc7518#section-4.7.1.1
@@ -163,20 +161,20 @@ class AESGCMAlgorithm(JWEAlgorithm):
         ek = enc.update(cek) + enc.finalize()
 
         h = {
-            'iv': to_native(urlsafe_b64encode(iv)),
-            'tag': to_native(urlsafe_b64encode(enc.tag))
+            "iv": to_native(urlsafe_b64encode(iv)),
+            "tag": to_native(urlsafe_b64encode(enc.tag)),
         }
-        return {'ek': ek, 'cek': cek, 'header': h}
+        return {"ek": ek, "cek": cek, "header": h}
 
     def unwrap(self, enc_alg, ek, headers, key):
-        op_key = key.get_op_key('unwrapKey')
+        op_key = key.get_op_key("unwrapKey")
         self._check_key(op_key)
 
-        iv = headers.get('iv')
+        iv = headers.get("iv")
         if not iv:
             raise ValueError('Missing "iv" in headers')
 
-        tag = headers.get('tag')
+        tag = headers.get("tag")
         if not tag:
             raise ValueError('Missing "tag" in headers')
 
@@ -192,19 +190,19 @@ class AESGCMAlgorithm(JWEAlgorithm):
 
 
 class ECDHESAlgorithm(JWEAlgorithm):
-    EXTRA_HEADERS = ['epk', 'apu', 'apv']
+    EXTRA_HEADERS = ["epk", "apu", "apv"]
     ALLOWED_KEY_CLS = ECKey
 
     # https://tools.ietf.org/html/rfc7518#section-4.6
     def __init__(self, key_size=None):
         if key_size is None:
-            self.name = 'ECDH-ES'
-            self.description = 'ECDH-ES in the Direct Key Agreement mode'
+            self.name = "ECDH-ES"
+            self.description = "ECDH-ES in the Direct Key Agreement mode"
         else:
-            self.name = 'ECDH-ES+A{}KW'.format(key_size)
+            self.name = f"ECDH-ES+A{key_size}KW"
             self.description = (
-                'ECDH-ES using Concat KDF and CEK wrapped '
-                'with A{}KW').format(key_size)
+                f"ECDH-ES using Concat KDF and CEK wrapped with A{key_size}KW"
+            )
         self.key_size = key_size
         self.aeskw = AESAlgorithm(key_size)
 
@@ -216,27 +214,27 @@ class ECDHESAlgorithm(JWEAlgorithm):
     def generate_preset(self, enc_alg, key):
         epk = self._generate_ephemeral_key(key)
         h = self._prepare_headers(epk)
-        preset = {'epk': epk, 'header': h}
+        preset = {"epk": epk, "header": h}
         if self.key_size is not None:
             cek = enc_alg.generate_cek()
-            preset['cek'] = cek
+            preset["cek"] = cek
         return preset
 
     def compute_fixed_info(self, headers, bit_size):
         # AlgorithmID
         if self.key_size is None:
-            alg_id = u32be_len_input(headers['enc'])
+            alg_id = u32be_len_input(headers["enc"])
         else:
-            alg_id = u32be_len_input(headers['alg'])
+            alg_id = u32be_len_input(headers["alg"])
 
         # PartyUInfo
-        apu_info = u32be_len_input(headers.get('apu'), True)
+        apu_info = u32be_len_input(headers.get("apu"), True)
 
         # PartyVInfo
-        apv_info = u32be_len_input(headers.get('apv'), True)
+        apv_info = u32be_len_input(headers.get("apv"), True)
 
         # SuppPubInfo
-        pub_info = struct.pack('>I', bit_size)
+        pub_info = struct.pack(">I", bit_size)
 
         return alg_id + apu_info + apv_info + pub_info
 
@@ -245,7 +243,7 @@ class ECDHESAlgorithm(JWEAlgorithm):
             algorithm=hashes.SHA256(),
             length=bit_size // 8,
             otherinfo=fixed_info,
-            backend=default_backend()
+            backend=default_backend(),
         )
         return ckdf.derive(shared_key)
 
@@ -255,13 +253,13 @@ class ECDHESAlgorithm(JWEAlgorithm):
         return self.compute_derived_key(shared_key, fixed_info, bit_size)
 
     def _generate_ephemeral_key(self, key):
-        return key.generate_key(key['crv'], is_private=True)
+        return key.generate_key(key["crv"], is_private=True)
 
     def _prepare_headers(self, epk):
         # REQUIRED_JSON_FIELDS contains only public fields
         pub_epk = {k: epk[k] for k in epk.REQUIRED_JSON_FIELDS}
-        pub_epk['kty'] = epk.kty
-        return {'epk': pub_epk}
+        pub_epk["kty"] = epk.kty
+        return {"epk": pub_epk}
 
     def wrap(self, enc_alg, headers, key, preset=None):
         if self.key_size is None:
@@ -269,31 +267,31 @@ class ECDHESAlgorithm(JWEAlgorithm):
         else:
             bit_size = self.key_size
 
-        if preset and 'epk' in preset:
-            epk = preset['epk']
+        if preset and "epk" in preset:
+            epk = preset["epk"]
             h = {}
         else:
             epk = self._generate_ephemeral_key(key)
             h = self._prepare_headers(epk)
 
-        public_key = key.get_op_key('wrapKey')
+        public_key = key.get_op_key("wrapKey")
         dk = self.deliver(epk, public_key, headers, bit_size)
 
         if self.key_size is None:
-            return {'ek': b'', 'cek': dk, 'header': h}
+            return {"ek": b"", "cek": dk, "header": h}
 
-        if preset and 'cek' in preset:
-            preset_for_kw = {'cek': preset['cek']}
+        if preset and "cek" in preset:
+            preset_for_kw = {"cek": preset["cek"]}
         else:
             preset_for_kw = None
 
         kek = self.aeskw.prepare_key(dk)
         rv = self.aeskw.wrap(enc_alg, headers, kek, preset_for_kw)
-        rv['header'] = h
+        rv["header"] = h
         return rv
 
     def unwrap(self, enc_alg, ek, headers, key):
-        if 'epk' not in headers:
+        if "epk" not in headers:
             raise ValueError('Missing "epk" in headers')
 
         if self.key_size is None:
@@ -301,8 +299,8 @@ class ECDHESAlgorithm(JWEAlgorithm):
         else:
             bit_size = self.key_size
 
-        epk = key.import_key(headers['epk'])
-        public_key = epk.get_op_key('wrapKey')
+        epk = key.import_key(headers["epk"])
+        public_key = epk.get_op_key("wrapKey")
         dk = self.deliver(key, public_key, headers, bit_size)
 
         if self.key_size is None:
@@ -314,24 +312,27 @@ class ECDHESAlgorithm(JWEAlgorithm):
 
 def u32be_len_input(s, base64=False):
     if not s:
-        return b'\x00\x00\x00\x00'
+        return b"\x00\x00\x00\x00"
     if base64:
         s = urlsafe_b64decode(to_bytes(s))
     else:
         s = to_bytes(s)
-    return struct.pack('>I', len(s)) + s
+    return struct.pack(">I", len(s)) + s
 
 
 JWE_ALG_ALGORITHMS = [
     DirectAlgorithm(),  # dir
-    RSAAlgorithm('RSA1_5', 'RSAES-PKCS1-v1_5', padding.PKCS1v15()),
+    RSAAlgorithm("RSA1_5", "RSAES-PKCS1-v1_5", padding.PKCS1v15()),
     RSAAlgorithm(
-        'RSA-OAEP', 'RSAES OAEP using default parameters',
-        padding.OAEP(padding.MGF1(hashes.SHA1()), hashes.SHA1(), None)),
+        "RSA-OAEP",
+        "RSAES OAEP using default parameters",
+        padding.OAEP(padding.MGF1(hashes.SHA1()), hashes.SHA1(), None),
+    ),
     RSAAlgorithm(
-        'RSA-OAEP-256', 'RSAES OAEP using SHA-256 and MGF1 with SHA-256',
-        padding.OAEP(padding.MGF1(hashes.SHA256()), hashes.SHA256(), None)),
-
+        "RSA-OAEP-256",
+        "RSAES OAEP using SHA-256 and MGF1 with SHA-256",
+        padding.OAEP(padding.MGF1(hashes.SHA256()), hashes.SHA256(), None),
+    ),
     AESAlgorithm(128),  # A128KW
     AESAlgorithm(192),  # A192KW
     AESAlgorithm(256),  # A256KW

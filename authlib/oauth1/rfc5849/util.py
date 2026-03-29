@@ -1,8 +1,9 @@
-from authlib.common.urls import quote, unquote
+from authlib.common.urls import quote
+from authlib.common.urls import unquote
 
 
 def escape(s):
-    return quote(s, safe=b'~')
+    return quote(s, safe=b"~")
 
 
 def unescape(s):

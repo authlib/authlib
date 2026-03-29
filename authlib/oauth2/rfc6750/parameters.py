@@ -1,4 +1,5 @@
-from authlib.common.urls import add_params_to_qs, add_params_to_uri
+from authlib.common.urls import add_params_to_qs
+from authlib.common.urls import add_params_to_uri
 
 
 def add_to_uri(token, uri):
@@ -7,7 +8,7 @@ def add_to_uri(token, uri):
 
     http://www.example.com/path?access_token=h480djs93hd8
     """
-    return add_params_to_uri(uri, [('access_token', token)])
+    return add_params_to_uri(uri, [("access_token", token)])
 
 
 def add_to_headers(token, headers=None):
@@ -17,7 +18,7 @@ def add_to_headers(token, headers=None):
     Authorization: Bearer h480djs93hd8
     """
     headers = headers or {}
-    headers['Authorization'] = 'Bearer {}'.format(token)
+    headers["Authorization"] = f"Bearer {token}"
     return headers
 
 
@@ -27,15 +28,15 @@ def add_to_body(token, body=None):
     access_token=h480djs93hd8
     """
     if body is None:
-        body = ''
-    return add_params_to_qs(body, [('access_token', token)])
+        body = ""
+    return add_params_to_qs(body, [("access_token", token)])
 
 
-def add_bearer_token(token, uri, headers, body, placement='header'):
-    if placement in ('uri', 'url', 'query'):
+def add_bearer_token(token, uri, headers, body, placement="header"):
+    if placement in ("uri", "url", "query"):
         uri = add_to_uri(token, uri)
-    elif placement in ('header', 'headers'):
+    elif placement in ("header", "headers"):
         headers = add_to_headers(token, headers)
-    elif placement == 'body':
+    elif placement == "body":
         body = add_to_body(token, body)
     return uri, headers, body

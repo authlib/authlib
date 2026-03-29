@@ -10,6 +10,14 @@ JSON Web Signature (JWS) represents content secured with digital
 signatures or Message Authentication Codes (MACs) using JSON-based
 data structures.
 
+.. important::
+
+    We are splitting the ``jose`` module into a separated package. You may be
+    interested in joserfc_.
+
+.. _joserfc: https://jose.authlib.org/en/dev/guide/jws/
+
+
 There are two types of JWS Serializations:
 
 1. JWS Compact Serialization

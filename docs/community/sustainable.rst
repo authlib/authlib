@@ -31,8 +31,10 @@ Find out the :ref:`benefits for sponsorship <funding>`.
 Commercial License
 ------------------
 
-Authlib is licensed under BSD for open source projects. If you are
-running a business, consider to purchase a commercial license instead.
+Authlib is licensed under BSD-3 for any project.
+If you are running a business, and you need advanced support,
+and wish to help Authlib sustainability,
+please consider to purchase a commercial license instead.
 
 Find more information on
 https://authlib.org/support#commercial-license

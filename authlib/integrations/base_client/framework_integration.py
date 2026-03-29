@@ -2,7 +2,7 @@ import json
 import time
 
 
-class FrameworkIntegration(object):
+class FrameworkIntegration:
     expires_in = 3600
 
     def __init__(self, name, cache=None):
@@ -20,41 +20,42 @@ class FrameworkIntegration(object):
 
     def _clear_session_state(self, session):
         now = time.time()
+        prefix = f"_state_{self.name}"
         for key in dict(session):
-            if '_authlib_' in key:
-                # TODO: remove in future
-                session.pop(key)
-            elif key.startswith('_state_'):
+            if key.startswith(prefix):
                 value = session[key]
-                exp = value.get('exp')
+                exp = value.get("exp")
                 if not exp or exp < now:
                     session.pop(key)
 
     def get_state_data(self, session, state):
-        key = f'_state_{self.name}_{state}'
+        key = f"_state_{self.name}_{state}"
+        session_data = session.get(key)
+        if not session_data:
+            return None
         if self.cache:
-            value = self._get_cache_data(key)
+            cached_value = self._get_cache_data(key)
         else:
-            value = session.get(key)
-        if value:
-            return value.get('data')
+            cached_value = session_data
+        if cached_value:
+            return cached_value.get("data")
         return None
 
     def set_state_data(self, session, state, data):
-        key = f'_state_{self.name}_{state}'
+        key = f"_state_{self.name}_{state}"
+        now = time.time()
         if self.cache:
-            self.cache.set(key, json.dumps({'data': data}), self.expires_in)
+            self.cache.set(key, json.dumps({"data": data}), self.expires_in)
+            session[key] = {"exp": now + self.expires_in}
         else:
-            now = time.time()
-            session[key] = {'data': data, 'exp': now + self.expires_in}
+            session[key] = {"data": data, "exp": now + self.expires_in}
 
     def clear_state_data(self, session, state):
-        key = f'_state_{self.name}_{state}'
+        key = f"_state_{self.name}_{state}"
         if self.cache:
             self.cache.delete(key)
-        else:
-            session.pop(key, None)
-            self._clear_session_state(session)
+        session.pop(key, None)
+        self._clear_session_state(session)
 
     def update_token(self, token, refresh_token=None, access_token=None):
         raise NotImplementedError()

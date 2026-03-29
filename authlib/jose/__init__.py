@@ -1,29 +1,39 @@
-"""
-    authlib.jose
-    ~~~~~~~~~~~~
+"""authlib.jose
+~~~~~~~~~~~~
 
-    JOSE implementation in Authlib. Tracking the status of JOSE specs at
-    https://tools.ietf.org/wg/jose/
+JOSE implementation in Authlib. Tracking the status of JOSE specs at
+https://tools.ietf.org/wg/jose/
 """
-from .rfc7515 import (
-    JsonWebSignature, JWSAlgorithm, JWSHeader, JWSObject,
-)
-from .rfc7516 import (
-    JsonWebEncryption, JWEAlgorithm, JWEEncAlgorithm, JWEZipAlgorithm,
-)
-from .rfc7517 import Key, KeySet, JsonWebKey
-from .rfc7518 import (
-    register_jws_rfc7518,
-    register_jwe_rfc7518,
-    ECDHESAlgorithm,
-    OctKey,
-    RSAKey,
-    ECKey,
-)
-from .rfc7519 import JsonWebToken, BaseClaims, JWTClaims
-from .rfc8037 import OKPKey, register_jws_rfc8037
+
+from authlib.deprecate import deprecate
 
 from .errors import JoseError
+from .rfc7515 import JsonWebSignature
+from .rfc7515 import JWSAlgorithm
+from .rfc7515 import JWSHeader
+from .rfc7515 import JWSObject
+from .rfc7516 import JsonWebEncryption
+from .rfc7516 import JWEAlgorithm
+from .rfc7516 import JWEEncAlgorithm
+from .rfc7516 import JWEZipAlgorithm
+from .rfc7517 import JsonWebKey
+from .rfc7517 import Key
+from .rfc7517 import KeySet
+from .rfc7518 import ECDHESAlgorithm
+from .rfc7518 import ECKey
+from .rfc7518 import OctKey
+from .rfc7518 import RSAKey
+from .rfc7518 import register_jwe_rfc7518
+from .rfc7518 import register_jws_rfc7518
+from .rfc7519 import BaseClaims
+from .rfc7519 import JsonWebToken
+from .rfc7519 import JWTClaims
+from .rfc8037 import OKPKey
+from .rfc8037 import register_jws_rfc8037
+
+deprecate(
+    "authlib.jose module is deprecated, please use joserfc instead.", version="2.0.0"
+)
 
 # register algorithms
 register_jws_rfc7518(JsonWebSignature)
@@ -42,19 +52,45 @@ JsonWebKey.JWK_KEY_CLS = {
     OKPKey.kty: OKPKey,
 }
 
-jwt = JsonWebToken()
+jwt = JsonWebToken(
+    [
+        "HS256",
+        "HS384",
+        "HS512",
+        "RS256",
+        "RS384",
+        "RS512",
+        "ES256",
+        "ES256K",
+        "ES384",
+        "ES512",
+        "PS256",
+        "PS384",
+        "PS512",
+        "EdDSA",
+    ]
+)
 
 
 __all__ = [
-    'JoseError',
-
-    'JsonWebSignature', 'JWSAlgorithm', 'JWSHeader', 'JWSObject',
-    'JsonWebEncryption', 'JWEAlgorithm', 'JWEEncAlgorithm', 'JWEZipAlgorithm',
-
-    'JsonWebKey', 'Key', 'KeySet',
-
-    'OctKey', 'RSAKey', 'ECKey', 'OKPKey',
-
-    'JsonWebToken', 'BaseClaims', 'JWTClaims',
-    'jwt',
+    "JoseError",
+    "JsonWebSignature",
+    "JWSAlgorithm",
+    "JWSHeader",
+    "JWSObject",
+    "JsonWebEncryption",
+    "JWEAlgorithm",
+    "JWEEncAlgorithm",
+    "JWEZipAlgorithm",
+    "JsonWebKey",
+    "Key",
+    "KeySet",
+    "OctKey",
+    "RSAKey",
+    "ECKey",
+    "OKPKey",
+    "JsonWebToken",
+    "BaseClaims",
+    "JWTClaims",
+    "jwt",
 ]

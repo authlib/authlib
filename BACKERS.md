@@ -15,6 +15,11 @@ Many thanks to these awesome sponsors and backers.
 <td><img align="middle" width="48" src="https://user-images.githubusercontent.com/290496/67944168-33843980-fc1f-11e9-8f69-6a7515344b92.png"></td>
 <td>For quickly implementing token-based authentication, feel free to check <a href="https://learn.authing.cn/authing/sdk/sdk-for-python">Authing's Python SDK</a>.</td>
 </tr>
+<tr>
+<td><img align="middle" width="48" src="https://avatars.githubusercontent.com/u/105941848?s=200&v=4"></td>
+<td>Kraken is the world's leading customer & culture platform for energy, water & broadband. Licensing enquiries at <a href="https://kraken.tech/">Kraken.tech</a>.
+</td>
+</tr>
 </table>
 
 <table>
@@ -79,6 +84,30 @@ Jun
 <img src="https://avatars.githubusercontent.com/u/6923650?v=4" alt="Malik Piara" width="48" height="48">
 </a><br>
 Malik Piara
+</td>
+<td align="center">
+<a href="https://github.com/alan-eu">
+<img src="https://avatars.githubusercontent.com/u/18175329?v=4" alt="Alan" width="48" height="48">
+</a><br>
+Alan
+</td>
+<td align="center">
+<a href="https://github.com/jeffheaton">
+<img src="https://avatars.githubusercontent.com/u/462761?v=4" alt="Alan" width="48" height="48">
+</a><br>
+Jeff Heaton
+</td>
+<td align="center">
+<a href="https://github.com/birkjernstrom">
+<img src="https://avatars.githubusercontent.com/u/281715?v=4" alt="Alan" width="48" height="48">
+</a><br>
+Birk Jernström
+</td>
+<td align="center">
+<a href="https://github.com/yaal-coop">
+<img src="https://avatars.githubusercontent.com/u/7792703?v=4" alt="Yaal Coop" width="48" height="48">
+</a><br>
+Yaal Coop
 </td>
 </tr>
 </table>

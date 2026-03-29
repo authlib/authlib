@@ -1,195 +1,177 @@
-from flask import json, jsonify
-from authlib.integrations.flask_oauth2 import ResourceProtector, current_token
+import pytest
+from flask import json
+from flask import jsonify
+
+from authlib.integrations.flask_oauth2 import ResourceProtector
+from authlib.integrations.flask_oauth2 import current_token
 from authlib.integrations.sqla_oauth2 import create_bearer_token_validator
-from .models import db, User, Client, Token
-from .oauth2_server import TestCase
-from .oauth2_server import create_authorization_server
 
-require_oauth = ResourceProtector()
-BearerTokenValidator = create_bearer_token_validator(db.session, Token)
-require_oauth.register_token_validator(BearerTokenValidator())
+from .models import Token
+from .oauth2_server import create_bearer_header
 
 
-def create_resource_server(app):
-    @app.route('/user')
-    @require_oauth('profile')
+@pytest.fixture(autouse=True)
+def server(server):
+    return server
+
+
+@pytest.fixture(autouse=True)
+def resource_server(app, db):
+    require_oauth = ResourceProtector()
+    BearerTokenValidator = create_bearer_token_validator(db.session, Token)
+    require_oauth.register_token_validator(BearerTokenValidator())
+
+    @app.route("/user")
+    @require_oauth("profile")
     def user_profile():
         user = current_token.user
         return jsonify(id=user.id, username=user.username)
 
-    @app.route('/user/email')
-    @require_oauth('email')
+    @app.route("/user/email")
+    @require_oauth("email")
     def user_email():
         user = current_token.user
-        return jsonify(email=user.username + '@example.com')
+        return jsonify(email=user.username + "@example.com")
 
-    @app.route('/info')
+    @app.route("/info")
     @require_oauth()
     def public_info():
-        return jsonify(status='ok')
+        return jsonify(status="ok")
 
-    @app.route('/operator-and')
-    @require_oauth(['profile email'])
+    @app.route("/no-parens")
+    @require_oauth
+    def no_parens():
+        return jsonify(status="ok")
+
+    @app.route("/operator-and")
+    @require_oauth(["profile email"])
     def operator_and():
-        return jsonify(status='ok')
+        return jsonify(status="ok")
 
-    @app.route('/operator-or')
-    @require_oauth(['profile', 'email'])
+    @app.route("/operator-or")
+    @require_oauth(["profile", "email"])
     def operator_or():
-        return jsonify(status='ok')
+        return jsonify(status="ok")
 
-    @app.route('/acquire')
+    @app.route("/acquire")
     def test_acquire():
-        with require_oauth.acquire('profile') as token:
+        with require_oauth.acquire("profile") as token:
             user = token.user
             return jsonify(id=user.id, username=user.username)
 
-    @app.route('/optional')
-    @require_oauth('profile', optional=True)
+    @app.route("/optional")
+    @require_oauth("profile", optional=True)
     def test_optional_token():
         if current_token:
             user = current_token.user
             return jsonify(id=user.id, username=user.username)
         else:
-            return jsonify(id=0, username='anonymous')
+            return jsonify(id=0, username="anonymous")
+
+    return require_oauth
 
 
-class AuthorizationTest(TestCase):
-    def test_none_grant(self):
-        create_authorization_server(self.app)
-        authorize_url = (
-            '/oauth/authorize?response_type=token'
-            '&client_id=implicit-client'
-        )
-        rv = self.client.get(authorize_url)
-        self.assertIn(b'unsupported_response_type', rv.data)
+def test_authorization_none_grant(test_client):
+    authorize_url = "/oauth/authorize?response_type=token&client_id=implicit-client"
+    rv = test_client.get(authorize_url)
+    assert b"unsupported_response_type" in rv.data
 
-        rv = self.client.post(authorize_url, data={'user_id': '1'})
-        self.assertNotEqual(rv.status, 200)
+    rv = test_client.post(authorize_url, data={"user_id": "1"})
+    assert rv.status != 200
 
-        rv = self.client.post('/oauth/token', data={
-            'grant_type': 'authorization_code',
-            'code': 'x',
-        })
-        data = json.loads(rv.data)
-        self.assertEqual(data['error'], 'unsupported_grant_type')
+    rv = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": "x",
+        },
+    )
+    data = json.loads(rv.data)
+    assert data["error"] == "unsupported_grant_type"
 
 
-class ResourceTest(TestCase):
-    def prepare_data(self):
-        create_resource_server(self.app)
+def test_invalid_token(test_client, token):
+    rv = test_client.get("/user")
+    assert rv.status_code == 401
+    resp = json.loads(rv.data)
+    assert resp["error"] == "missing_authorization"
 
-        user = User(username='foo')
-        db.session.add(user)
-        db.session.commit()
-        client = Client(
-            user_id=user.id,
-            client_id='resource-client',
-            client_secret='resource-secret',
-        )
-        client.set_client_metadata({
-            'scope': 'profile',
-            'redirect_uris': ['http://localhost/authorized'],
-        })
-        db.session.add(client)
-        db.session.commit()
+    headers = {"Authorization": "invalid token"}
+    rv = test_client.get("/user", headers=headers)
+    assert rv.status_code == 401
+    resp = json.loads(rv.data)
+    assert resp["error"] == "unsupported_token_type"
 
-    def create_token(self, expires_in=3600):
-        token = Token(
-            user_id=1,
-            client_id='resource-client',
-            token_type='bearer',
-            access_token='a1',
-            scope='profile',
-            expires_in=expires_in,
-        )
-        db.session.add(token)
-        db.session.commit()
+    headers = create_bearer_header("invalid")
+    rv = test_client.get("/user", headers=headers)
+    assert rv.status_code == 401
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_token"
 
-    def create_bearer_header(self, token):
-        return {'Authorization': 'Bearer ' + token}
 
-    def test_invalid_token(self):
-        self.prepare_data()
+def test_expired_token(test_client, db, token):
+    token.expires_in = -10
+    db.session.add(token)
+    db.session.commit()
 
-        rv = self.client.get('/user')
-        self.assertEqual(rv.status_code, 401)
-        resp = json.loads(rv.data)
-        self.assertEqual(resp['error'], 'missing_authorization')
+    headers = create_bearer_header("a1")
 
-        headers = {'Authorization': 'invalid token'}
-        rv = self.client.get('/user', headers=headers)
-        self.assertEqual(rv.status_code, 401)
-        resp = json.loads(rv.data)
-        self.assertEqual(resp['error'], 'unsupported_token_type')
+    rv = test_client.get("/user", headers=headers)
+    assert rv.status_code == 401
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_token"
 
-        headers = self.create_bearer_header('invalid')
-        rv = self.client.get('/user', headers=headers)
-        self.assertEqual(rv.status_code, 401)
-        resp = json.loads(rv.data)
-        self.assertEqual(resp['error'], 'invalid_token')
+    rv = test_client.get("/acquire", headers=headers)
+    assert rv.status_code == 401
 
-    def test_expired_token(self):
-        self.prepare_data()
-        self.create_token(-10)
-        headers = self.create_bearer_header('a1')
 
-        rv = self.client.get('/user', headers=headers)
-        self.assertEqual(rv.status_code, 401)
-        resp = json.loads(rv.data)
-        self.assertEqual(resp['error'], 'invalid_token')
+def test_insufficient_token(test_client, token):
+    headers = create_bearer_header("a1")
+    rv = test_client.get("/user/email", headers=headers)
+    assert rv.status_code == 403
+    resp = json.loads(rv.data)
+    assert resp["error"] == "insufficient_scope"
 
-        rv = self.client.get('/acquire', headers=headers)
-        self.assertEqual(rv.status_code, 401)
 
-    def test_insufficient_token(self):
-        self.prepare_data()
-        self.create_token()
-        headers = self.create_bearer_header('a1')
-        rv = self.client.get('/user/email', headers=headers)
-        self.assertEqual(rv.status_code, 403)
-        resp = json.loads(rv.data)
-        self.assertEqual(resp['error'], 'insufficient_scope')
+def test_access_resource(test_client, token):
+    headers = create_bearer_header("a1")
 
-    def test_access_resource(self):
-        self.prepare_data()
-        self.create_token()
-        headers = self.create_bearer_header('a1')
+    rv = test_client.get("/user", headers=headers)
+    resp = json.loads(rv.data)
+    assert resp["username"] == "foo"
 
-        rv = self.client.get('/user', headers=headers)
-        resp = json.loads(rv.data)
-        self.assertEqual(resp['username'], 'foo')
+    rv = test_client.get("/acquire", headers=headers)
+    resp = json.loads(rv.data)
+    assert resp["username"] == "foo"
 
-        rv = self.client.get('/acquire', headers=headers)
-        resp = json.loads(rv.data)
-        self.assertEqual(resp['username'], 'foo')
+    rv = test_client.get("/info", headers=headers)
+    resp = json.loads(rv.data)
+    assert resp["status"] == "ok"
 
-        rv = self.client.get('/info', headers=headers)
-        resp = json.loads(rv.data)
-        self.assertEqual(resp['status'], 'ok')
+    rv = test_client.get("/no-parens", headers=headers)
+    resp = json.loads(rv.data)
+    assert resp["status"] == "ok"
 
-    def test_scope_operator(self):
-        self.prepare_data()
-        self.create_token()
-        headers = self.create_bearer_header('a1')
-        rv = self.client.get('/operator-and', headers=headers)
-        self.assertEqual(rv.status_code, 403)
-        resp = json.loads(rv.data)
-        self.assertEqual(resp['error'], 'insufficient_scope')
 
-        rv = self.client.get('/operator-or', headers=headers)
-        self.assertEqual(rv.status_code, 200)
+def test_scope_operator(test_client, token):
+    headers = create_bearer_header("a1")
+    rv = test_client.get("/operator-and", headers=headers)
+    assert rv.status_code == 403
+    resp = json.loads(rv.data)
+    assert resp["error"] == "insufficient_scope"
 
-    def test_optional_token(self):
-        self.prepare_data()
-        rv = self.client.get('/optional')
-        self.assertEqual(rv.status_code, 200)
-        resp = json.loads(rv.data)
-        self.assertEqual(resp['username'], 'anonymous')
+    rv = test_client.get("/operator-or", headers=headers)
+    assert rv.status_code == 200
 
-        self.create_token()
-        headers = self.create_bearer_header('a1')
-        rv = self.client.get('/optional', headers=headers)
-        self.assertEqual(rv.status_code, 200)
-        resp = json.loads(rv.data)
-        self.assertEqual(resp['username'], 'foo')
+
+def test_optional_token(test_client, token):
+    rv = test_client.get("/optional")
+    assert rv.status_code == 200
+    resp = json.loads(rv.data)
+    assert resp["username"] == "anonymous"
+
+    headers = create_bearer_header("a1")
+    rv = test_client.get("/optional", headers=headers)
+    assert rv.status_code == 200
+    resp = json.loads(rv.data)
+    assert resp["username"] == "foo"

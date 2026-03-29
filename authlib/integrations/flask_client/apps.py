@@ -1,18 +1,22 @@
-from flask import redirect, request, session
-from flask import _app_ctx_stack
-from ..requests_client import OAuth1Session, OAuth2Session
-from ..base_client import (
-    BaseApp, OAuthError,
-    OAuth1Mixin, OAuth2Mixin, OpenIDMixin,
-)
+from flask import g
+from flask import redirect
+from flask import request
+from flask import session
+
+from ..base_client import BaseApp
+from ..base_client import OAuth1Mixin
+from ..base_client import OAuth2Mixin
+from ..base_client import OAuthError
+from ..base_client import OpenIDMixin
+from ..requests_client import OAuth1Session
+from ..requests_client import OAuth2Session
 
 
-class FlaskAppMixin(object):
+class FlaskAppMixin:
     @property
     def token(self):
-        ctx = _app_ctx_stack.top
-        attr = '_oauth_token_{}'.format(self.name)
-        token = getattr(ctx, attr, None)
+        attr = f"_oauth_token_{self.name}"
+        token = g.get(attr)
         if token:
             return token
         if self._fetch_token:
@@ -22,19 +26,18 @@ class FlaskAppMixin(object):
 
     @token.setter
     def token(self, token):
-        ctx = _app_ctx_stack.top
-        attr = '_oauth_token_{}'.format(self.name)
-        setattr(ctx, attr, token)
+        attr = f"_oauth_token_{self.name}"
+        setattr(g, attr, token)
 
     def _get_requested_token(self, *args, **kwargs):
         return self.token
 
     def save_authorize_data(self, **kwargs):
-        state = kwargs.pop('state', None)
+        state = kwargs.pop("state", None)
         if state:
             self.framework.set_state_data(session, state, kwargs)
         else:
-            raise RuntimeError('Missing state value')
+            raise RuntimeError("Missing state value")
 
     def authorize_redirect(self, redirect_uri=None, **kwargs):
         """Create a HTTP Redirect for Authorization Endpoint.
@@ -45,7 +48,7 @@ class FlaskAppMixin(object):
         """
         rv = self.create_authorization_url(redirect_uri, **kwargs)
         self.save_authorize_data(redirect_uri=redirect_uri, **rv)
-        return redirect(rv['url'])
+        return redirect(rv["url"])
 
 
 class FlaskOAuth1App(FlaskAppMixin, OAuth1Mixin, BaseApp):
@@ -57,7 +60,7 @@ class FlaskOAuth1App(FlaskAppMixin, OAuth1Mixin, BaseApp):
         :return: A token dict.
         """
         params = request.args.to_dict(flat=True)
-        state = params.get('oauth_token')
+        state = params.get("oauth_token")
         if not state:
             raise OAuthError(description='Missing "oauth_token" parameter')
 
@@ -65,7 +68,7 @@ class FlaskOAuth1App(FlaskAppMixin, OAuth1Mixin, BaseApp):
         if not data:
             raise OAuthError(description='Missing "request_token" in temporary data')
 
-        params['request_token'] = data['request_token']
+        params["request_token"] = data["request_token"]
         params.update(kwargs)
         self.framework.clear_state_data(session, state)
         token = self.fetch_access_token(**params)
@@ -76,35 +79,86 @@ class FlaskOAuth1App(FlaskAppMixin, OAuth1Mixin, BaseApp):
 class FlaskOAuth2App(FlaskAppMixin, OAuth2Mixin, OpenIDMixin, BaseApp):
     client_cls = OAuth2Session
 
+    def logout_redirect(
+        self, post_logout_redirect_uri=None, id_token_hint=None, **kwargs
+    ):
+        """Create a HTTP Redirect for End Session Endpoint (RP-Initiated Logout).
+
+        :param post_logout_redirect_uri: URI to redirect after logout.
+        :param id_token_hint: ID Token previously issued to the RP.
+        :param kwargs: Extra parameters (state, client_id, logout_hint, ui_locales).
+        :return: A HTTP redirect response.
+        """
+        result = self.create_logout_url(
+            post_logout_redirect_uri=post_logout_redirect_uri,
+            id_token_hint=id_token_hint,
+            **kwargs,
+        )
+        if result.get("state"):
+            self.framework.set_state_data(
+                session,
+                result["state"],
+                {
+                    "post_logout_redirect_uri": post_logout_redirect_uri,
+                },
+            )
+        return redirect(result["url"])
+
+    def validate_logout_response(self):
+        """Validate the state parameter from the logout callback.
+
+        :return: The state data dict.
+        :raises OAuthError: If state is missing or invalid.
+        """
+        state = request.args.get("state")
+        if not state:
+            raise OAuthError(description='Missing "state" parameter')
+
+        state_data = self.framework.get_state_data(session, state)
+        if not state_data:
+            raise OAuthError(description='Invalid "state" parameter')
+
+        self.framework.clear_state_data(session, state)
+        return state_data
+
     def authorize_access_token(self, **kwargs):
         """Fetch access token in one step.
 
         :return: A token dict.
         """
-        if request.method == 'GET':
-            error = request.args.get('error')
+        if request.method == "GET":
+            error = request.args.get("error")
             if error:
-                description = request.args.get('error_description')
+                description = request.args.get("error_description")
                 raise OAuthError(error=error, description=description)
 
             params = {
-                'code': request.args['code'],
-                'state': request.args.get('state'),
+                "code": request.args.get("code"),
+                "state": request.args.get("state"),
             }
         else:
             params = {
-                'code': request.form['code'],
-                'state': request.form.get('state'),
+                "code": request.form.get("code"),
+                "state": request.form.get("state"),
             }
 
-        claims_options = kwargs.pop('claims_options', None)
-        state_data = self.framework.get_state_data(session, params.get('state'))
-        self.framework.clear_state_data(session, params.get('state'))
+        state_data = self.framework.get_state_data(session, params.get("state"))
+        self.framework.clear_state_data(session, params.get("state"))
         params = self._format_state_params(state_data, params)
+
+        claims_options = kwargs.pop("claims_options", None)
+        claims_cls = kwargs.pop("claims_cls", None)
+        leeway = kwargs.pop("leeway", 120)
         token = self.fetch_access_token(**params, **kwargs)
         self.token = token
 
-        if 'id_token' in token and 'nonce' in state_data:
-            userinfo = self.parse_id_token(token, nonce=state_data['nonce'], claims_options=claims_options)
-            token['userinfo'] = userinfo
+        if "id_token" in token and "nonce" in state_data:
+            userinfo = self.parse_id_token(
+                token,
+                nonce=state_data["nonce"],
+                claims_options=claims_options,
+                claims_cls=claims_cls,
+                leeway=leeway,
+            )
+            token["userinfo"] = userinfo
         return token

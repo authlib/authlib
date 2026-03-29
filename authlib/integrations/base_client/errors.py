@@ -2,29 +2,29 @@ from authlib.common.errors import AuthlibBaseError
 
 
 class OAuthError(AuthlibBaseError):
-    error = 'oauth_error'
+    error = "oauth_error"
 
 
 class MissingRequestTokenError(OAuthError):
-    error = 'missing_request_token'
+    error = "missing_request_token"
 
 
 class MissingTokenError(OAuthError):
-    error = 'missing_token'
+    error = "missing_token"
 
 
 class TokenExpiredError(OAuthError):
-    error = 'token_expired'
+    error = "token_expired"
 
 
 class InvalidTokenError(OAuthError):
-    error = 'token_invalid'
+    error = "token_invalid"
 
 
 class UnsupportedTokenTypeError(OAuthError):
-    error = 'unsupported_token_type'
+    error = "unsupported_token_type"
 
 
 class MismatchingStateError(OAuthError):
-    error = 'mismatching_state'
-    description = 'CSRF Warning! State not equal in request and response.'
+    error = "mismatching_state"
+    description = "CSRF Warning! State not equal in request and response."

@@ -2,8 +2,7 @@
 name: Bug report
 about: Create a report to help us improve
 title: ''
-labels: bug
-assignees: lepture
+type: 'Bug'
 
 ---
 
@@ -13,7 +12,7 @@ A clear and concise description of what the bug is.
 
 **Error Stacks**
 
-```
+```python
 put error stacks here
 ```
 

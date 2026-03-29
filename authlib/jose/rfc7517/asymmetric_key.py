@@ -1,22 +1,26 @@
+from cryptography.hazmat.primitives.serialization import BestAvailableEncryption
+from cryptography.hazmat.primitives.serialization import Encoding
+from cryptography.hazmat.primitives.serialization import NoEncryption
+from cryptography.hazmat.primitives.serialization import PrivateFormat
+from cryptography.hazmat.primitives.serialization import PublicFormat
+
 from authlib.common.encoding import to_bytes
-from cryptography.hazmat.primitives.serialization import (
-    Encoding, PrivateFormat, PublicFormat,
-    BestAvailableEncryption, NoEncryption,
-)
+
 from ._cryptography_key import load_pem_key
 from .base_key import Key
 
 
 class AsymmetricKey(Key):
     """This is the base class for a JSON Web Key."""
+
     PUBLIC_KEY_FIELDS = []
     PRIVATE_KEY_FIELDS = []
     PRIVATE_KEY_CLS = bytes
     PUBLIC_KEY_CLS = bytes
-    SSH_PUBLIC_PREFIX = b''
+    SSH_PUBLIC_PREFIX = b""
 
     def __init__(self, private_key=None, public_key=None, options=None):
-        super(AsymmetricKey, self).__init__(options)
+        super().__init__(options)
         self.private_key = private_key
         self.public_key = public_key
 
@@ -24,7 +28,7 @@ class AsymmetricKey(Key):
     def public_only(self):
         if self.private_key:
             return False
-        if 'd' in self.tokens:
+        if "d" in self.tokens:
             return False
         return True
 
@@ -59,7 +63,7 @@ class AsymmetricKey(Key):
         return self.private_key
 
     def load_raw_key(self):
-        if 'd' in self.tokens:
+        if "d" in self.tokens:
             self.private_key = self.load_private_key()
         else:
             self.public_key = self.load_public_key()
@@ -85,19 +89,19 @@ class AsymmetricKey(Key):
     def as_dict(self, is_private=False, **params):
         """Represent this key as a dict of the JSON Web Key."""
         tokens = self.tokens
-        if is_private and 'd' not in tokens:
-            raise ValueError('This is a public key')
+        if is_private and "d" not in tokens:
+            raise ValueError("This is a public key")
 
-        kid = tokens.get('kid')
-        if 'd' in tokens and not is_private:
+        kid = tokens.get("kid")
+        if "d" in tokens and not is_private:
             # filter out private fields
             tokens = {k: tokens[k] for k in tokens if k in self.PUBLIC_KEY_FIELDS}
-            tokens['kty'] = self.kty
+            tokens["kty"] = self.kty
             if kid:
-                tokens['kid'] = kid
+                tokens["kid"] = kid
 
         if not kid:
-            tokens['kid'] = self.thumbprint()
+            tokens["kid"] = self.thumbprint()
 
         tokens.update(params)
         return tokens
@@ -116,18 +120,17 @@ class AsymmetricKey(Key):
         :param password: encrypt private key with password
         :return: bytes
         """
-
-        if encoding is None or encoding == 'PEM':
+        if encoding is None or encoding == "PEM":
             encoding = Encoding.PEM
-        elif encoding == 'DER':
+        elif encoding == "DER":
             encoding = Encoding.DER
         else:
-            raise ValueError('Invalid encoding: {!r}'.format(encoding))
+            raise ValueError(f"Invalid encoding: {encoding!r}")
 
         raw_key = self.as_key(is_private)
         if is_private:
             if not raw_key:
-                raise ValueError('This is a public key')
+                raise ValueError("This is a public key")
             if password is None:
                 encryption_algorithm = NoEncryption()
             else:
@@ -146,7 +149,7 @@ class AsymmetricKey(Key):
         return self.as_bytes(is_private=is_private, password=password)
 
     def as_der(self, is_private=False, password=None):
-        return self.as_bytes(encoding='DER', is_private=is_private, password=password)
+        return self.as_bytes(encoding="DER", is_private=is_private, password=password)
 
     @classmethod
     def import_dict_key(cls, raw, options=None):
@@ -170,7 +173,7 @@ class AsymmetricKey(Key):
             key = cls.import_dict_key(raw, options)
         else:
             if options is not None:
-                password = options.pop('password', None)
+                password = options.pop("password", None)
             else:
                 password = None
             raw_key = load_pem_key(raw, cls.SSH_PUBLIC_PREFIX, password=password)
@@ -179,12 +182,14 @@ class AsymmetricKey(Key):
             elif isinstance(raw_key, cls.PRIVATE_KEY_CLS):
                 key = cls(private_key=raw_key, options=options)
             else:
-                raise ValueError('Invalid data for importing key')
+                raise ValueError("Invalid data for importing key")
         return key
 
     @classmethod
     def validate_raw_key(cls, key):
-        return isinstance(key, cls.PUBLIC_KEY_CLS) or isinstance(key, cls.PRIVATE_KEY_CLS)
+        return isinstance(key, cls.PUBLIC_KEY_CLS) or isinstance(
+            key, cls.PRIVATE_KEY_CLS
+        )
 
     @classmethod
     def generate_key(cls, crv_or_size, options=None, is_private=False):

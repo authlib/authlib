@@ -1,8 +1,11 @@
 import functools
-from flask import json, Response
+
+from flask import Response
+from flask import g
+from flask import json
 from flask import request as _req
-from flask import _app_ctx_stack
 from werkzeug.local import LocalProxy
+
 from authlib.consts import default_json_headers
 from authlib.oauth1 import ResourceProtector as _ResourceProtector
 from authlib.oauth1.errors import OAuth1Error
@@ -24,7 +27,9 @@ class ResourceProtector(_ResourceProtector):
     A ``query_token`` method accept two parameters, ``client_id`` and ``oauth_token``::
 
         def query_token(client_id, oauth_token):
-            return Token.query.filter_by(client_id=client_id, oauth_token=oauth_token).first()
+            return Token.query.filter_by(
+                client_id=client_id, oauth_token=oauth_token
+            ).first()
 
     And for ``exists_nonce``, if using cache, we have a built-in hook to create this method::
 
@@ -35,12 +40,16 @@ class ResourceProtector(_ResourceProtector):
     Then initialize the resource protector with those methods::
 
         require_oauth = ResourceProtector(
-            app, query_client=query_client,
-            query_token=query_token, exists_nonce=exists_nonce,
+            app,
+            query_client=query_client,
+            query_token=query_token,
+            exists_nonce=exists_nonce,
         )
     """
-    def __init__(self, app=None, query_client=None,
-                 query_token=None, exists_nonce=None):
+
+    def __init__(
+        self, app=None, query_client=None, query_token=None, exists_nonce=None
+    ):
         self.query_client = query_client
         self.query_token = query_token
         self._exists_nonce = exists_nonce
@@ -49,8 +58,7 @@ class ResourceProtector(_ResourceProtector):
         if app:
             self.init_app(app)
 
-    def init_app(self, app, query_client=None, query_token=None,
-                 exists_nonce=None):
+    def init_app(self, app, query_client=None, query_token=None, exists_nonce=None):
         if query_client is not None:
             self.query_client = query_client
         if query_token is not None:
@@ -58,7 +66,7 @@ class ResourceProtector(_ResourceProtector):
         if exists_nonce is not None:
             self._exists_nonce = exists_nonce
 
-        methods = app.config.get('OAUTH1_SUPPORTED_SIGNATURE_METHODS')
+        methods = app.config.get("OAUTH1_SUPPORTED_SIGNATURE_METHODS")
         if methods and isinstance(methods, (list, tuple)):
             self.SUPPORTED_SIGNATURE_METHODS = methods
 
@@ -81,17 +89,13 @@ class ResourceProtector(_ResourceProtector):
 
     def acquire_credential(self):
         req = self.validate_request(
-            _req.method,
-            _req.url,
-            _req.form.to_dict(flat=True),
-            _req.headers
+            _req.method, _req.url, _req.form.to_dict(flat=True), _req.headers
         )
-        ctx = _app_ctx_stack.top
-        ctx.authlib_server_oauth1_credential = req.credential
+        g.authlib_server_oauth1_credential = req.credential
         return req.credential
 
     def __call__(self, scope=None):
-        def wrapper(f):
+        def decorator(f):
             @functools.wraps(f)
             def decorated(*args, **kwargs):
                 try:
@@ -104,13 +108,16 @@ class ResourceProtector(_ResourceProtector):
                         headers=default_json_headers,
                     )
                 return f(*args, **kwargs)
+
             return decorated
-        return wrapper
+
+        if callable(scope):
+            return decorator(scope)
+        return decorator
 
 
 def _get_current_credential():
-    ctx = _app_ctx_stack.top
-    return getattr(ctx, 'authlib_server_oauth1_credential', None)
+    return g.get("authlib_server_oauth1_credential")
 
 
 current_credential = LocalProxy(_get_current_credential)

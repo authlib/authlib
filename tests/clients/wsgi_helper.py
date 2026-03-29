@@ -1,20 +1,20 @@
 import json
+
 from werkzeug.wrappers import Request as WSGIRequest
 from werkzeug.wrappers import Response as WSGIResponse
 
 
 class MockDispatch:
-    def __init__(self, body=b'', status_code=200, headers=None,
-                 assert_func=None):
+    def __init__(self, body=b"", status_code=200, headers=None, assert_func=None):
         if headers is None:
             headers = {}
         if isinstance(body, dict):
             body = json.dumps(body).encode()
-            headers['Content-Type'] = 'application/json'
+            headers["Content-Type"] = "application/json"
         else:
             if isinstance(body, str):
                 body = body.encode()
-            headers['Content-Type'] = 'application/x-www-form-urlencoded'
+            headers["Content-Type"] = "application/x-www-form-urlencoded"
 
         self.body = body
         self.status_code = status_code

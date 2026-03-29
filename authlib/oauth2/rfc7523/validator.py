@@ -1,54 +1,62 @@
-import time
 import logging
-from authlib.jose import jwt, JoseError, JWTClaims
+import time
+
+from joserfc import jwt
+from joserfc.errors import JoseError
+
+from authlib._joserfc_helpers import import_any_key
+
 from ..rfc6749 import TokenMixin
 from ..rfc6750 import BearerTokenValidator
 
 logger = logging.getLogger(__name__)
 
 
-class JWTBearerToken(TokenMixin, JWTClaims):
+class JWTBearerToken(TokenMixin, dict):
     def check_client(self, client):
-        return self['client_id'] == client.get_client_id()
+        return self["client_id"] == client.get_client_id()
 
     def get_scope(self):
-        return self.get('scope')
+        return self.get("scope")
 
     def get_expires_in(self):
-        return self['exp'] - self['iat']
+        return self["exp"] - self["iat"]
 
     def is_expired(self):
-        return self['exp'] < time.time()
+        return self["exp"] < time.time()
 
     def is_revoked(self):
         return False
 
 
 class JWTBearerTokenValidator(BearerTokenValidator):
-    TOKEN_TYPE = 'bearer'
+    TOKEN_TYPE = "bearer"
     token_cls = JWTBearerToken
 
     def __init__(self, public_key, issuer=None, realm=None, **extra_attributes):
-        super(JWTBearerTokenValidator, self).__init__(realm, **extra_attributes)
-        self.public_key = public_key
+        super().__init__(realm, **extra_attributes)
+        self.public_key = import_any_key(public_key)
         claims_options = {
-            'exp': {'essential': True},
-            'client_id': {'essential': True},
-            'grant_type': {'essential': True},
+            "exp": {"essential": True},
+            "client_id": {"essential": True},
+            "grant_type": {"essential": True},
         }
         if issuer:
-            claims_options['iss'] = {'essential': True, 'value': issuer}
+            claims_options["iss"] = {"essential": True, "value": issuer}
         self.claims_options = claims_options
 
-    def authenticate_token(self, token_string):
+    def authenticate_token(self, token_string: str):
         try:
-            claims = jwt.decode(
-                token_string, self.public_key,
-                claims_options=self.claims_options,
-                claims_cls=self.token_cls,
-            )
-            claims.validate()
-            return claims
+            token = jwt.decode(token_string, self.public_key)
         except JoseError as error:
-            logger.debug('Authenticate token failed. %r', error)
+            logger.debug("Authenticate token failed. %r", error)
             return None
+
+        claims_requests = jwt.JWTClaimsRegistry(leeway=60, **self.claims_options)
+        try:
+            claims_requests.validate(token.claims)
+        except JoseError as error:
+            logger.debug("Authenticate token failed. %r", error)
+            return None
+
+        return JWTBearerToken(token.claims)

@@ -1,26 +1,36 @@
+from authlib.common.errors import ContinueIteration
+from authlib.deprecate import deprecate
+
 from .authenticate_client import ClientAuthentication
-from .errors import (
-    OAuth2Error,
-    InvalidScopeError,
-    UnsupportedResponseTypeError,
-    UnsupportedGrantTypeError,
-)
+from .endpoint import Endpoint
+from .endpoint import EndpointRequest
+from .errors import InvalidScopeError
+from .errors import OAuth2Error
+from .errors import UnsupportedGrantTypeError
+from .errors import UnsupportedResponseTypeError
+from .hooks import Hookable
+from .hooks import hooked
+from .requests import JsonRequest
+from .requests import OAuth2Request
 from .util import scope_to_list
 
 
-class AuthorizationServer(object):
+class AuthorizationServer(Hookable):
     """Authorization server that handles Authorization Endpoint and Token
     Endpoint.
 
     :param scopes_supported: A list of supported scopes by this authorization server.
     """
+
     def __init__(self, scopes_supported=None):
+        super().__init__()
         self.scopes_supported = scopes_supported
         self._token_generators = {}
         self._client_auth = None
         self._authorization_grants = []
         self._token_grants = []
         self._endpoints = {}
+        self._extensions = []
 
     def query_client(self, client_id):
         """Query OAuth client by client_id. The client model class MUST
@@ -33,8 +43,15 @@ class AuthorizationServer(object):
         """Define function to save the generated token into database."""
         raise NotImplementedError()
 
-    def generate_token(self, grant_type, client, user=None, scope=None,
-                       expires_in=None, include_refresh_token=True):
+    def generate_token(
+        self,
+        grant_type,
+        client,
+        user=None,
+        scope=None,
+        expires_in=None,
+        include_refresh_token=True,
+    ):
         """Generate the token dict.
 
         :param grant_type: current requested grant_type.
@@ -49,40 +66,57 @@ class AuthorizationServer(object):
         func = self._token_generators.get(grant_type)
         if not func:
             # default generator for all grant types
-            func = self._token_generators.get('default')
+            func = self._token_generators.get("default")
         if not func:
-            raise RuntimeError('No configured token generator')
+            raise RuntimeError("No configured token generator")
 
         return func(
-            grant_type=grant_type, client=client, user=user, scope=scope,
-            expires_in=expires_in, include_refresh_token=include_refresh_token)
+            grant_type=grant_type,
+            client=client,
+            user=user,
+            scope=scope,
+            expires_in=expires_in,
+            include_refresh_token=include_refresh_token,
+        )
 
     def register_token_generator(self, grant_type, func):
         """Register a function as token generator for the given ``grant_type``.
         Developers MUST register a default token generator with a special
         ``grant_type=default``::
 
-            def generate_bearer_token(grant_type, client, user=None, scope=None,
-                                      expires_in=None, include_refresh_token=True):
-                token = {'token_type': 'Bearer', 'access_token': ...}
+            def generate_bearer_token(
+                grant_type,
+                client,
+                user=None,
+                scope=None,
+                expires_in=None,
+                include_refresh_token=True,
+            ):
+                token = {"token_type": "Bearer", "access_token": ...}
                 if include_refresh_token:
-                    token['refresh_token'] = ...
+                    token["refresh_token"] = ...
                 ...
                 return token
 
-            authorization_server.register_token_generator('default', generate_bearer_token)
+
+            authorization_server.register_token_generator(
+                "default", generate_bearer_token
+            )
 
         If you register a generator for a certain grant type, that generator will only works
         for the given grant type::
 
-            authorization_server.register_token_generator('client_credentials', generate_bearer_token)
+            authorization_server.register_token_generator(
+                "client_credentials",
+                generate_bearer_token,
+            )
 
         :param grant_type: string name of the grant type
         :param func: a function to generate token
         """
         self._token_generators[grant_type] = func
 
-    def authenticate_client(self, request, methods, endpoint='token'):
+    def authenticate_client(self, request, methods, endpoint="token"):
         """Authenticate client via HTTP request information with the given
         methods, such as ``client_secret_basic``, ``client_secret_post``.
         """
@@ -104,18 +138,23 @@ class AuthorizationServer(object):
         an example for this method::
 
             def authenticate_client_via_custom(query_client, request):
-                client_id = request.headers['X-Client-Id']
+                client_id = request.headers["X-Client-Id"]
                 client = query_client(client_id)
                 do_some_validation(client)
                 return client
 
+
             authorization_server.register_client_auth_method(
-                'custom', authenticate_client_via_custom)
+                "custom", authenticate_client_via_custom
+            )
         """
         if self._client_auth is None and self.query_client:
             self._client_auth = ClientAuthentication(self.query_client)
 
         self._client_auth.register(method, func)
+
+    def register_extension(self, extension):
+        self._extensions.append(extension(self))
 
     def get_error_uri(self, request, error):
         """Return a URI for the given error, framework may implement this method."""
@@ -127,7 +166,7 @@ class AuthorizationServer(object):
         """
         raise NotImplementedError()
 
-    def create_oauth2_request(self, request):
+    def create_oauth2_request(self, request) -> OAuth2Request:
         """This method MUST be implemented in framework integrations. It is
         used to create an OAuth2Request instance.
 
@@ -136,7 +175,7 @@ class AuthorizationServer(object):
         """
         raise NotImplementedError()
 
-    def create_json_request(self, request):
+    def create_json_request(self, request) -> JsonRequest:
         """This method MUST be implemented in framework integrations. It is
         used to create an HttpRequest instance.
 
@@ -149,14 +188,14 @@ class AuthorizationServer(object):
         """Return HTTP response. Framework MUST implement this function."""
         raise NotImplementedError()
 
-    def validate_requested_scope(self, scope, state=None):
+    def validate_requested_scope(self, scope):
         """Validate if requested scope is supported by Authorization Server.
         Developers CAN re-write this method to meet your needs.
         """
         if scope and self.scopes_supported:
             scopes = set(scope_to_list(scope))
             if not set(self.scopes_supported).issuperset(scopes):
-                raise InvalidScopeError(state=state)
+                raise InvalidScopeError()
 
     def register_grant(self, grant_cls, extensions=None):
         """Register a grant class into the endpoint registry. Developers
@@ -172,41 +211,63 @@ class AuthorizationServer(object):
         :param grant_cls: a grant class.
         :param extensions: extensions for the grant class.
         """
-        if hasattr(grant_cls, 'check_authorization_endpoint'):
+        if hasattr(grant_cls, "check_authorization_endpoint"):
             self._authorization_grants.append((grant_cls, extensions))
-        if hasattr(grant_cls, 'check_token_endpoint'):
+        if hasattr(grant_cls, "check_token_endpoint"):
             self._token_grants.append((grant_cls, extensions))
 
-    def register_endpoint(self, endpoint_cls):
+    def register_endpoint(self, endpoint: type[Endpoint] | Endpoint):
         """Add extra endpoint to authorization server. e.g.
         RevocationEndpoint::
 
             authorization_server.register_endpoint(RevocationEndpoint)
 
-        :param endpoint_cls: A endpoint class
+        :param endpoint: An endpoint class or instance.
         """
-        self._endpoints[endpoint_cls.ENDPOINT_NAME] = endpoint_cls(self)
+        if isinstance(endpoint, type):
+            endpoint = endpoint(self)
+        else:
+            endpoint.server = self
 
+        endpoints = self._endpoints.setdefault(endpoint.ENDPOINT_NAME, [])
+        endpoints.append(endpoint)
+
+    @hooked
     def get_authorization_grant(self, request):
         """Find the authorization grant for current request.
 
         :param request: OAuth2Request instance.
         :return: grant instance
         """
-        for (grant_cls, extensions) in self._authorization_grants:
+        for grant_cls, extensions in self._authorization_grants:
             if grant_cls.check_authorization_endpoint(request):
                 return _create_grant(grant_cls, extensions, request, self)
-        raise UnsupportedResponseTypeError(request.response_type)
+
+        raise UnsupportedResponseTypeError(
+            f"The response type '{request.payload.response_type}' is not supported by the server.",
+            request.payload.response_type,
+            redirect_uri=request.payload.redirect_uri,
+        )
 
     def get_consent_grant(self, request=None, end_user=None):
         """Validate current HTTP request for authorization page. This page
         is designed for resource owner to grant or deny the authorization.
         """
         request = self.create_oauth2_request(request)
-        request.user = end_user
 
-        grant = self.get_authorization_grant(request)
-        grant.validate_consent_request()
+        try:
+            request.user = end_user
+
+            grant = self.get_authorization_grant(request)
+            grant.validate_no_multiple_request_parameter(request)
+            grant.validate_consent_request()
+
+        except OAuth2Error as error:
+            # REQUIRED if a "state" parameter was present in the client
+            # authorization request.  The exact value received from the
+            # client.
+            error.state = request.payload.state
+            raise
         return grant
 
     def get_token_grant(self, request):
@@ -215,29 +276,79 @@ class AuthorizationServer(object):
         :param request: OAuth2Request instance.
         :return: grant instance
         """
-        for (grant_cls, extensions) in self._token_grants:
+        for grant_cls, extensions in self._token_grants:
             if grant_cls.check_token_endpoint(request):
                 return _create_grant(grant_cls, extensions, request, self)
-        raise UnsupportedGrantTypeError(request.grant_type)
+        raise UnsupportedGrantTypeError(request.payload.grant_type)
+
+    def validate_endpoint_request(self, name, request=None) -> EndpointRequest:
+        """Validate endpoint request and return the validated request object.
+
+        Use this for interactive endpoints where you need to handle UI
+        between validation and response creation.
+
+        :param name: Endpoint name
+        :param request: HTTP request instance
+        :returns: Validated EndpointRequest object
+        :raises OAuth2Error: If validation fails
+        :raises RuntimeError: If endpoint not found
+
+        Example::
+
+            req = server.validate_endpoint_request("end_session")
+            if req.needs_confirmation:
+                return render_template("confirm_logout.html", ...)
+            return server.create_endpoint_response("end_session", req)
+        """
+        if name not in self._endpoints:
+            raise RuntimeError(f"There is no '{name}' endpoint.")
+
+        endpoint = self._endpoints[name][0]
+        request = endpoint.create_endpoint_request(request)
+        return endpoint.validate_request(request)
 
     def create_endpoint_response(self, name, request=None):
         """Validate endpoint request and create endpoint response.
 
+        Can be called with:
+        - A raw HTTP request or None: validates and responds in one step
+        - A validated EndpointRequest: skips validation, creates response directly
+
         :param name: Endpoint name
-        :param request: HTTP request instance.
-        :return: Response
+        :param request: HTTP request instance or validated EndpointRequest
+        :return: Response, or None if the endpoint returns None
         """
         if name not in self._endpoints:
-            raise RuntimeError(f'There is no "{name}" endpoint.')
+            raise RuntimeError(f"There is no '{name}' endpoint.")
 
-        endpoint = self._endpoints[name]
-        request = endpoint.create_endpoint_request(request)
-        try:
-            return self.handle_response(*endpoint(request))
-        except OAuth2Error as error:
-            return self.handle_error_response(request, error)
+        endpoints = self._endpoints[name]
 
-    def create_authorization_response(self, request=None, grant_user=None):
+        # If request is already validated, create response directly
+        if isinstance(request, EndpointRequest):
+            endpoint = endpoints[0]
+            try:
+                result = endpoint.create_response(request)
+                if result is None:
+                    return None
+                return self.handle_response(*result)
+            except OAuth2Error as error:
+                return self.handle_error_response(request.request, error)
+
+        # Otherwise, validate and respond (existing behavior)
+        for endpoint in endpoints:
+            request = endpoint.create_endpoint_request(request)
+            try:
+                result = endpoint(request)
+                if result is None:
+                    return None
+                return self.handle_response(*result)
+            except ContinueIteration:
+                continue
+            except OAuth2Error as error:
+                return self.handle_error_response(request, error)
+
+    @hooked
+    def create_authorization_response(self, request=None, grant_user=None, grant=None):
         """Validate authorization request and create authorization response.
 
         :param request: HTTP request instance.
@@ -245,18 +356,27 @@ class AuthorizationServer(object):
             it is None.
         :returns: Response
         """
-        request = self.create_oauth2_request(request)
-        try:
-            grant = self.get_authorization_grant(request)
-        except UnsupportedResponseTypeError as error:
-            return self.handle_error_response(request, error)
+        if not isinstance(request, OAuth2Request):
+            request = self.create_oauth2_request(request)
+
+        if not grant:
+            deprecate("The 'grant' parameter will become mandatory.", version="1.8")
+            try:
+                grant = self.get_authorization_grant(request)
+            except UnsupportedResponseTypeError as error:
+                error.state = request.payload.state
+                return self.handle_error_response(request, error)
 
         try:
             redirect_uri = grant.validate_authorization_request()
             args = grant.create_authorization_response(redirect_uri, grant_user)
-            return self.handle_response(*args)
+            response = self.handle_response(*args)
         except OAuth2Error as error:
-            return self.handle_error_response(request, error)
+            error.state = request.payload.state
+            response = self.handle_error_response(request, error)
+
+        grant.execute_hook("after_authorization_response", response)
+        return response
 
     def create_token_response(self, request=None):
         """Validate token request and create token response.

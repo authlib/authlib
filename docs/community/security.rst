@@ -28,4 +28,5 @@ Here is the process when we have received a security report:
 Previous CVEs
 -------------
 
-.. note:: No CVEs yet
+- CVE-2022-39174
+- CVE-2022-39175

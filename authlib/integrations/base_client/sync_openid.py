@@ -1,77 +1,122 @@
-from authlib.jose import jwt, JsonWebToken, JsonWebKey
-from authlib.oidc.core import UserInfo, CodeIDToken, ImplicitIDToken
+from joserfc import jwt
+from joserfc.errors import InvalidKeyIdError
+from joserfc.jwk import KeySet
+
+from authlib.common.security import generate_token
+from authlib.common.urls import add_params_to_uri
+from authlib.oidc.core import CodeIDToken
+from authlib.oidc.core import ImplicitIDToken
+from authlib.oidc.core import UserInfo
 
 
-class OpenIDMixin(object):
+class OpenIDMixin:
     def fetch_jwk_set(self, force=False):
         metadata = self.load_server_metadata()
-        jwk_set = metadata.get('jwks')
+        jwk_set = metadata.get("jwks")
         if jwk_set and not force:
             return jwk_set
 
-        uri = metadata.get('jwks_uri')
+        uri = metadata.get("jwks_uri")
         if not uri:
             raise RuntimeError('Missing "jwks_uri" in metadata')
 
-        with self.client_cls(**self.client_kwargs) as session:
-            resp = session.request('GET', uri, withhold_token=True)
+        with self._get_session() as session:
+            resp = session.request("GET", uri, withhold_token=True)
             resp.raise_for_status()
             jwk_set = resp.json()
 
-        self.server_metadata['jwks'] = jwk_set
+        self.server_metadata["jwks"] = jwk_set
         return jwk_set
 
     def userinfo(self, **kwargs):
         """Fetch user info from ``userinfo_endpoint``."""
         metadata = self.load_server_metadata()
-        resp = self.get(metadata['userinfo_endpoint'], **kwargs)
+        resp = self.get(metadata["userinfo_endpoint"], **kwargs)
         resp.raise_for_status()
         data = resp.json()
         return UserInfo(data)
 
-    def parse_id_token(self, token, nonce, claims_options=None, leeway=120):
+    def parse_id_token(
+        self, token, nonce, claims_options=None, claims_cls=None, leeway=120
+    ):
         """Return an instance of UserInfo from token's ``id_token``."""
-        if 'id_token' not in token:
+        if "id_token" not in token:
             return None
-
-        def load_key(header, _):
-            jwk_set = JsonWebKey.import_key_set(self.fetch_jwk_set())
-            try:
-                return jwk_set.find_by_kid(header.get('kid'))
-            except ValueError:
-                # re-try with new jwk set
-                jwk_set = JsonWebKey.import_key_set(self.fetch_jwk_set(force=True))
-                return jwk_set.find_by_kid(header.get('kid'))
 
         claims_params = dict(
             nonce=nonce,
             client_id=self.client_id,
         )
-        if 'access_token' in token:
-            claims_params['access_token'] = token['access_token']
-            claims_cls = CodeIDToken
-        else:
-            claims_cls = ImplicitIDToken
+
+        if claims_cls is None:
+            if "access_token" in token:
+                claims_params["access_token"] = token["access_token"]
+                claims_cls = CodeIDToken
+            else:
+                claims_cls = ImplicitIDToken
 
         metadata = self.load_server_metadata()
-        if claims_options is None and 'issuer' in metadata:
-            claims_options = {'iss': {'values': [metadata['issuer']]}}
+        if claims_options is None and "issuer" in metadata:
+            claims_options = {"iss": {"values": [metadata["issuer"]]}}
 
-        alg_values = metadata.get('id_token_signing_alg_values_supported')
-        if alg_values:
-            _jwt = JsonWebToken(alg_values)
-        else:
-            _jwt = jwt
+        alg_values = metadata.get("id_token_signing_alg_values_supported")
 
-        claims = _jwt.decode(
-            token['id_token'], key=load_key,
-            claims_cls=claims_cls,
-            claims_options=claims_options,
-            claims_params=claims_params,
-        )
-        # https://github.com/lepture/authlib/issues/259
-        if claims.get('nonce_supported') is False:
-            claims.params['nonce'] = None
+        key_set = KeySet.import_key_set(self.fetch_jwk_set())
+        try:
+            token = jwt.decode(
+                token["id_token"],
+                key=key_set,
+                algorithms=alg_values,
+            )
+        except InvalidKeyIdError:
+            key_set = KeySet.import_key_set(self.fetch_jwk_set(force=True))
+            token = jwt.decode(
+                token["id_token"],
+                key=key_set,
+                algorithms=alg_values,
+            )
+
+        claims = claims_cls(token.claims, token.header, claims_options, claims_params)
+        # https://github.com/authlib/authlib/issues/259
+        if claims.get("nonce_supported") is False:
+            claims.params["nonce"] = None
 
         claims.validate(leeway=leeway)
         return UserInfo(claims)
+
+    def create_logout_url(
+        self,
+        post_logout_redirect_uri=None,
+        id_token_hint=None,
+        state=None,
+        **kwargs,
+    ):
+        """Generate the end session URL for RP-Initiated Logout.
+
+        :param post_logout_redirect_uri: URI to redirect after logout.
+        :param id_token_hint: ID Token previously issued to the RP.
+        :param state: Opaque value for maintaining state.
+        :param kwargs: Extra parameters (client_id, logout_hint, ui_locales).
+        :return: dict with 'url' and 'state' keys.
+        """
+        metadata = self.load_server_metadata()
+        end_session_endpoint = metadata.get("end_session_endpoint")
+
+        if not end_session_endpoint:
+            raise RuntimeError('Missing "end_session_endpoint" in metadata')
+
+        params = {}
+        if id_token_hint:
+            params["id_token_hint"] = id_token_hint
+        if post_logout_redirect_uri:
+            params["post_logout_redirect_uri"] = post_logout_redirect_uri
+            if state is None:
+                state = generate_token(20)
+            params["state"] = state
+
+        for key in ("client_id", "logout_hint", "ui_locales"):
+            if key in kwargs:
+                params[key] = kwargs[key]
+
+        url = add_params_to_uri(end_session_endpoint, params)
+        return {"url": url, "state": state}

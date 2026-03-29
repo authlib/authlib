@@ -1,6 +1,11 @@
 REQUESTS_SESSION_KWARGS = [
-    'proxies', 'hooks', 'stream', 'verify', 'cert',
-    'max_redirects', 'trust_env',
+    "proxies",
+    "hooks",
+    "stream",
+    "verify",
+    "cert",
+    "max_redirects",
+    "trust_env",
 ]
 
 

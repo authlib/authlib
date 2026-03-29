@@ -1,9 +1,10 @@
 import logging
-from .base import BaseGrant, TokenEndpointMixin
-from ..errors import (
-    UnauthorizedClientError,
-    InvalidRequestError,
-)
+
+from ..errors import InvalidRequestError
+from ..errors import UnauthorizedClientError
+from ..hooks import hooked
+from .base import BaseGrant
+from .base import TokenEndpointMixin
 
 log = logging.getLogger(__name__)
 
@@ -11,7 +12,7 @@ log = logging.getLogger(__name__)
 class ResourceOwnerPasswordCredentialsGrant(BaseGrant, TokenEndpointMixin):
     """The resource owner password credentials grant type is suitable in
     cases where the resource owner has a trust relationship with the
-    client, such as the device operating system or a highly privileged
+    client, such as the device operating system or a highly privileged.
 
     application.  The authorization server should take special care when
     enabling this grant type and only allow it when other flows are not
@@ -42,7 +43,8 @@ class ResourceOwnerPasswordCredentialsGrant(BaseGrant, TokenEndpointMixin):
         |         |    (w/ Optional Refresh Token)   |               |
         +---------+                                  +---------------+
     """
-    GRANT_TYPE = 'password'
+
+    GRANT_TYPE = "password"
 
     def validate_token_request(self):
         """The client makes a request to the token endpoint by adding the
@@ -84,30 +86,30 @@ class ResourceOwnerPasswordCredentialsGrant(BaseGrant, TokenEndpointMixin):
         # ignore validate for grant_type, since it is validated by
         # check_token_endpoint
         client = self.authenticate_token_endpoint_client()
-        log.debug('Validate token request of %r', client)
+        log.debug("Validate token request of %r", client)
 
         if not client.check_grant_type(self.GRANT_TYPE):
-            raise UnauthorizedClientError()
+            raise UnauthorizedClientError(
+                f"The client is not authorized to use 'grant_type={self.GRANT_TYPE}'"
+            )
 
         params = self.request.form
-        if 'username' not in params:
-            raise InvalidRequestError('Missing "username" in request.')
-        if 'password' not in params:
-            raise InvalidRequestError('Missing "password" in request.')
+        if "username" not in params:
+            raise InvalidRequestError("Missing 'username' in request.")
+        if "password" not in params:
+            raise InvalidRequestError("Missing 'password' in request.")
 
-        log.debug('Authenticate user of %r', params['username'])
-        user = self.authenticate_user(
-            params['username'],
-            params['password']
-        )
+        log.debug("Authenticate user of %r", params["username"])
+        user = self.authenticate_user(params["username"], params["password"])
         if not user:
             raise InvalidRequestError(
-                'Invalid "username" or "password" in request.',
+                "Invalid 'username' or 'password' in request.",
             )
         self.request.client = client
         self.request.user = user
         self.validate_requested_scope()
 
+    @hooked
     def create_token_response(self):
         """If the access token request is valid and authorized, the
         authorization server issues an access token and optional refresh
@@ -135,20 +137,19 @@ class ResourceOwnerPasswordCredentialsGrant(BaseGrant, TokenEndpointMixin):
         :returns: (status_code, body, headers)
         """
         user = self.request.user
-        scope = self.request.scope
+        scope = self.request.payload.scope
         token = self.generate_token(user=user, scope=scope)
-        log.debug('Issue token %r to %r', token, self.request.client)
+        log.debug("Issue token %r to %r", token, self.client)
         self.save_token(token)
-        self.execute_hook('process_token', token=token)
         return 200, token, self.TOKEN_RESPONSE_HEADER
 
     def authenticate_user(self, username, password):
-        """validate the resource owner password credentials using its
+        """Validate the resource owner password credentials using its
         existing password validation algorithm::
 
             def authenticate_user(self, username, password):
                 user = get_user_by_username(username)
                 if user.check_password(password):
-                   return user
+                    return user
         """
         raise NotImplementedError()

@@ -10,8 +10,8 @@ def get_well_known_url(issuer, external=False):
     """
     # https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfigurationRequest
     if external:
-        return issuer.rstrip('/') + '/.well-known/openid-configuration'
+        return issuer.rstrip("/") + "/.well-known/openid-configuration"
 
     parsed = urlparse.urlparse(issuer)
     path = parsed.path
-    return path.rstrip('/') + '/.well-known/openid-configuration'
+    return path.rstrip("/") + "/.well-known/openid-configuration"

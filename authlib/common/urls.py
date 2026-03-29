@@ -1,25 +1,21 @@
-"""
-    authlib.util.urls
-    ~~~~~~~~~~~~~~~~~
+"""authlib.util.urls.
+~~~~~~~~~~~~~~~~~
 
-    Wrapper functions for URL encoding and decoding.
+Wrapper functions for URL encoding and decoding.
 """
 
 import re
+import urllib.parse as urlparse
 from urllib.parse import quote as _quote
 from urllib.parse import unquote as _unquote
 from urllib.parse import urlencode as _urlencode
-import urllib.parse as urlparse
 
-from .encoding import to_unicode, to_bytes
+from .encoding import to_bytes
+from .encoding import to_unicode
 
-always_safe = (
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    'abcdefghijklmnopqrstuvwxyz'
-    '0123456789_.-'
-)
-urlencoded = set(always_safe) | set('=&;:%+~,*@!()/?')
-INVALID_HEX_PATTERN = re.compile(r'%[^0-9A-Fa-f]|%[0-9A-Fa-f][^0-9A-Fa-f]')
+always_safe = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_.-"
+urlencoded = set(always_safe) | set("=&;:%+~,*@!()/?")
+INVALID_HEX_PATTERN = re.compile(r"%[^0-9A-Fa-f]|%[0-9A-Fa-f][^0-9A-Fa-f]")
 
 
 def url_encode(params):
@@ -40,11 +36,13 @@ def url_decode(query):
     """
     # Check if query contains invalid characters
     if query and not set(query) <= urlencoded:
-        error = ("Error trying to decode a non urlencoded string. "
-                 "Found invalid characters: %s "
-                 "in the string: '%s'. "
-                 "Please ensure the request/response body is "
-                 "x-www-form-urlencoded.")
+        error = (
+            "Error trying to decode a non urlencoded string. "
+            "Found invalid characters: %s "
+            "in the string: '%s'. "
+            "Please ensure the request/response body is "
+            "x-www-form-urlencoded."
+        )
         raise ValueError(error % (set(query) - urlencoded, query))
 
     # Check for correctly hex encoded values using a regular expression
@@ -52,7 +50,7 @@ def url_decode(query):
     # correct = %00, %A0, %0A, %FF
     # invalid = %G0, %5H, %PO
     if INVALID_HEX_PATTERN.search(query):
-        raise ValueError('Invalid hex encoding in query string.')
+        raise ValueError("Invalid hex encoding in query string.")
 
     # We encode to utf-8 prior to parsing because parse_qsl behaves
     # differently on unicode input in python 2 and 3.
@@ -100,7 +98,7 @@ def add_params_to_uri(uri, params, fragment=False):
     return urlparse.urlunparse((sch, net, path, par, query, fra))
 
 
-def quote(s, safe=b'/'):
+def quote(s, safe=b"/"):
     return to_unicode(_quote(to_bytes(s), safe))
 
 
@@ -109,7 +107,7 @@ def unquote(s):
 
 
 def quote_url(s):
-    return quote(s, b'~@#$&()*!+=:;,.?/\'')
+    return quote(s, b"~@#$&()*!+=:;,.?/'")
 
 
 def extract_params(raw):
@@ -141,6 +139,8 @@ def extract_params(raw):
         return None
 
 
-def is_valid_url(url):
+def is_valid_url(url: str, fragments_allowed=True):
     parsed = urlparse.urlparse(url)
-    return parsed.scheme and parsed.hostname
+    return (
+        parsed.scheme and parsed.hostname and (fragments_allowed or not parsed.fragment)
+    )

@@ -1,7 +1,11 @@
 from werkzeug.local import LocalProxy
-from .integration import FlaskIntegration, token_update
-from .apps import FlaskOAuth1App, FlaskOAuth2App
-from ..base_client import BaseOAuth, OAuthError
+
+from ..base_client import BaseOAuth
+from ..base_client import OAuthError
+from .apps import FlaskOAuth1App
+from .apps import FlaskOAuth2App
+from .integration import FlaskIntegration
+from .integration import token_update
 
 
 class OAuth(BaseOAuth):
@@ -10,8 +14,9 @@ class OAuth(BaseOAuth):
     framework_integration_cls = FlaskIntegration
 
     def __init__(self, app=None, cache=None, fetch_token=None, update_token=None):
-        super(OAuth, self).__init__(
-            cache=cache, fetch_token=fetch_token, update_token=update_token)
+        super().__init__(
+            cache=cache, fetch_token=fetch_token, update_token=update_token
+        )
         self.app = app
         if app:
             self.init_app(app)
@@ -29,13 +34,13 @@ class OAuth(BaseOAuth):
         if update_token:
             self.update_token = update_token
 
-        app.extensions = getattr(app, 'extensions', {})
-        app.extensions['authlib.integrations.flask_client'] = self
+        app.extensions = getattr(app, "extensions", {})
+        app.extensions["authlib.integrations.flask_client"] = self
 
     def create_client(self, name):
         if not self.app:
-            raise RuntimeError('OAuth is not init with Flask app.')
-        return super(OAuth, self).create_client(name)
+            raise RuntimeError("OAuth is not init with Flask app.")
+        return super().create_client(name)
 
     def register(self, name, overwrite=False, **kwargs):
         self._registry[name] = (overwrite, kwargs)
@@ -45,7 +50,10 @@ class OAuth(BaseOAuth):
 
 
 __all__ = [
-    'OAuth', 'FlaskIntegration',
-    'FlaskOAuth1App', 'FlaskOAuth2App',
-    'token_update', 'OAuthError',
+    "OAuth",
+    "FlaskIntegration",
+    "FlaskOAuth1App",
+    "FlaskOAuth2App",
+    "token_update",
+    "OAuthError",
 ]
