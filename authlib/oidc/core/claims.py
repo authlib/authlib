@@ -6,6 +6,7 @@ from joserfc.errors import InvalidClaimError
 from joserfc.errors import MissingClaimError
 
 from authlib.common.encoding import to_bytes
+from authlib.common.language import is_valid_language_tag
 from authlib.oauth2.claims import JWTClaims
 from authlib.oauth2.rfc6749.util import scope_to_list
 
@@ -243,6 +244,12 @@ class UserInfo(dict):
         "address": ["address"],
         "phone": ["phone_number", "phone_number_verified"],
     }
+
+    def validate_locale(self):
+        """Validate the locale claim is a BCP 47 language tag."""
+        locale = self.get("locale")
+        if locale is not None and not is_valid_language_tag(locale):
+            raise ValueError('"locale" MUST be a BCP 47 language tag')
 
     def filter(self, scope: str):
         """Return a new UserInfo object containing only the claims matching the scope passed in parameter."""
