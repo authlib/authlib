@@ -11,6 +11,9 @@ Version 1.7.0
 
 **Unreleased**
 
+- Add support for `OpenID Connect Back-Channel Logout 1.0
+  <https://openid.net/specs/openid-connect-backchannel-1_0.html>`_.
+  See :ref:`specs/backchannel` for details.
 - Add support for `OpenID Connect RP-Initiated Logout 1.0
   <https://openid.net/specs/openid-connect-rpinitiated-1_0.html>`_.
   See :ref:`specs/rpinitiated` for details. :issue:`500`
