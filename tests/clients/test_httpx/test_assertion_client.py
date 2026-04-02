@@ -52,6 +52,28 @@ def test_refresh_token():
         client.get("https://provider.test")
 
 
+def test_client_id():
+    """client_id is included in the token request body when provided."""
+
+    def verifier(request):
+        if str(request.url) == "https://provider.test/token":
+            content = request.form
+            assert "assertion" in content
+            assert content["client_id"] == "my-client"
+
+    with AssertionClient(
+        "https://provider.test/token",
+        issuer="foo",
+        subject="foo",
+        audience="foo",
+        alg="HS256",
+        key="secret",
+        client_id="my-client",
+        transport=WSGITransport(MockDispatch(default_token, assert_func=verifier)),
+    ) as client:
+        client.get("https://provider.test")
+
+
 def test_without_alg():
     with AssertionClient(
         "https://provider.test/token",

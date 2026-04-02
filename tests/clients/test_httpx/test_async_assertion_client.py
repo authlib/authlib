@@ -55,6 +55,29 @@ async def test_refresh_token():
 
 
 @pytest.mark.asyncio
+async def test_client_id():
+    """client_id is included in the token request body when provided."""
+
+    async def verifier(request):
+        if str(request.url) == "https://provider.test/token":
+            content = await request.body()
+            assert b"assertion=" in content
+            assert b"client_id=my-client" in content
+
+    async with AsyncAssertionClient(
+        "https://provider.test/token",
+        issuer="foo",
+        subject="foo",
+        audience="foo",
+        alg="HS256",
+        key="secret",
+        client_id="my-client",
+        transport=ASGITransport(AsyncMockDispatch(default_token, assert_func=verifier)),
+    ) as client:
+        await client.get("https://provider.test")
+
+
+@pytest.mark.asyncio
 async def test_without_alg():
     async with AsyncAssertionClient(
         "https://provider.test/token",
