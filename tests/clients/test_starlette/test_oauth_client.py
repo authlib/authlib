@@ -118,6 +118,66 @@ async def test_oauth2_authorize():
     assert token["access_token"] == "a"
 
 
+class _FakeAsyncCache:
+    """Minimal async cache implementing the authlib framework cache protocol."""
+
+    def __init__(self):
+        self.store = {}
+
+    async def get(self, key):
+        return self.store.get(key)
+
+    async def set(self, key, value, expires=None):
+        self.store[key] = value
+
+    async def delete(self, key):
+        self.store.pop(key, None)
+
+
+@pytest.mark.asyncio
+async def test_oauth2_authorize_csrf_with_cache():
+    """When a cache is configured, the state must still be bound to the
+    session that initiated the flow. Otherwise an attacker can start an
+    authorization request, stop before the callback, and trick a victim into
+    completing the flow — logging the victim into the attacker's account
+    (RFC 6749 §10.12)."""
+    transport = ASGITransport(
+        AsyncPathMapDispatch({"/token": {"body": get_bearer_token()}})
+    )
+    oauth = OAuth(cache=_FakeAsyncCache())
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        api_base_url="https://resource.test/api",
+        access_token_url="https://provider.test/token",
+        authorize_url="https://provider.test/authorize",
+        client_kwargs={
+            "transport": transport,
+        },
+    )
+
+    # Attacker initiates an auth flow from their own session.
+    attacker_req = Request({"type": "http", "session": {}})
+    resp = await client.authorize_redirect(attacker_req, "https://client.test/callback")
+    assert resp.status_code == 302
+    url = resp.headers.get("Location")
+    state = dict(url_decode(urlparse.urlparse(url).query))["state"]
+
+    # Victim is tricked into hitting the callback URL. The victim's browser
+    # carries a *different* session — they never initiated this flow.
+    victim_req = Request(
+        {
+            "type": "http",
+            "path": "/",
+            "query_string": f"code=a&state={state}".encode(),
+            "session": {},
+        }
+    )
+    with pytest.raises(OAuthError):
+        await client.authorize_access_token(victim_req)
+
+
 @pytest.mark.asyncio
 async def test_oauth2_authorize_access_denied():
     oauth = OAuth()

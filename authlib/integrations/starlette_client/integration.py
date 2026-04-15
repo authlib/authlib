@@ -22,6 +22,10 @@ class StarletteIntegration(FrameworkIntegration):
     ) -> dict[str, Any]:
         key = f"_state_{self.name}_{state}"
         if self.cache:
+            # require a session-bound marker to prove the callback originates
+            # from the user-agent that started the flow (RFC 6749 §10.12)
+            if session is None or session.get(key) is None:
+                return None
             value = await self._get_cache_data(key)
         elif session is not None:
             value = session.get(key)
@@ -37,21 +41,27 @@ class StarletteIntegration(FrameworkIntegration):
     ):
         key_prefix = f"_state_{self.name}_"
         key = f"{key_prefix}{state}"
+        now = time.time()
         if self.cache:
             await self.cache.set(key, json.dumps({"data": data}), self.expires_in)
+            if session is not None:
+                # clear old state data to avoid session size growing
+                for old_key in list(session.keys()):
+                    if old_key.startswith(key_prefix):
+                        session.pop(old_key)
+                session[key] = {"exp": now + self.expires_in}
         elif session is not None:
             # clear old state data to avoid session size growing
             for old_key in list(session.keys()):
                 if old_key.startswith(key_prefix):
                     session.pop(old_key)
-            now = time.time()
             session[key] = {"data": data, "exp": now + self.expires_in}
 
     async def clear_state_data(self, session: Optional[dict[str, Any]], state: str):
         key = f"_state_{self.name}_{state}"
         if self.cache:
             await self.cache.delete(key)
-        elif session is not None:
+        if session is not None:
             session.pop(key, None)
             self._clear_session_state(session)
 
