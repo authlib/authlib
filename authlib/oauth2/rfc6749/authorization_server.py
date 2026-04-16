@@ -156,6 +156,23 @@ class AuthorizationServer(Hookable):
     def register_extension(self, extension):
         self._extensions.append(extension(self))
 
+    def get_extension(self, cls):
+        """Retrieve a registered extension by class.
+
+        :param cls: The extension class to look up.
+        :returns: The extension instance, or ``None`` if not registered.
+
+        Example::
+
+            sender = server.get_extension(BackchannelLogoutExtension)
+            if sender:
+                sender.send_logout(sub=sub, sid=sid)
+        """
+        for ext in self._extensions:
+            if isinstance(ext, cls):
+                return ext
+        return None
+
     def get_error_uri(self, request, error):
         """Return a URI for the given error, framework may implement this method."""
         return None
