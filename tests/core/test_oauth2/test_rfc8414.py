@@ -260,14 +260,38 @@ def test_validate_ui_locales_supported():
     metadata = AuthorizationServerMetadata()
     metadata.validate_ui_locales_supported()
 
+    # valid
+    metadata = AuthorizationServerMetadata({"ui_locales_supported": ["en"]})
+    metadata.validate_ui_locales_supported()
+
+    metadata = AuthorizationServerMetadata(
+        {"ui_locales_supported": ["en-US", "fr-FR", "zh-Hans-CN"]}
+    )
+    metadata.validate_ui_locales_supported()
+
+    # private use
+    metadata = AuthorizationServerMetadata({"ui_locales_supported": ["x-custom"]})
+    metadata.validate_ui_locales_supported()
+
     # not array
     metadata = AuthorizationServerMetadata({"ui_locales_supported": "en"})
     with pytest.raises(ValueError, match="JSON array"):
         metadata.validate_ui_locales_supported()
 
-    # valid
-    metadata = AuthorizationServerMetadata({"ui_locales_supported": ["en"]})
-    metadata.validate_ui_locales_supported()
+    # underscore instead of hyphen
+    metadata = AuthorizationServerMetadata({"ui_locales_supported": ["fr_FR"]})
+    with pytest.raises(ValueError, match="BCP 47"):
+        metadata.validate_ui_locales_supported()
+
+    # single char (not private-use)
+    metadata = AuthorizationServerMetadata({"ui_locales_supported": ["a-US"]})
+    with pytest.raises(ValueError, match="BCP 47"):
+        metadata.validate_ui_locales_supported()
+
+    # subtag too long
+    metadata = AuthorizationServerMetadata({"ui_locales_supported": ["toolongsubtag"]})
+    with pytest.raises(ValueError, match="BCP 47"):
+        metadata.validate_ui_locales_supported()
 
 
 def test_validate_op_policy_uri():

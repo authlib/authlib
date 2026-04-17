@@ -119,6 +119,19 @@ def test_validate_claims_supported():
 def test_validate_claims_locales_supported():
     _call_validate_array("claims_locales_supported", ["en-US"])
 
+    metadata = OpenIDProviderMetadata(
+        {"claims_locales_supported": ["en-US", "fr-FR", "zh-Hans-CN"]}
+    )
+    metadata.validate_claims_locales_supported()
+
+    metadata = OpenIDProviderMetadata({"claims_locales_supported": ["fr_FR"]})
+    with pytest.raises(ValueError, match="BCP 47"):
+        metadata.validate_claims_locales_supported()
+
+    metadata = OpenIDProviderMetadata({"claims_locales_supported": ["toolongsubtag"]})
+    with pytest.raises(ValueError, match="BCP 47"):
+        metadata.validate_claims_locales_supported()
+
 
 def test_validate_claims_parameter_supported():
     _call_validate_boolean("claims_parameter_supported")

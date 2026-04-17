@@ -172,3 +172,17 @@ def test_userinfo_getattribute():
     assert user.email is None
     with pytest.raises(AttributeError):
         user.invalid  # noqa: B018
+
+
+def test_userinfo_validate_locale():
+    UserInfo({"sub": "1"}).validate_locale()
+    UserInfo({"sub": "1", "locale": "en"}).validate_locale()
+    UserInfo({"sub": "1", "locale": "en-US"}).validate_locale()
+    UserInfo({"sub": "1", "locale": "zh-Hans-CN"}).validate_locale()
+    UserInfo({"sub": "1", "locale": "x-custom"}).validate_locale()
+
+    with pytest.raises(ValueError, match="BCP 47"):
+        UserInfo({"sub": "1", "locale": "fr_FR"}).validate_locale()
+
+    with pytest.raises(ValueError, match="BCP 47"):
+        UserInfo({"sub": "1", "locale": "toolongsubtag"}).validate_locale()

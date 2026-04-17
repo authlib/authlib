@@ -26,6 +26,8 @@ Version 1.7.0
 - RFC7523 accepts the issuer URL as a valid audience. :issue:`730`
 - Fix ``InvalidTokenError`` extra attributes being wrapped instead of passed as
   individual key=value pairs in the ``WWW-Authenticate`` header. :pr:`872`
+- Validate BCP 47 language tags in ``ui_locales_supported``, ``claims_locales_supported``
+  and ``UserInfo.locale``. :pr:`873`
 
 Upgrade Guide: :ref:`joserfc_upgrade`.
 
