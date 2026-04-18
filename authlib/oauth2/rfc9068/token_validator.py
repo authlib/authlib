@@ -6,9 +6,12 @@ Implementation of Validating JWT Access Tokens per `Section 4`_.
 .. _`Section 7`: https://www.rfc-editor.org/rfc/rfc9068.html#name-validating-jwt-access-token
 """
 
-from authlib.jose import jwt
-from authlib.jose.errors import DecodeError
-from authlib.jose.errors import JoseError
+from joserfc import jwt
+from joserfc.errors import DecodeError
+from joserfc.errors import JoseError
+
+from authlib._joserfc_helpers import import_any_key
+from authlib.oauth2.claims import ClaimsOption
 from authlib.oauth2.rfc6750.errors import InsufficientScopeError
 from authlib.oauth2.rfc6750.errors import InvalidTokenError
 from authlib.oauth2.rfc6750.validator import BearerTokenValidator
@@ -81,7 +84,7 @@ class JWTBearerTokenValidator(BearerTokenValidator):
         """"""
         # empty docstring avoids to display the irrelevant parent docstring
 
-        claims_options = {
+        claims_options: dict[str, ClaimsOption] = {
             "iss": {"essential": True, "validate": self.validate_iss},
             "exp": {"essential": True},
             "aud": {"essential": True, "value": self.resource_server},
@@ -97,7 +100,7 @@ class JWTBearerTokenValidator(BearerTokenValidator):
             "roles": {"essential": False},
             "entitlements": {"essential": False},
         }
-        jwks = self.get_jwks()
+        key = import_any_key(self.get_jwks())
 
         # If the JWT access token is encrypted, decrypt it using the keys and algorithms
         # that the resource server specified during registration. If encryption was
@@ -110,19 +113,21 @@ class JWTBearerTokenValidator(BearerTokenValidator):
         # of 'alg' is 'none'. The resource server MUST use the keys provided by the
         # authorization server.
         try:
-            return jwt.decode(
-                token_string,
-                key=jwks,
-                claims_cls=JWTAccessTokenClaims,
-                claims_options=claims_options,
-            )
+            token = jwt.decode(token_string, key=key)
+            return JWTAccessTokenClaims(token.claims, token.header, claims_options)
         except DecodeError as exc:
             raise InvalidTokenError(
                 realm=self.realm, extra_attributes=self.extra_attributes
             ) from exc
 
     def validate_token(
-        self, token, scopes, request, groups=None, roles=None, entitlements=None
+        self,
+        token: JWTAccessTokenClaims,
+        scopes,
+        request,
+        groups=None,
+        roles=None,
+        entitlements=None,
     ):
         """"""
         # empty docstring avoids to display the irrelevant parent docstring

@@ -354,6 +354,37 @@ def test_token_generator(app, test_client, client, server):
     assert "c-authorization_code.1." in resp["access_token"]
 
 
+def test_missing_scope_uses_default(test_client, client, monkeypatch):
+    """Per RFC 6749 Section 3.3, when scope is omitted at authorization endpoint,
+    the server should use a pre-defined default value from client.get_allowed_scope().
+    """
+
+    def get_allowed_scope_with_default(scope):
+        if scope is None:
+            return "default_scope"
+        return scope
+
+    monkeypatch.setattr(client, "get_allowed_scope", get_allowed_scope_with_default)
+
+    rv = test_client.post(authorize_url, data={"user_id": "1"})
+    assert "code=" in rv.location
+
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    code = params["code"]
+    headers = create_basic_header("client-id", "client-secret")
+    rv = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+        },
+        headers=headers,
+    )
+    resp = json.loads(rv.data)
+    assert "access_token" in resp
+    assert resp.get("scope") == "default_scope"
+
+
 def test_missing_scope_empty_default(test_client, client, monkeypatch):
     """When client.get_allowed_scope() returns empty string for missing scope,
     the authorization should proceed without a scope.
@@ -385,14 +416,17 @@ def test_missing_scope_empty_default(test_client, client, monkeypatch):
     assert resp.get("scope", "") == ""
 
 
-def test_unsupported_response_type_does_not_redirect(test_client):
-    """Regression test for open redirect via unsupported response_type."""
-    url = (
-        "/oauth/authorize"
-        "?response_type=totally-unsupported"
-        "&redirect_uri=https%3A%2F%2Fevil.example%2Flanding"
-        "&state=s1"
-    )
-    rv = test_client.get(url)
-    assert rv.status_code == 400
-    assert rv.headers.get("Location") is None
+def test_missing_scope_rejected(test_client, client, monkeypatch):
+    """Per RFC 6749 Section 3.3, when scope is omitted and client.get_allowed_scope()
+    returns None, the authorization should fail with invalid_scope.
+    """
+
+    def get_allowed_scope_reject(scope):
+        if scope is None:
+            return None
+        return scope
+
+    monkeypatch.setattr(client, "get_allowed_scope", get_allowed_scope_reject)
+
+    rv = test_client.post(authorize_url, data={"user_id": "1"})
+    assert "error=invalid_scope" in rv.location

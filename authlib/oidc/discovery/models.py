@@ -1,8 +1,21 @@
 from authlib.oauth2.rfc8414 import AuthorizationServerMetadata
 from authlib.oauth2.rfc8414.models import validate_array_value
+from authlib.oauth2.rfc8414.models import validate_boolean_value
 
 
 class OpenIDProviderMetadata(AuthorizationServerMetadata):
+    """OpenID Provider Metadata for OpenID Connect Discovery.
+
+    The :meth:`validate` method can compose extension classes via the
+    ``metadata_classes`` parameter. For example, to validate RP-Initiated
+    Logout metadata::
+
+        from authlib.oidc import discovery, rpinitiated
+
+        metadata = discovery.OpenIDProviderMetadata(data)
+        metadata.validate(metadata_classes=[rpinitiated.OpenIDProviderMetadata])
+    """
+
     REGISTRY_KEYS = [
         "issuer",
         "authorization_endpoint",
@@ -230,21 +243,21 @@ class OpenIDProviderMetadata(AuthorizationServerMetadata):
         the claims parameter, with true indicating support. If omitted, the
         default value is false.
         """
-        _validate_boolean_value(self, "claims_parameter_supported")
+        validate_boolean_value(self, "claims_parameter_supported")
 
     def validate_request_parameter_supported(self):
         """OPTIONAL. Boolean value specifying whether the OP supports use of
         the request parameter, with true indicating support. If omitted, the
         default value is false.
         """
-        _validate_boolean_value(self, "request_parameter_supported")
+        validate_boolean_value(self, "request_parameter_supported")
 
     def validate_request_uri_parameter_supported(self):
         """OPTIONAL. Boolean value specifying whether the OP supports use of
         the request_uri parameter, with true indicating support. If omitted,
         the default value is true.
         """
-        _validate_boolean_value(self, "request_uri_parameter_supported")
+        validate_boolean_value(self, "request_uri_parameter_supported")
 
     def validate_require_request_uri_registration(self):
         """OPTIONAL. Boolean value specifying whether the OP requires any
@@ -252,7 +265,7 @@ class OpenIDProviderMetadata(AuthorizationServerMetadata):
         registration parameter. Pre-registration is REQUIRED when the value
         is true. If omitted, the default value is false.
         """
-        _validate_boolean_value(self, "require_request_uri_registration")
+        validate_boolean_value(self, "require_request_uri_registration")
 
     @property
     def claim_types_supported(self):
@@ -278,10 +291,3 @@ class OpenIDProviderMetadata(AuthorizationServerMetadata):
     def require_request_uri_registration(self):
         # If omitted, the default value is false.
         return self.get("require_request_uri_registration", False)
-
-
-def _validate_boolean_value(metadata, key):
-    if key not in metadata:
-        return
-    if metadata[key] not in (True, False):
-        raise ValueError(f'"{key}" MUST be boolean')

@@ -1,3 +1,6 @@
+from ..rfc6749.errors import InvalidScopeError
+
+
 class BearerTokenGenerator:
     """Bearer token generator which can create the payload for token response
     by OAuth 2 server. A typical token response would be:
@@ -52,8 +55,20 @@ class BearerTokenGenerator:
 
     @staticmethod
     def get_allowed_scope(client, scope):
-        if scope:
-            scope = client.get_allowed_scope(scope)
+        """Get the allowed scope for token generation.
+
+        Per RFC 6749 Section 3.3, if the client omits the scope parameter,
+        the authorization server MUST either process the request using a
+        pre-defined default value or fail the request indicating an invalid scope.
+
+        :param client: the client making the request
+        :param scope: the requested scope (may be None if omitted)
+        :return: the allowed scope string
+        :raises InvalidScopeError: if client.get_allowed_scope returns None
+        """
+        scope = client.get_allowed_scope(scope)
+        if scope is None:
+            raise InvalidScopeError()
         return scope
 
     def generate(

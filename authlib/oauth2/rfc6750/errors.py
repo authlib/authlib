@@ -40,11 +40,11 @@ class InvalidTokenError(OAuth2Error):
         status_code=None,
         state=None,
         realm=None,
-        **extra_attributes,
+        extra_attributes=None,
     ):
         super().__init__(description, uri, status_code, state)
         self.realm = realm
-        self.extra_attributes = extra_attributes
+        self.extra_attributes = extra_attributes or {}
 
     def get_headers(self):
         """If the protected resource request does not include authentication

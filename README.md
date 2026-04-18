@@ -17,7 +17,7 @@
 The ultimate Python library in building OAuth and OpenID Connect servers.
 JWS, JWK, JWA, JWT are included.
 
-Authlib is compatible with Python3.9+.
+Authlib is compatible with Python3.10+.
 
 ## Migrations
 
@@ -39,70 +39,71 @@ Authlib will deprecate `authlib.jose` module, please read:
 </tr>
 </table>
 
-[**Fund Authlib to access additional features**](https://docs.authlib.org/en/latest/community/funding.html)
+[**Fund Authlib to access additional features**](https://docs.authlib.org/en/stable/community/funding.html)
 
 ## Features
 
 Generic, spec-compliant implementation to build clients and providers:
 
-- [The OAuth 1.0 Protocol](https://docs.authlib.org/en/latest/basic/oauth1.html)
-  - [RFC5849: The OAuth 1.0 Protocol](https://docs.authlib.org/en/latest/specs/rfc5849.html)
-- [The OAuth 2.0 Authorization Framework](https://docs.authlib.org/en/latest/basic/oauth2.html)
-  - [RFC6749: The OAuth 2.0 Authorization Framework](https://docs.authlib.org/en/latest/specs/rfc6749.html)
-  - [RFC6750: The OAuth 2.0 Authorization Framework: Bearer Token Usage](https://docs.authlib.org/en/latest/specs/rfc6750.html)
-  - [RFC7009: OAuth 2.0 Token Revocation](https://docs.authlib.org/en/latest/specs/rfc7009.html)
-  - [RFC7523: JWT Profile for OAuth 2.0 Client Authentication and Authorization Grants](https://docs.authlib.org/en/latest/specs/rfc7523.html)
-  - [RFC7591: OAuth 2.0 Dynamic Client Registration Protocol](https://docs.authlib.org/en/latest/specs/rfc7591.html)
-  - [RFC7592: OAuth 2.0 Dynamic Client Registration Management Protocol](https://docs.authlib.org/en/latest/specs/rfc7592.html)
-  - [RFC7636: Proof Key for Code Exchange by OAuth Public Clients](https://docs.authlib.org/en/latest/specs/rfc7636.html)
-  - [RFC7662: OAuth 2.0 Token Introspection](https://docs.authlib.org/en/latest/specs/rfc7662.html)
-  - [RFC8414: OAuth 2.0 Authorization Server Metadata](https://docs.authlib.org/en/latest/specs/rfc8414.html)
-  - [RFC8628: OAuth 2.0 Device Authorization Grant](https://docs.authlib.org/en/latest/specs/rfc8628.html)
-  - [RFC9068: JSON Web Token (JWT) Profile for OAuth 2.0 Access Tokens](https://docs.authlib.org/en/latest/specs/rfc9068.html)
-  - [RFC9101: The OAuth 2.0 Authorization Framework: JWT-Secured Authorization Request (JAR)](https://docs.authlib.org/en/latest/specs/rfc9101.html)
-  - [RFC9207: OAuth 2.0 Authorization Server Issuer Identification](https://docs.authlib.org/en/latest/specs/rfc9207.html)
-- [Javascript Object Signing and Encryption](https://docs.authlib.org/en/latest/jose/index.html)
-  - [RFC7515: JSON Web Signature](https://docs.authlib.org/en/latest/jose/jws.html)
-  - [RFC7516: JSON Web Encryption](https://docs.authlib.org/en/latest/jose/jwe.html)
-  - [RFC7517: JSON Web Key](https://docs.authlib.org/en/latest/jose/jwk.html)
-  - [RFC7518: JSON Web Algorithms](https://docs.authlib.org/en/latest/specs/rfc7518.html)
-  - [RFC7519: JSON Web Token](https://docs.authlib.org/en/latest/jose/jwt.html)
-  - [RFC7638: JSON Web Key (JWK) Thumbprint](https://docs.authlib.org/en/latest/specs/rfc7638.html)
+- [The OAuth 1.0 Protocol](https://docs.authlib.org/en/stable/basic/oauth1.html)
+  - [RFC5849: The OAuth 1.0 Protocol](https://docs.authlib.org/en/stable/specs/rfc5849.html)
+- [The OAuth 2.0 Authorization Framework](https://docs.authlib.org/en/stable/basic/oauth2.html)
+  - [RFC6749: The OAuth 2.0 Authorization Framework](https://docs.authlib.org/en/stable/specs/rfc6749.html)
+  - [RFC6750: The OAuth 2.0 Authorization Framework: Bearer Token Usage](https://docs.authlib.org/en/stable/specs/rfc6750.html)
+  - [RFC7009: OAuth 2.0 Token Revocation](https://docs.authlib.org/en/stable/specs/rfc7009.html)
+  - [RFC7523: JWT Profile for OAuth 2.0 Client Authentication and Authorization Grants](https://docs.authlib.org/en/stable/specs/rfc7523.html)
+  - [RFC7591: OAuth 2.0 Dynamic Client Registration Protocol](https://docs.authlib.org/en/stable/specs/rfc7591.html)
+  - [RFC7592: OAuth 2.0 Dynamic Client Registration Management Protocol](https://docs.authlib.org/en/stable/specs/rfc7592.html)
+  - [RFC7636: Proof Key for Code Exchange by OAuth Public Clients](https://docs.authlib.org/en/stable/specs/rfc7636.html)
+  - [RFC7662: OAuth 2.0 Token Introspection](https://docs.authlib.org/en/stable/specs/rfc7662.html)
+  - [RFC8414: OAuth 2.0 Authorization Server Metadata](https://docs.authlib.org/en/stable/specs/rfc8414.html)
+  - [RFC8628: OAuth 2.0 Device Authorization Grant](https://docs.authlib.org/en/stable/specs/rfc8628.html)
+  - [RFC9068: JSON Web Token (JWT) Profile for OAuth 2.0 Access Tokens](https://docs.authlib.org/en/stable/specs/rfc9068.html)
+  - [RFC9101: The OAuth 2.0 Authorization Framework: JWT-Secured Authorization Request (JAR)](https://docs.authlib.org/en/stable/specs/rfc9101.html)
+  - [RFC9207: OAuth 2.0 Authorization Server Issuer Identification](https://docs.authlib.org/en/stable/specs/rfc9207.html)
+- [Javascript Object Signing and Encryption](https://docs.authlib.org/en/stable/jose/index.html)
+  - [RFC7515: JSON Web Signature](https://docs.authlib.org/en/stable/jose/jws.html)
+  - [RFC7516: JSON Web Encryption](https://docs.authlib.org/en/stable/jose/jwe.html)
+  - [RFC7517: JSON Web Key](https://docs.authlib.org/en/stable/jose/jwk.html)
+  - [RFC7518: JSON Web Algorithms](https://docs.authlib.org/en/stable/specs/rfc7518.html)
+  - [RFC7519: JSON Web Token](https://docs.authlib.org/en/stable/jose/jwt.html)
+  - [RFC7638: JSON Web Key (JWK) Thumbprint](https://docs.authlib.org/en/stable/specs/rfc7638.html)
   - [ ] RFC7797: JSON Web Signature (JWS) Unencoded Payload Option
-  - [RFC8037: ECDH in JWS and JWE](https://docs.authlib.org/en/latest/specs/rfc8037.html)
+  - [RFC8037: ECDH in JWS and JWE](https://docs.authlib.org/en/stable/specs/rfc8037.html)
   - [ ] draft-madden-jose-ecdh-1pu-04: Public Key Authenticated Encryption for JOSE: ECDH-1PU
-- [OpenID Connect 1.0](https://docs.authlib.org/en/latest/specs/oidc.html)
+- [OpenID Connect 1.0](https://docs.authlib.org/en/stable/specs/oidc.html)
   - [x] OpenID Connect Core 1.0
   - [x] OpenID Connect Discovery 1.0
   - [x] OpenID Connect Dynamic Client Registration 1.0
+  - [x] [OpenID Connect RP-Initiated Logout 1.0](https://openid.net/specs/openid-connect-rpinitiated-1_0.html)
 
 Connect third party OAuth providers with Authlib built-in client integrations:
 
 - Requests
-  - [OAuth1Session](https://docs.authlib.org/en/latest/client/requests.html#requests-oauth-1-0)
-  - [OAuth2Session](https://docs.authlib.org/en/latest/client/requests.html#requests-oauth-2-0)
-  - [OpenID Connect](https://docs.authlib.org/en/latest/client/requests.html#requests-openid-connect)
-  - [AssertionSession](https://docs.authlib.org/en/latest/client/requests.html#requests-service-account)
+  - [OAuth1Session](https://docs.authlib.org/en/stable/client/requests.html#requests-oauth-1-0)
+  - [OAuth2Session](https://docs.authlib.org/en/stable/client/requests.html#requests-oauth-2-0)
+  - [OpenID Connect](https://docs.authlib.org/en/stable/client/requests.html#requests-openid-connect)
+  - [AssertionSession](https://docs.authlib.org/en/stable/client/requests.html#requests-service-account)
 - HTTPX
-  - [AsyncOAuth1Client](https://docs.authlib.org/en/latest/client/httpx.html#httpx-oauth-1-0)
-  - [AsyncOAuth2Client](https://docs.authlib.org/en/latest/client/httpx.html#httpx-oauth-2-0)
-  - [OpenID Connect](https://docs.authlib.org/en/latest/client/httpx.html#httpx-oauth-2-0)
-  - [AsyncAssertionClient](https://docs.authlib.org/en/latest/client/httpx.html#async-service-account)
-- [Flask OAuth Client](https://docs.authlib.org/en/latest/client/flask.html)
-- [Django OAuth Client](https://docs.authlib.org/en/latest/client/django.html)
-- [Starlette OAuth Client](https://docs.authlib.org/en/latest/client/starlette.html)
-- [FastAPI OAuth Client](https://docs.authlib.org/en/latest/client/fastapi.html)
+  - [AsyncOAuth1Client](https://docs.authlib.org/en/stable/client/httpx.html#httpx-oauth-1-0)
+  - [AsyncOAuth2Client](https://docs.authlib.org/en/stable/client/httpx.html#httpx-oauth-2-0)
+  - [OpenID Connect](https://docs.authlib.org/en/stable/client/httpx.html#httpx-oauth-2-0)
+  - [AsyncAssertionClient](https://docs.authlib.org/en/stable/client/httpx.html#async-service-account)
+- [Flask OAuth Client](https://docs.authlib.org/en/stable/client/flask.html)
+- [Django OAuth Client](https://docs.authlib.org/en/stable/client/django.html)
+- [Starlette OAuth Client](https://docs.authlib.org/en/stable/client/starlette.html)
+- [FastAPI OAuth Client](https://docs.authlib.org/en/stable/client/fastapi.html)
 
 Build your own OAuth 1.0, OAuth 2.0, and OpenID Connect providers:
 
 - Flask
-  - [Flask OAuth 1.0 Provider](https://docs.authlib.org/en/latest/flask/1/)
-  - [Flask OAuth 2.0 Provider](https://docs.authlib.org/en/latest/flask/2/)
-  - [Flask OpenID Connect 1.0 Provider](https://docs.authlib.org/en/latest/flask/2/openid-connect.html)
+  - [Flask OAuth 1.0 Provider](https://docs.authlib.org/en/stable/flask/1/)
+  - [Flask OAuth 2.0 Provider](https://docs.authlib.org/en/stable/flask/2/)
+  - [Flask OpenID Connect 1.0 Provider](https://docs.authlib.org/en/stable/flask/2/openid-connect.html)
 - Django
-  - [Django OAuth 1.0 Provider](https://docs.authlib.org/en/latest/django/1/)
-  - [Django OAuth 2.0 Provider](https://docs.authlib.org/en/latest/django/2/)
-  - [Django OpenID Connect 1.0 Provider](https://docs.authlib.org/en/latest/django/2/openid-connect.html)
+  - [Django OAuth 1.0 Provider](https://docs.authlib.org/en/stable/django/1/)
+  - [Django OAuth 2.0 Provider](https://docs.authlib.org/en/stable/django/2/)
+  - [Django OpenID Connect 1.0 Provider](https://docs.authlib.org/en/stable/django/2/openid-connect.html)
 
 ## Useful Links
 

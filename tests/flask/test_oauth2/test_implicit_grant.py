@@ -92,3 +92,53 @@ def test_token_generator(test_client, app, server):
     server.load_config(app.config)
     rv = test_client.post(authorize_url, data={"user_id": "1"})
     assert "access_token=c-implicit.1." in rv.location
+
+
+def test_missing_scope_uses_default(test_client, client, monkeypatch):
+    """Per RFC 6749 Section 3.3, when scope is omitted, the server should use
+    a pre-defined default value from client.get_allowed_scope().
+    """
+
+    def get_allowed_scope_with_default(scope):
+        if scope is None:
+            return "default_scope"
+        return scope
+
+    monkeypatch.setattr(client, "get_allowed_scope", get_allowed_scope_with_default)
+
+    rv = test_client.post(authorize_url, data={"user_id": "1"})
+    assert "access_token=" in rv.location
+    assert "scope=default_scope" in rv.location
+
+
+def test_missing_scope_empty_default(test_client, client, monkeypatch):
+    """When client.get_allowed_scope() returns empty string for missing scope,
+    the token should be issued without a scope.
+    """
+
+    def get_allowed_scope_empty(scope):
+        if scope is None:
+            return ""
+        return scope
+
+    monkeypatch.setattr(client, "get_allowed_scope", get_allowed_scope_empty)
+
+    rv = test_client.post(authorize_url, data={"user_id": "1"})
+    assert "access_token=" in rv.location
+    assert "scope=" not in rv.location
+
+
+def test_missing_scope_rejected(test_client, client, monkeypatch):
+    """Per RFC 6749 Section 3.3, when scope is omitted and client.get_allowed_scope()
+    returns None, the authorization should fail with invalid_scope.
+    """
+
+    def get_allowed_scope_reject(scope):
+        if scope is None:
+            return None
+        return scope
+
+    monkeypatch.setattr(client, "get_allowed_scope", get_allowed_scope_reject)
+
+    rv = test_client.post(authorize_url, data={"user_id": "1"})
+    assert "#error=invalid_scope" in rv.location

@@ -1,7 +1,9 @@
+from joserfc.errors import InvalidClaimError
+from joserfc.errors import JoseError
+from joserfc.jwk import KeySet
+
 from authlib.common.urls import is_valid_url
-from authlib.jose import BaseClaims
-from authlib.jose import JsonWebKey
-from authlib.jose.errors import InvalidClaimError
+from authlib.oauth2.claims import BaseClaims
 
 from ..rfc6749 import scope_to_list
 
@@ -26,8 +28,8 @@ class ClientMetadataClaims(BaseClaims):
         "software_version",
     ]
 
-    def validate(self):
-        self._validate_essential_claims()
+    def validate(self, now=None, leeway=0):
+        super().validate(now, leeway)
         self.validate_redirect_uris()
         self.validate_token_endpoint_auth_method()
         self.validate_grant_types()
@@ -65,19 +67,16 @@ class ClientMetadataClaims(BaseClaims):
         # If unspecified or omitted, the default is "client_secret_basic"
         if "token_endpoint_auth_method" not in self:
             self["token_endpoint_auth_method"] = "client_secret_basic"
-        self._validate_claim_value("token_endpoint_auth_method")
 
     def validate_grant_types(self):
         """Array of OAuth 2.0 grant type strings that the client can use at
         the token endpoint.
         """
-        self._validate_claim_value("grant_types")
 
     def validate_response_types(self):
         """Array of the OAuth 2.0 response type strings that the client can
         use at the authorization endpoint.
         """
-        self._validate_claim_value("response_types")
 
     def validate_client_name(self):
         """Human-readable string name of the client to be presented to the
@@ -114,7 +113,6 @@ class ClientMetadataClaims(BaseClaims):
         this list are service specific.  If omitted, an authorization
         server MAY register a client with a default set of scopes.
         """
-        self._validate_claim_value("scope")
 
     def validate_contacts(self):
         """Array of strings representing ways to contact people responsible
@@ -180,10 +178,8 @@ class ClientMetadataClaims(BaseClaims):
 
             jwks = self["jwks"]
             try:
-                key_set = JsonWebKey.import_key_set(jwks)
-                if not key_set:
-                    raise InvalidClaimError("jwks")
-            except ValueError as exc:
+                KeySet.import_key_set(jwks)
+            except (JoseError, ValueError) as exc:
                 raise InvalidClaimError("jwks") from exc
 
     def validate_software_id(self):
@@ -234,6 +230,7 @@ class ClientMetadataClaims(BaseClaims):
             def _validate_scope(claims, value):
                 if not value:
                     return True
+
                 scopes = set(scope_to_list(value))
                 return scopes_supported.issuperset(scopes)
 

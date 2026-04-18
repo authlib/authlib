@@ -1,6 +1,6 @@
 import pytest
+from joserfc.errors import InvalidClaimError
 
-from authlib.jose.errors import InvalidClaimError
 from authlib.oidc.registration import ClientMetadataClaims
 
 

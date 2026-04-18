@@ -3,11 +3,12 @@ import time
 import pytest
 from flask import json
 from flask import jsonify
+from joserfc import jwt
+from joserfc.jwk import KeySet
 
 from authlib.common.security import generate_token
 from authlib.integrations.flask_oauth2 import ResourceProtector
 from authlib.integrations.flask_oauth2 import current_token
-from authlib.jose import jwt
 from authlib.oauth2.rfc9068 import JWTBearerTokenValidator
 from tests.util import read_file_path
 
@@ -91,7 +92,7 @@ def resource_protector(app, token_validator):
 
 @pytest.fixture
 def jwks():
-    return read_file_path("jwks_private.json")
+    return KeySet.import_key_set(read_file_path("jwks_private.json"))
 
 
 @pytest.fixture(autouse=True)
@@ -146,13 +147,11 @@ def claims(client, user):
 
 
 def create_access_token(claims, jwks, alg="RS256", typ="at+jwt"):
-    access_token = jwt.encode(
+    return jwt.encode(
         {"alg": alg, "typ": typ},
         claims,
         key=jwks,
-        check=False,
     )
-    return access_token.decode()
 
 
 @pytest.fixture

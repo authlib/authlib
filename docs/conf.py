@@ -1,4 +1,10 @@
+import warnings
+
 import authlib
+from authlib.deprecate import AuthlibDeprecationWarning
+
+# we will keep authlib.jose module until 2.0.0
+warnings.simplefilter("ignore", AuthlibDeprecationWarning)
 
 project = "Authlib"
 copyright = "&copy; 2017, Hsiaoming Ltd"
@@ -21,6 +27,7 @@ language = "en"
 extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.extlinks",
+    "sphinx.ext.intersphinx",
     "sphinx_copybutton",
     "sphinx_design",
 ]
@@ -32,10 +39,12 @@ extlinks = {
 
 intersphinx_mapping = {
     "python": ("https://docs.python.org/3", None),
+    "joserfc": ("https://jose.authlib.org/en/", None),
 }
 html_favicon = "_static/icon.svg"
 html_theme_options = {
     "accent_color": "blue",
+    "globaltoc_expand_depth": 1,
     "og_image_url": "https://authlib.org/logo.png",
     "light_logo": "_static/light-logo.svg",
     "dark_logo": "_static/dark-logo.svg",

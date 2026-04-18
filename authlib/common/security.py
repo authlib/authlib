@@ -16,4 +16,6 @@ def is_secure_transport(uri):
         return True
 
     uri = uri.lower()
-    return uri.startswith(("https://", "http://localhost:", "http://127.0.0.1:"))
+    return uri.startswith(
+        ("https://", "http://localhost:", "http://127.0.0.1:", "http://[::1]:")
+    )

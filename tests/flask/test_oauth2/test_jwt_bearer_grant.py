@@ -1,5 +1,9 @@
 import pytest
 from flask import json
+from joserfc import jws
+from joserfc import jwt
+from joserfc.jwk import KeySet
+from joserfc.jwk import OctKey
 
 from authlib.oauth2.rfc7523 import JWTBearerGrant as _JWTBearerGrant
 from authlib.oauth2.rfc7523 import JWTBearerTokenGenerator
@@ -13,9 +17,13 @@ class JWTBearerGrant(_JWTBearerGrant):
     def resolve_issuer_client(self, issuer):
         return Client.query.filter_by(client_id=issuer).first()
 
-    def resolve_client_key(self, client, headers, payload):
-        keys = {"1": "foo", "2": "bar"}
-        return keys[headers["kid"]]
+    def resolve_client_public_key(self, client):
+        return KeySet(
+            [
+                OctKey.import_key("foo", {"kid": "1"}),
+                OctKey.import_key("bar", {"kid": "2"}),
+            ]
+        )
 
     def authenticate_user(self, subject):
         return None
@@ -134,7 +142,8 @@ def test_token_generator(test_client, app, server):
 def test_jwt_bearer_token_generator(test_client, server):
     private_key = read_file_path("jwks_private.json")
     server.register_token_generator(
-        JWTBearerGrant.GRANT_TYPE, JWTBearerTokenGenerator(private_key)
+        JWTBearerGrant.GRANT_TYPE,
+        JWTBearerTokenGenerator(private_key),
     )
     assertion = JWTBearerGrant.sign(
         "foo",
@@ -150,3 +159,56 @@ def test_jwt_bearer_token_generator(test_client, server):
     resp = json.loads(rv.data)
     assert "access_token" in resp
     assert resp["access_token"].count(".") == 2
+
+
+def test_invalid_payload_assertion(test_client):
+    assertion = jws.serialize_compact(
+        {"alg": "HS256", "kid": "1"},
+        "text",
+        OctKey.import_key("foo"),
+    )
+    rv = test_client.post(
+        "/oauth/token",
+        data={"grant_type": JWTBearerGrant.GRANT_TYPE, "assertion": assertion},
+    )
+    resp = json.loads(rv.data)
+    assert "Invalid JWT" in resp["error_description"]
+
+
+def test_missing_assertion_claims(test_client):
+    assertion = jwt.encode(
+        {"alg": "HS256", "kid": "1"},
+        {"iss": "client-id"},
+        OctKey.import_key("foo"),
+    )
+    rv = test_client.post(
+        "/oauth/token",
+        data={"grant_type": JWTBearerGrant.GRANT_TYPE, "assertion": assertion},
+    )
+    resp = json.loads(rv.data)
+    assert "Missing claim" in resp["error_description"]
+
+
+def test_invalid_audience(test_client, server):
+    """RFC 7523 Section 3: The authorization server MUST reject any JWT that
+    does not contain its own identity as the intended audience."""
+
+    class StrictAudienceGrant(JWTBearerGrant):
+        def get_audiences(self):
+            return ["https://provider.test/token"]
+
+    server._token_grants.clear()
+    server.register_grant(StrictAudienceGrant)
+    assertion = StrictAudienceGrant.sign(
+        "foo",
+        issuer="client-id",
+        audience="https://evil.test/token",
+        subject=None,
+        header={"alg": "HS256", "kid": "1"},
+    )
+    rv = test_client.post(
+        "/oauth/token",
+        data={"grant_type": StrictAudienceGrant.GRANT_TYPE, "assertion": assertion},
+    )
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_grant"

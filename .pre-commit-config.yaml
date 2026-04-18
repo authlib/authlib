@@ -4,13 +4,13 @@ default_install_hook_types:
   - commit-msg
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: 'v0.12.7'
+    rev: v0.15.8
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.1
+    rev: v2.4.2
     hooks:
     - id: codespell
       stages: [pre-commit]
@@ -19,7 +19,7 @@ repos:
       exclude: "docs/locales"
       args: [--write-changes]
   - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: v4.2.0
+    rev: v4.4.0
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]

@@ -1,18 +1,20 @@
+import time
 from unittest import mock
 
 import pytest
 from cachelib import SimpleCache
 from flask import Flask
 from flask import session
+from joserfc import jwk
+from joserfc import jwt
 
 from authlib.common.urls import url_decode
 from authlib.common.urls import urlparse
 from authlib.integrations.flask_client import FlaskOAuth2App
 from authlib.integrations.flask_client import OAuth
 from authlib.integrations.flask_client import OAuthError
-from authlib.jose.rfc7517 import JsonWebKey
 from authlib.oauth2.rfc6749.errors import MissingCodeException
-from authlib.oidc.core.grants.util import generate_id_token
+from authlib.oidc.core.grants.util import create_half_hash
 
 from ..util import get_bearer_token
 from ..util import mock_send_value
@@ -329,6 +331,41 @@ def test_oauth2_authorize_via_custom_client():
         assert url.startswith("https://provider.test/custom?")
 
 
+def test_oauth2_fetch_metadata():
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        api_base_url="https://resource.test/api",
+        access_token_url="https://provider.test/token",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+    with mock.patch("requests.sessions.Session.send") as send:
+
+        def check_request(req, **kwargs):
+            assert "Authlib/" in req.headers.get("user-agent", "")
+            if req.url == "https://provider.test/.well-known/openid-configuration":
+                return mock_send_value(
+                    {
+                        "authorization_endpoint": "https://provider.test/authorize",
+                        "jwks_uri": "https://provider.test/.well-known/keys",
+                    }
+                )
+            if req.url == "https://provider.test/.well-known/keys":
+                return mock_send_value({"keys": []})
+            return mock.DEFAULT
+
+        send.side_effect = check_request
+
+        with app.test_request_context():
+            client.fetch_jwk_set()
+
+        assert send.call_count == 2
+
+
 def test_oauth2_authorize_with_metadata():
     app = Flask(__name__)
     app.secret_key = "!"
@@ -406,7 +443,7 @@ def test_openid_authorize():
     app = Flask(__name__)
     app.secret_key = "!"
     oauth = OAuth(app)
-    key = dict(JsonWebKey.import_key("secret", {"kid": "f", "kty": "oct"}))
+    key = jwk.import_key("secret", "oct")
 
     client = oauth.register(
         "dev",
@@ -415,7 +452,7 @@ def test_openid_authorize():
         access_token_url="https://provider.test/token",
         authorize_url="https://provider.test/authorize",
         client_kwargs={"scope": "openid profile"},
-        jwks={"keys": [key]},
+        jwks={"keys": [key.as_dict()]},
     )
 
     with app.test_request_context():
@@ -433,16 +470,19 @@ def test_openid_authorize():
         assert nonce == query_data["nonce"]
 
     token = get_bearer_token()
-    token["id_token"] = generate_id_token(
-        token,
-        {"sub": "123"},
-        key,
-        alg="HS256",
-        iss="https://provider.test",
-        aud="dev",
-        exp=3600,
-        nonce=query_data["nonce"],
-    )
+    now = int(time.time())
+    claims = {
+        "sub": "123",
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "iat": now,
+        "auth_time": now,
+        "exp": now + 3600,
+        "nonce": query_data["nonce"],
+        "at_hash": create_half_hash(token["access_token"], "HS256").decode("utf-8"),
+    }
+    id_token = jwt.encode({"alg": "HS256"}, claims, key)
+    token["id_token"] = id_token
     path = f"/?code=a&state={state}"
     with app.test_request_context(path=path):
         session[f"_state_dev_{state}"] = session_data
@@ -606,3 +646,271 @@ def test_oauth2_authorize_missing_code():
         with pytest.raises(MissingCodeException) as exc_info:
             client.authorize_access_token()
         assert exc_info.value.error == "missing_code"
+
+
+def test_logout_redirect_with_metadata():
+    """Test logout_redirect generates correct URL with state stored in session."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+
+    metadata = {
+        "issuer": "https://provider.test",
+        "end_session_endpoint": "https://provider.test/logout",
+    }
+
+    with mock.patch("requests.sessions.Session.send") as send:
+        send.return_value = mock_send_value(metadata)
+
+        with app.test_request_context():
+            resp = client.logout_redirect(
+                post_logout_redirect_uri="https://client.test/logged-out",
+                id_token_hint="fake.id.token",
+            )
+            assert resp.status_code == 302
+            url = resp.headers.get("Location")
+            assert "https://provider.test/logout" in url
+            assert "id_token_hint=fake.id.token" in url
+            assert (
+                "post_logout_redirect_uri=https%3A%2F%2Fclient.test%2Flogged-out" in url
+            )
+            assert "state=" in url
+
+            # Verify state is stored in session
+            params = dict(url_decode(urlparse.urlparse(url).query))
+            state = params["state"]
+            assert f"_state_dev_{state}" in session
+
+
+def test_logout_redirect_without_redirect_uri():
+    """Test logout_redirect omits state when no post_logout_redirect_uri is provided."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+
+    metadata = {
+        "issuer": "https://provider.test",
+        "end_session_endpoint": "https://provider.test/logout",
+    }
+
+    with mock.patch("requests.sessions.Session.send") as send:
+        send.return_value = mock_send_value(metadata)
+
+        with app.test_request_context():
+            resp = client.logout_redirect(id_token_hint="fake.id.token")
+            assert resp.status_code == 302
+            url = resp.headers.get("Location")
+            assert "https://provider.test/logout" in url
+            assert "id_token_hint=fake.id.token" in url
+            assert "post_logout_redirect_uri" not in url
+            assert "state" not in url
+
+            # No state stored when no redirect_uri
+            assert not any(k.startswith("_state_dev_") for k in session.keys())
+
+
+def test_logout_redirect_with_extra_params():
+    """Test logout_redirect includes optional params: client_id, logout_hint, ui_locales."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+
+    metadata = {
+        "issuer": "https://provider.test",
+        "end_session_endpoint": "https://provider.test/logout",
+    }
+
+    with mock.patch("requests.sessions.Session.send") as send:
+        send.return_value = mock_send_value(metadata)
+
+        with app.test_request_context():
+            resp = client.logout_redirect(
+                post_logout_redirect_uri="https://client.test/logged-out",
+                client_id="dev",
+                logout_hint="user@example.com",
+                ui_locales="fr",
+            )
+            assert resp.status_code == 302
+            url = resp.headers.get("Location")
+            assert "client_id=dev" in url
+            assert "logout_hint=user%40example.com" in url
+            assert "ui_locales=fr" in url
+
+
+def test_logout_redirect_with_custom_state():
+    """Test logout_redirect uses a custom state value when provided."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+
+    metadata = {
+        "issuer": "https://provider.test",
+        "end_session_endpoint": "https://provider.test/logout",
+    }
+
+    with mock.patch("requests.sessions.Session.send") as send:
+        send.return_value = mock_send_value(metadata)
+
+        with app.test_request_context():
+            resp = client.logout_redirect(
+                post_logout_redirect_uri="https://client.test/logged-out",
+                state="custom-state-123",
+            )
+            assert resp.status_code == 302
+            url = resp.headers.get("Location")
+            assert "state=custom-state-123" in url
+
+
+def test_logout_redirect_missing_endpoint():
+    """Test logout_redirect raises RuntimeError when end_session_endpoint is missing."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+
+    # Metadata without end_session_endpoint
+    metadata = {
+        "issuer": "https://provider.test",
+        "authorization_endpoint": "https://provider.test/authorize",
+    }
+
+    with mock.patch("requests.sessions.Session.send") as send:
+        send.return_value = mock_send_value(metadata)
+
+        with app.test_request_context():
+            with pytest.raises(RuntimeError, match='Missing "end_session_endpoint"'):
+                client.logout_redirect()
+
+
+def test_create_logout_url_directly():
+    """Test create_logout_url returns URL and state without performing redirect."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+
+    metadata = {
+        "issuer": "https://provider.test",
+        "end_session_endpoint": "https://provider.test/logout",
+    }
+
+    with mock.patch("requests.sessions.Session.send") as send:
+        send.return_value = mock_send_value(metadata)
+
+        with app.test_request_context():
+            result = client.create_logout_url(
+                post_logout_redirect_uri="https://client.test/logged-out",
+                id_token_hint="fake.id.token",
+            )
+            assert "url" in result
+            assert "state" in result
+            assert result["state"] is not None
+            assert "https://provider.test/logout" in result["url"]
+
+
+def test_validate_logout_response():
+    """Test validate_logout_response verifies state and returns stored data."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+
+    metadata = {
+        "issuer": "https://provider.test",
+        "end_session_endpoint": "https://provider.test/logout",
+    }
+
+    with mock.patch("requests.sessions.Session.send") as send:
+        send.return_value = mock_send_value(metadata)
+
+        with app.test_request_context():
+            resp = client.logout_redirect(
+                post_logout_redirect_uri="https://client.test/logged-out",
+            )
+            url = resp.headers.get("Location")
+            params = dict(url_decode(urlparse.urlparse(url).query))
+            state = params["state"]
+            session_data = session[f"_state_dev_{state}"]
+
+        with app.test_request_context(path=f"/?state={state}"):
+            session[f"_state_dev_{state}"] = session_data
+            state_data = client.validate_logout_response()
+            assert (
+                state_data["post_logout_redirect_uri"]
+                == "https://client.test/logged-out"
+            )
+            # State should be cleared from session
+            assert f"_state_dev_{state}" not in session
+
+
+def test_validate_logout_response_missing_state():
+    """Test validate_logout_response raises OAuthError when state is missing."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+
+    with app.test_request_context(path="/"):
+        with pytest.raises(OAuthError, match='Missing "state" parameter'):
+            client.validate_logout_response()
+
+
+def test_validate_logout_response_invalid_state():
+    """Test validate_logout_response raises OAuthError when state is invalid."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+
+    with app.test_request_context(path="/?state=invalid-state"):
+        with pytest.raises(OAuthError, match='Invalid "state" parameter'):
+            client.validate_logout_response()

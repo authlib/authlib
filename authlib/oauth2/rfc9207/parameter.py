@@ -1,5 +1,3 @@
-from typing import Optional
-
 from authlib.common.urls import add_params_to_uri
 from authlib.deprecate import deprecate
 from authlib.oauth2.rfc6749.grants import BaseGrant
@@ -35,7 +33,7 @@ class IssuerParameter:
             )
             response.location = new_location
 
-    def get_issuer(self) -> Optional[str]:
+    def get_issuer(self) -> str | None:
         """Return the issuer URL.
         Developers MAY implement this method if they want to support :rfc:`RFC9207 <9207>`::
 

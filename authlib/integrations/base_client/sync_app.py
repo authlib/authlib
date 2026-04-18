@@ -228,6 +228,11 @@ class OAuth2Base:
     def _on_update_token(self, token, refresh_token=None, access_token=None):
         raise NotImplementedError()
 
+    def _get_session(self):
+        session = self.client_cls(**self.client_kwargs)
+        session.headers["User-Agent"] = self._user_agent
+        return session
+
     def _get_oauth_client(self, **metadata):
         client_kwargs = {}
         client_kwargs.update(self.client_kwargs)
@@ -320,7 +325,7 @@ class OAuth2Mixin(_RequestMixin, OAuth2Base):
 
     def load_server_metadata(self):
         if self._server_metadata_url and "_loaded_at" not in self.server_metadata:
-            with self.client_cls(**self.client_kwargs) as session:
+            with self._get_session() as session:
                 resp = session.request(
                     "GET", self._server_metadata_url, withhold_token=True
                 )

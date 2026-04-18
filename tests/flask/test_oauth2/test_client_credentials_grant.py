@@ -114,3 +114,71 @@ def test_token_generator(test_client, app, server):
     resp = json.loads(rv.data)
     assert "access_token" in resp
     assert "c-client_credentials." in resp["access_token"]
+
+
+def test_missing_scope_uses_default(test_client, client, monkeypatch):
+    """Per RFC 6749 Section 3.3, when scope is omitted, the server should use
+    a pre-defined default value from client.get_allowed_scope().
+    """
+
+    def get_allowed_scope_with_default(scope):
+        if scope is None:
+            return "default_scope"
+        return scope
+
+    monkeypatch.setattr(client, "get_allowed_scope", get_allowed_scope_with_default)
+
+    headers = create_basic_header("client-id", "client-secret")
+    rv = test_client.post(
+        "/oauth/token",
+        data={"grant_type": "client_credentials"},
+        headers=headers,
+    )
+    resp = json.loads(rv.data)
+    assert "access_token" in resp
+    assert resp.get("scope") == "default_scope"
+
+
+def test_missing_scope_empty_default(test_client, client, monkeypatch):
+    """When client.get_allowed_scope() returns empty string for missing scope,
+    the token should be issued without a scope.
+    """
+
+    def get_allowed_scope_empty(scope):
+        if scope is None:
+            return ""
+        return scope
+
+    monkeypatch.setattr(client, "get_allowed_scope", get_allowed_scope_empty)
+
+    headers = create_basic_header("client-id", "client-secret")
+    rv = test_client.post(
+        "/oauth/token",
+        data={"grant_type": "client_credentials"},
+        headers=headers,
+    )
+    resp = json.loads(rv.data)
+    assert "access_token" in resp
+    assert resp.get("scope", "") == ""
+
+
+def test_missing_scope_rejected(test_client, client, monkeypatch):
+    """Per RFC 6749 Section 3.3, when scope is omitted and client.get_allowed_scope()
+    returns None, the server should fail with invalid_scope.
+    """
+
+    def get_allowed_scope_reject(scope):
+        if scope is None:
+            return None
+        return scope
+
+    monkeypatch.setattr(client, "get_allowed_scope", get_allowed_scope_reject)
+
+    headers = create_basic_header("client-id", "client-secret")
+    rv = test_client.post(
+        "/oauth/token",
+        data={"grant_type": "client_credentials"},
+        headers=headers,
+    )
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_scope"

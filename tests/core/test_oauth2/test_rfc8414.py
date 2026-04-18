@@ -1,5 +1,6 @@
 import pytest
 
+from authlib.oauth2 import rfc9101
 from authlib.oauth2.rfc8414 import AuthorizationServerMetadata
 from authlib.oauth2.rfc8414 import get_well_known_url
 
@@ -437,3 +438,25 @@ def test_validate_code_challenge_methods_supported():
         {"code_challenge_methods_supported": ["S256"]}
     )
     metadata.validate_code_challenge_methods_supported()
+
+
+def test_validate_with_metadata_classes():
+    """Test that validate() can compose metadata extension classes."""
+
+    base_metadata = {
+        "issuer": "https://provider.test",
+        "authorization_endpoint": "https://provider.test/auth",
+        "token_endpoint": "https://provider.test/token",
+        "response_types_supported": ["code"],
+    }
+
+    metadata = AuthorizationServerMetadata(
+        {**base_metadata, "require_signed_request_object": True}
+    )
+    metadata.validate(metadata_classes=[rfc9101.AuthorizationServerMetadata])
+
+    metadata = AuthorizationServerMetadata(
+        {**base_metadata, "require_signed_request_object": "invalid"}
+    )
+    with pytest.raises(ValueError, match="boolean"):
+        metadata.validate(metadata_classes=[rfc9101.AuthorizationServerMetadata])

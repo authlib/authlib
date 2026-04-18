@@ -1,7 +1,9 @@
 import base64
+import time
 
 import pytest
 
+from authlib.oauth2.rfc6749 import OAuth2Token
 from authlib.oauth2.rfc6749 import errors
 from authlib.oauth2.rfc6749 import parameters
 from authlib.oauth2.rfc6749 import util
@@ -83,3 +85,23 @@ def test_extract_basic_authorization():
 
     text = "Basic {}".format(base64.b64encode(b"a:b").decode())
     assert util.extract_basic_authorization({"Authorization": text}) == ("a", "b")
+
+
+def test_oauth2token_is_expired_with_expires_at_zero():
+    """Token with expires_at=0 (epoch) should be considered expired."""
+    token = OAuth2Token({"access_token": "a", "expires_at": 0})
+    assert token["expires_at"] == 0
+    assert token.is_expired() is True
+
+
+def test_oauth2token_is_expired_with_expires_at_none():
+    """Token with no expires_at should return None for is_expired."""
+    token = OAuth2Token({"access_token": "a"})
+    assert token.is_expired() is None
+
+
+def test_oauth2token_is_expired_with_valid_token():
+    """Token with future expires_at should not be expired."""
+    future = int(time.time()) + 7200
+    token = OAuth2Token({"access_token": "a", "expires_at": future})
+    assert token.is_expired() is False

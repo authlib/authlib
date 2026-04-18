@@ -21,3 +21,4 @@ venv/
 .idea/
 uv.lock
 .env
+coverage.xml

@@ -36,11 +36,16 @@ class AsyncMockDispatch:
 
 
 class AsyncPathMapDispatch:
-    def __init__(self, path_maps):
+    def __init__(self, path_maps, side_effects=None):
         self.path_maps = path_maps
+        self.side_effects = side_effects or dict()
 
     async def __call__(self, scope, receive, send):
         request = ASGIRequest(scope, receive=receive)
+
+        side_effect = self.side_effects.get(request.url.path)
+        if side_effect is not None:
+            side_effect(request)
 
         rv = self.path_maps[request.url.path]
         status_code = rv.get("status_code", 200)

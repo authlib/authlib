@@ -1,14 +1,16 @@
+import time
 from unittest import mock
 
 import pytest
 from django.test import override_settings
+from joserfc import jwk
+from joserfc import jwt
 
 from authlib.common.urls import url_decode
 from authlib.common.urls import urlparse
 from authlib.integrations.django_client import OAuth
 from authlib.integrations.django_client import OAuthError
-from authlib.jose import JsonWebKey
-from authlib.oidc.core.grants.util import generate_id_token
+from authlib.oidc.core.grants.util import create_half_hash
 
 from ..util import get_bearer_token
 from ..util import mock_send_value
@@ -209,7 +211,7 @@ def test_oauth2_authorize_code_verifier(factory):
 def test_openid_authorize(factory):
     request = factory.get("/login")
     request.session = factory.session
-    secret_key = JsonWebKey.import_key("secret", {"kty": "oct", "kid": "f"})
+    secret_key = jwk.import_key("secret", "oct")
 
     oauth = OAuth()
     client = oauth.register(
@@ -229,16 +231,19 @@ def test_openid_authorize(factory):
     query_data = dict(url_decode(urlparse.urlparse(url).query))
 
     token = get_bearer_token()
-    token["id_token"] = generate_id_token(
-        token,
-        {"sub": "123"},
-        secret_key,
-        alg="HS256",
-        iss="https://provider.test",
-        aud="dev",
-        exp=3600,
-        nonce=query_data["nonce"],
-    )
+    now = int(time.time())
+    claims = {
+        "sub": "123",
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "iat": now,
+        "auth_time": now,
+        "exp": now + 3600,
+        "nonce": query_data["nonce"],
+        "at_hash": create_half_hash(token["access_token"], "HS256").decode("utf-8"),
+    }
+    id_token = jwt.encode({"alg": "HS256"}, claims, secret_key)
+    token["id_token"] = id_token
     state = query_data["state"]
     with mock.patch("requests.sessions.Session.send") as send:
         send.return_value = mock_send_value(token)
@@ -344,3 +349,166 @@ def test_request_without_token():
         assert resp.text == "hi"
         with pytest.raises(OAuthError):
             client.get("https://resource.test/api/user")
+
+
+def test_logout_redirect(factory):
+    """Test logout_redirect generates correct URL with state stored in session."""
+    request = factory.get("/logout")
+    request.session = factory.session
+
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+
+    metadata = {
+        "issuer": "https://provider.test",
+        "end_session_endpoint": "https://provider.test/logout",
+    }
+
+    with mock.patch("requests.sessions.Session.send") as send:
+        send.return_value = mock_send_value(metadata)
+
+        resp = client.logout_redirect(
+            request,
+            post_logout_redirect_uri="https://client.test/logged-out",
+            id_token_hint="fake.id.token",
+        )
+        assert resp.status_code == 302
+        url = resp.get("Location")
+        assert "https://provider.test/logout" in url
+        assert "id_token_hint=fake.id.token" in url
+        assert "post_logout_redirect_uri" in url
+        assert "state=" in url
+
+        # Verify state is stored in session
+        params = dict(url_decode(urlparse.urlparse(url).query))
+        state = params["state"]
+        assert f"_state_dev_{state}" in request.session
+
+
+def test_logout_redirect_without_redirect_uri(factory):
+    """Test logout_redirect omits state when no post_logout_redirect_uri is provided."""
+    request = factory.get("/logout")
+    request.session = factory.session
+
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+
+    metadata = {
+        "issuer": "https://provider.test",
+        "end_session_endpoint": "https://provider.test/logout",
+    }
+
+    with mock.patch("requests.sessions.Session.send") as send:
+        send.return_value = mock_send_value(metadata)
+
+        resp = client.logout_redirect(request, id_token_hint="fake.id.token")
+        assert resp.status_code == 302
+        url = resp.get("Location")
+        assert "id_token_hint=fake.id.token" in url
+        assert "state" not in url
+
+
+def test_logout_redirect_missing_endpoint(factory):
+    """Test logout_redirect raises RuntimeError when end_session_endpoint is missing."""
+    request = factory.get("/logout")
+    request.session = factory.session
+
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+
+    metadata = {
+        "issuer": "https://provider.test",
+        "authorization_endpoint": "https://provider.test/authorize",
+    }
+
+    with mock.patch("requests.sessions.Session.send") as send:
+        send.return_value = mock_send_value(metadata)
+
+        with pytest.raises(RuntimeError, match='Missing "end_session_endpoint"'):
+            client.logout_redirect(request)
+
+
+def test_validate_logout_response(factory):
+    """Test validate_logout_response verifies state and returns stored data."""
+    request = factory.get("/logout")
+    request.session = factory.session
+
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+
+    metadata = {
+        "issuer": "https://provider.test",
+        "end_session_endpoint": "https://provider.test/logout",
+    }
+
+    with mock.patch("requests.sessions.Session.send") as send:
+        send.return_value = mock_send_value(metadata)
+
+        resp = client.logout_redirect(
+            request,
+            post_logout_redirect_uri="https://client.test/logged-out",
+        )
+        url = resp.get("Location")
+        params = dict(url_decode(urlparse.urlparse(url).query))
+        state = params["state"]
+
+        request2 = factory.get(f"/logged-out?state={state}")
+        request2.session = request.session
+        state_data = client.validate_logout_response(request2)
+        assert (
+            state_data["post_logout_redirect_uri"] == "https://client.test/logged-out"
+        )
+        # State should be cleared from session
+        assert f"_state_dev_{state}" not in request2.session
+
+
+def test_validate_logout_response_missing_state(factory):
+    """Test validate_logout_response raises OAuthError when state is missing."""
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+
+    request = factory.get("/logged-out")
+    request.session = factory.session
+    with pytest.raises(OAuthError, match='Missing "state" parameter'):
+        client.validate_logout_response(request)
+
+
+def test_validate_logout_response_invalid_state(factory):
+    """Test validate_logout_response raises OAuthError when state is invalid."""
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+
+    request = factory.get("/logged-out?state=invalid-state")
+    request.session = factory.session
+    with pytest.raises(OAuthError, match='Invalid "state" parameter'):
+        client.validate_logout_response(request)

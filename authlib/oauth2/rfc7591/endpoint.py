@@ -2,11 +2,13 @@ import binascii
 import os
 import time
 
+from joserfc import jwt
+from joserfc.errors import JoseError
+
+from authlib._joserfc_helpers import import_any_key
 from authlib.common.security import generate_token
 from authlib.consts import default_json_headers
 from authlib.deprecate import deprecate
-from authlib.jose import JoseError
-from authlib.jose import JsonWebToken
 
 from ..rfc6749 import AccessDeniedError
 from ..rfc6749 import InvalidRequestError
@@ -85,10 +87,11 @@ class ClientRegistrationEndpoint:
             raise UnapprovedSoftwareStatementError()
 
         try:
-            jwt = JsonWebToken(self.software_statement_alg_values_supported)
-            claims = jwt.decode(software_statement, key)
+            key = import_any_key(key)
+            algorithms = self.software_statement_alg_values_supported
+            token = jwt.decode(software_statement, key, algorithms=algorithms)
             # there is no need to validate claims
-            return claims
+            return token.claims
         except JoseError as exc:
             raise InvalidSoftwareStatementError() from exc
 
@@ -97,7 +100,7 @@ class ClientRegistrationEndpoint:
         try:
             client_id = self.generate_client_id(request)
         except TypeError:  # pragma: no cover
-            client_id = self.generate_client_id()
+            client_id = self.generate_client_id()  # type: ignore
             deprecate(
                 "generate_client_id takes a 'request' parameter. "
                 "It will become mandatory in coming releases",

@@ -1,6 +1,6 @@
 import pytest
+from joserfc.errors import InvalidClaimError
 
-from authlib.jose.errors import InvalidClaimError
 from authlib.oauth2.rfc7591 import ClientMetadataClaims
 
 

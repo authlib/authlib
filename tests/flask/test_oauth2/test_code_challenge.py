@@ -115,6 +115,45 @@ def test_trusted_client_without_code_challenge(test_client, db, client):
     assert "access_token" in resp
 
 
+def test_code_verifier_without_code_challenge(test_client, db, client):
+    """RFC 9700 Section 4.8.2: the authorization server MUST ensure that
+    if there was no code_challenge in the authorization request, a
+    request to the token endpoint containing a code_verifier is rejected."""
+    client.client_secret = "client-secret"
+    client.set_client_metadata(
+        {
+            "redirect_uris": ["https://client.test"],
+            "scope": "profile address",
+            "token_endpoint_auth_method": "client_secret_basic",
+            "response_types": ["code"],
+            "grant_types": ["authorization_code"],
+        }
+    )
+    db.session.add(client)
+    db.session.commit()
+
+    rv = test_client.get(authorize_url)
+    assert rv.data == b"ok"
+
+    rv = test_client.post(authorize_url, data={"user_id": "1"})
+    assert "code=" in rv.location
+
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    code = params["code"]
+    headers = create_basic_header("client-id", "client-secret")
+    rv = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "code_verifier": generate_token(48),
+        },
+        headers=headers,
+    )
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_request"
+
+
 def test_missing_code_verifier(test_client):
     url = authorize_url + "&code_challenge=Zhs2POMonIVVHZteWfoU7cSXQSm0YjghikFGJSDI2_s"
     rv = test_client.post(url, data={"user_id": "1"})

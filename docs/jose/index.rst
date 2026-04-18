@@ -1,7 +1,7 @@
 .. _jose:
 
-JOSE Guide
-==========
+JOSE
+====
 
 This part of the documentation contains information on the JOSE implementation.
 It includes:
@@ -12,12 +12,11 @@ It includes:
 4. JSON Web Algorithm (JWA)
 5. JSON Web Token (JWT)
 
-.. important::
+.. versionchanged:: 1.7
+    We are deprecating ``authlib.jose`` module in favor of joserfc_.
+    It will be removed in Authlib 1.8.
 
-    We are splitting the ``jose`` module into a separated package. You may be
-    interested in joserfc_.
-
-.. _joserfc: https://jose.authlib.org/
+.. _joserfc: https://jose.authlib.org/en/
 
 Usage
 -----
@@ -45,3 +44,4 @@ Follow the documentation below to find out more in detail.
     jwe
     jwk
     jwt
+    specs/index

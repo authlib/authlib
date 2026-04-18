@@ -1,6 +1,7 @@
+from joserfc.errors import InvalidClaimError
+
 from authlib.common.urls import is_valid_url
-from authlib.jose import BaseClaims
-from authlib.jose.errors import InvalidClaimError
+from authlib.oauth2.claims import BaseClaims
 
 
 class ClientMetadataClaims(BaseClaims):
@@ -25,8 +26,8 @@ class ClientMetadataClaims(BaseClaims):
         "request_uris",
     ]
 
-    def validate(self):
-        self._validate_essential_claims()
+    def validate(self, now=None, leeway=0):
+        super().validate(now, leeway)
         self.validate_token_endpoint_auth_signing_alg()
         self.validate_application_type()
         self.validate_sector_identifier_uri()
@@ -106,8 +107,6 @@ class ClientMetadataClaims(BaseClaims):
         if self.get("token_endpoint_auth_signing_alg") == "none":
             raise InvalidClaimError("token_endpoint_auth_signing_alg")
 
-        self._validate_claim_value("token_endpoint_auth_signing_alg")
-
     def validate_application_type(self):
         """Kind of the application.
 
@@ -127,8 +126,6 @@ class ClientMetadataClaims(BaseClaims):
         if self.get("application_type") not in ("web", "native"):
             raise InvalidClaimError("application_type")
 
-        self._validate_claim_value("application_type")
-
     def validate_sector_identifier_uri(self):
         """URL using the https scheme to be used in calculating Pseudonymous Identifiers
         by the OP.
@@ -146,7 +143,6 @@ class ClientMetadataClaims(BaseClaims):
         The subject_types_supported discovery parameter contains a list of the supported
         subject_type values for the OP. Valid types include pairwise and public.
         """
-        self._validate_claim_value("subject_type")
 
     def validate_id_token_signed_response_alg(self):
         """JWS alg algorithm [JWA] REQUIRED for signing the ID Token issued to this
@@ -165,7 +161,6 @@ class ClientMetadataClaims(BaseClaims):
             raise InvalidClaimError("id_token_signed_response_alg")
 
         self.setdefault("id_token_signed_response_alg", "RS256")
-        self._validate_claim_value("id_token_signed_response_alg")
 
     def validate_id_token_encrypted_response_alg(self):
         """JWE alg algorithm [JWA] REQUIRED for encrypting the ID Token issued to this
@@ -175,7 +170,6 @@ class ClientMetadataClaims(BaseClaims):
         result being a Nested JWT, as defined in [JWT]. The default, if omitted, is that
         no encryption is performed.
         """
-        self._validate_claim_value("id_token_encrypted_response_alg")
 
     def validate_id_token_encrypted_response_enc(self):
         """JWE enc algorithm [JWA] REQUIRED for encrypting the ID Token issued to this
@@ -194,8 +188,6 @@ class ClientMetadataClaims(BaseClaims):
         if self.get("id_token_encrypted_response_alg"):
             self.setdefault("id_token_encrypted_response_enc", "A128CBC-HS256")
 
-        self._validate_claim_value("id_token_encrypted_response_enc")
-
     def validate_userinfo_signed_response_alg(self):
         """JWS alg algorithm [JWA] REQUIRED for signing UserInfo Responses.
 
@@ -204,7 +196,6 @@ class ClientMetadataClaims(BaseClaims):
         Claims as a UTF-8 [RFC3629] encoded JSON object using the application/json
         content-type.
         """
-        self._validate_claim_value("userinfo_signed_response_alg")
 
     def validate_userinfo_encrypted_response_alg(self):
         """JWE [JWE] alg algorithm [JWA] REQUIRED for encrypting UserInfo Responses.
@@ -213,7 +204,6 @@ class ClientMetadataClaims(BaseClaims):
         encrypted, with the result being a Nested JWT, as defined in [JWT]. The default,
         if omitted, is that no encryption is performed.
         """
-        self._validate_claim_value("userinfo_encrypted_response_alg")
 
     def validate_userinfo_encrypted_response_enc(self):
         """JWE enc algorithm [JWA] REQUIRED for encrypting UserInfo Responses.
@@ -231,8 +221,6 @@ class ClientMetadataClaims(BaseClaims):
         if self.get("userinfo_encrypted_response_alg"):
             self.setdefault("userinfo_encrypted_response_enc", "A128CBC-HS256")
 
-        self._validate_claim_value("userinfo_encrypted_response_enc")
-
     def validate_default_max_age(self):
         """Default Maximum Authentication Age.
 
@@ -245,8 +233,6 @@ class ClientMetadataClaims(BaseClaims):
             self["default_max_age"], (int, float)
         ):
             raise InvalidClaimError("default_max_age")
-
-        self._validate_claim_value("default_max_age")
 
     def validate_require_auth_time(self):
         """Boolean value specifying whether the auth_time Claim in the ID Token is
@@ -263,8 +249,6 @@ class ClientMetadataClaims(BaseClaims):
         ):
             raise InvalidClaimError("require_auth_time")
 
-        self._validate_claim_value("require_auth_time")
-
     def validate_default_acr_values(self):
         """Default requested Authentication Context Class Reference values.
 
@@ -277,7 +261,6 @@ class ClientMetadataClaims(BaseClaims):
         values supported by the OP. Values specified in the acr_values request parameter
         or an individual acr Claim request override these default values.
         """
-        self._validate_claim_value("default_acr_values")
 
     def validate_initiate_login_uri(self):
         """RI using the https scheme that a third party can use to initiate a login by
@@ -301,7 +284,6 @@ class ClientMetadataClaims(BaseClaims):
         MAY be used. The default, if omitted, is that any algorithm supported by the OP
         and the RP MAY be used.
         """
-        self._validate_claim_value("request_object_signing_alg")
 
     def validate_request_object_encryption_alg(self):
         """JWE [JWE] alg algorithm [JWA] the RP is declaring that it may use for
@@ -316,7 +298,6 @@ class ClientMetadataClaims(BaseClaims):
         the result being a Nested JWT, as defined in [JWT]. The default, if omitted, is
         that the RP is not declaring whether it might encrypt any Request Objects.
         """
-        self._validate_claim_value("request_object_encryption_alg")
 
     def validate_request_object_encryption_enc(self):
         """JWE enc algorithm [JWA] the RP is declaring that it may use for encrypting
@@ -334,8 +315,6 @@ class ClientMetadataClaims(BaseClaims):
 
         if self.get("request_object_encryption_alg"):
             self.setdefault("request_object_encryption_enc", "A128CBC-HS256")
-
-        self._validate_claim_value("request_object_encryption_enc")
 
     def validate_request_uris(self):
         """Array of request_uri values that are pre-registered by the RP for use at the

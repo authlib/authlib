@@ -49,7 +49,7 @@ class ResourceProtector(_ResourceProtector):
         return req.credential
 
     def __call__(self, realm=None):
-        def wrapper(f):
+        def decorator(f):
             @functools.wraps(f)
             def decorated(request, *args, **kwargs):
                 try:
@@ -65,4 +65,6 @@ class ResourceProtector(_ResourceProtector):
 
             return decorated
 
-        return wrapper
+        if callable(realm):
+            return decorator(realm)
+        return decorator

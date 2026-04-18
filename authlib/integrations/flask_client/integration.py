@@ -11,7 +11,7 @@ token_update = _signal.signal("token_update")
 class FlaskIntegration(FrameworkIntegration):
     def update_token(self, token, refresh_token=None, access_token=None):
         token_update.send(
-            current_app,
+            current_app._get_current_object(),
             name=self.name,
             token=token,
             refresh_token=refresh_token,

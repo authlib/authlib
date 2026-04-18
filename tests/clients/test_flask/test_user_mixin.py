@@ -1,17 +1,20 @@
+import time
 from unittest import mock
 
 import pytest
 from flask import Flask
+from joserfc import jwt
+from joserfc.errors import InvalidClaimError
+from joserfc.jwk import KeySet
+from joserfc.jwk import OctKey
 
 from authlib.integrations.flask_client import OAuth
-from authlib.jose import JsonWebKey
-from authlib.jose.errors import InvalidClaimError
-from authlib.oidc.core.grants.util import generate_id_token
+from authlib.oidc.core.grants.util import create_half_hash
 
 from ..util import get_bearer_token
 from ..util import read_key_file
 
-secret_key = JsonWebKey.import_key("secret", {"kty": "oct", "kid": "f"})
+secret_key = OctKey.import_key("test-oct-secret", {"kty": "oct", "kid": "f"})
 
 
 def test_fetch_userinfo():
@@ -40,16 +43,18 @@ def test_fetch_userinfo():
 
 def test_parse_id_token():
     token = get_bearer_token()
-    id_token = generate_id_token(
-        token,
-        {"sub": "123"},
-        secret_key,
-        alg="HS256",
-        iss="https://provider.test",
-        aud="dev",
-        exp=3600,
-        nonce="n",
-    )
+    now = int(time.time())
+    claims = {
+        "sub": "123",
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "iat": now,
+        "auth_time": now,
+        "exp": now + 3600,
+        "nonce": "n",
+        "at_hash": create_half_hash(token["access_token"], "HS256").decode("utf-8"),
+    }
+    id_token = jwt.encode({"alg": "HS256"}, claims, secret_key)
 
     app = Flask(__name__)
     app.secret_key = "!"
@@ -81,15 +86,19 @@ def test_parse_id_token():
 
 def test_parse_id_token_nonce_supported():
     token = get_bearer_token()
-    id_token = generate_id_token(
-        token,
-        {"sub": "123", "nonce_supported": False},
-        secret_key,
-        alg="HS256",
-        iss="https://provider.test",
-        aud="dev",
-        exp=3600,
-    )
+
+    now = int(time.time())
+    claims = {
+        "sub": "123",
+        "nonce_supported": False,
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "iat": now,
+        "auth_time": now,
+        "exp": now + 3600,
+        "at_hash": create_half_hash(token["access_token"], "HS256").decode("utf-8"),
+    }
+    id_token = jwt.encode({"alg": "HS256"}, claims, secret_key)
 
     app = Flask(__name__)
     app.secret_key = "!"
@@ -111,16 +120,18 @@ def test_parse_id_token_nonce_supported():
 
 def test_runtime_error_fetch_jwks_uri():
     token = get_bearer_token()
-    id_token = generate_id_token(
-        token,
-        {"sub": "123"},
-        secret_key,
-        alg="HS256",
-        iss="https://provider.test",
-        aud="dev",
-        exp=3600,
-        nonce="n",
-    )
+    now = int(time.time())
+    claims = {
+        "sub": "123",
+        "nonce": "n",
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "iat": now,
+        "auth_time": now,
+        "exp": now + 3600,
+        "at_hash": create_half_hash(token["access_token"], "HS256").decode("utf-8"),
+    }
+    id_token = jwt.encode({"alg": "HS256", "kid": "not-found"}, claims, secret_key)
 
     app = Flask(__name__)
     app.secret_key = "!"
@@ -143,18 +154,20 @@ def test_runtime_error_fetch_jwks_uri():
 
 
 def test_force_fetch_jwks_uri():
-    secret_keys = read_key_file("jwks_private.json")
+    secret_keys = KeySet.import_key_set(read_key_file("jwks_private.json"))
     token = get_bearer_token()
-    id_token = generate_id_token(
-        token,
-        {"sub": "123"},
-        secret_keys,
-        alg="RS256",
-        iss="https://provider.test",
-        aud="dev",
-        exp=3600,
-        nonce="n",
-    )
+    now = int(time.time())
+    claims = {
+        "sub": "123",
+        "nonce": "n",
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "iat": now,
+        "auth_time": now,
+        "exp": now + 3600,
+        "at_hash": create_half_hash(token["access_token"], "RS256").decode("utf-8"),
+    }
+    id_token = jwt.encode({"alg": "RS256"}, claims, secret_keys)
 
     app = Flask(__name__)
     app.secret_key = "!"

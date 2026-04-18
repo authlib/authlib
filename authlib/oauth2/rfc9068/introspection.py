@@ -1,11 +1,13 @@
+from joserfc.errors import ExpiredTokenError
+from joserfc.errors import InvalidClaimError
+
 from authlib.common.errors import ContinueIteration
 from authlib.consts import default_json_headers
-from authlib.jose.errors import ExpiredTokenError
-from authlib.jose.errors import InvalidClaimError
 from authlib.oauth2.rfc6750.errors import InvalidTokenError
-from authlib.oauth2.rfc9068.token_validator import JWTBearerTokenValidator
 
 from ..rfc7662 import IntrospectionEndpoint
+from .claims import JWTAccessTokenClaims
+from .token_validator import JWTBearerTokenValidator
 
 
 class JWTIntrospectionEndpoint(IntrospectionEndpoint):
@@ -78,7 +80,7 @@ class JWTIntrospectionEndpoint(IntrospectionEndpoint):
         if token and self.check_permission(token, client, request):
             return token
 
-    def create_introspection_payload(self, token):
+    def create_introspection_payload(self, token: JWTAccessTokenClaims):
         if not token:
             return {"active": False}
 
@@ -87,7 +89,7 @@ class JWTIntrospectionEndpoint(IntrospectionEndpoint):
         except ExpiredTokenError:
             return {"active": False}
         except InvalidClaimError as exc:
-            if exc.claim_name == "iss":
+            if exc.claim == "iss":
                 raise ContinueIteration() from exc
             raise InvalidTokenError() from exc
 

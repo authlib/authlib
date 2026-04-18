@@ -122,3 +122,20 @@ def test_scope_operator(factory, token):
     assert resp.status_code == 200
     data = json.loads(resp.content)
     assert data["username"] == "foo"
+
+
+def test_decorator_without_parentheses(factory, token):
+    @require_oauth
+    def get_resource(request):
+        user = request.oauth_token.user
+        return JsonResponse(dict(sub=user.pk, username=user.username))
+
+    request = factory.get("/resource")
+    resp = get_resource(request)
+    assert resp.status_code == 401
+
+    request = factory.get("/resource", HTTP_AUTHORIZATION="bearer a1")
+    resp = get_resource(request)
+    assert resp.status_code == 200
+    data = json.loads(resp.content)
+    assert data["username"] == "foo"

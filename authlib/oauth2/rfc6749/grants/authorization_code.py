@@ -7,6 +7,7 @@ from ..errors import AccessDeniedError
 from ..errors import InvalidClientError
 from ..errors import InvalidGrantError
 from ..errors import InvalidRequestError
+from ..errors import InvalidScopeError
 from ..errors import OAuth2Error
 from ..errors import UnauthorizedClientError
 from ..hooks import hooked
@@ -308,10 +309,15 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
                     code=code,
                     client_id=client.client_id,
                     redirect_uri=request.payload.redirect_uri,
-                    scope=request.payload.scope,
+                    scope=request.scope,
                     user_id=request.user.id,
                 )
                 item.save()
+
+        .. note:: Use ``request.scope`` instead of ``request.payload.scope`` to get
+            the resolved scope. Per RFC 6749 Section 3.3, if the client omits the
+            scope parameter, the server uses a default value from
+            ``client.get_allowed_scope()``.
         """
         raise NotImplementedError()
 
@@ -381,6 +387,10 @@ def validate_code_authorization_request(grant):
     @hooked
     def validate_authorization_request_payload(grant, redirect_uri):
         grant.validate_requested_scope()
+        scope = client.get_allowed_scope(request.payload.scope)
+        if scope is None:
+            raise InvalidScopeError()
+        request.scope = scope
 
     try:
         validate_authorization_request_payload(grant, redirect_uri)

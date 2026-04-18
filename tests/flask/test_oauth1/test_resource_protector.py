@@ -176,3 +176,17 @@ def test_rsa_sha1_signature(app, test_client, use_cache):
     rv = test_client.get(url, headers=headers)
     data = json.loads(rv.data)
     assert data["error"] == "invalid_signature"
+
+
+def test_decorator_without_parentheses(app, test_client):
+    create_resource_server(app)
+    auth_header = (
+        'OAuth oauth_consumer_key="client",'
+        'oauth_signature_method="PLAINTEXT",'
+        'oauth_token="valid-token",'
+        'oauth_signature="secret&valid-token-secret"'
+    )
+    headers = {"Authorization": auth_header}
+    rv = test_client.get("/user-no-parens", headers=headers)
+    data = json.loads(rv.data)
+    assert "username" in data

@@ -3,6 +3,7 @@ import logging
 from authlib.common.urls import add_params_to_uri
 
 from ..errors import AccessDeniedError
+from ..errors import InvalidScopeError
 from ..errors import OAuth2Error
 from ..errors import UnauthorizedClientError
 from ..hooks import hooked
@@ -140,6 +141,10 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
         try:
             self.request.client = client
             self.validate_requested_scope()
+            scope = client.get_allowed_scope(self.request.payload.scope)
+            if scope is None:
+                raise InvalidScopeError()
+            self.request.scope = scope
         except OAuth2Error as error:
             error.redirect_uri = redirect_uri
             error.redirect_fragment = True
@@ -208,7 +213,7 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
             self.request.user = grant_user
             token = self.generate_token(
                 user=grant_user,
-                scope=self.request.payload.scope,
+                scope=self.request.scope,
                 include_refresh_token=False,
             )
             log.debug("Grant token %r to %r", token, self.request.client)

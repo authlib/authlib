@@ -90,6 +90,7 @@ class OAuth2Request(OAuth2Payload):
         self.authorization_code = None
         self.refresh_token = None
         self.credential = None
+        self._scope = None
 
     @property
     def args(self):
@@ -151,11 +152,13 @@ class OAuth2Request(OAuth2Payload):
 
     @property
     def scope(self) -> str:
-        deprecate(
-            "'request.scope' is deprecated in favor of 'request.payload.scope'",
-            version="1.8",
-        )
+        if self._scope is not None:
+            return self._scope
         return self.payload.scope
+
+    @scope.setter
+    def scope(self, value: str):
+        self._scope = value
 
     @property
     def state(self):

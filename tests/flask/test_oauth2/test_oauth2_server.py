@@ -38,6 +38,11 @@ def resource_server(app, db):
     def public_info():
         return jsonify(status="ok")
 
+    @app.route("/no-parens")
+    @require_oauth
+    def no_parens():
+        return jsonify(status="ok")
+
     @app.route("/operator-and")
     @require_oauth(["profile email"])
     def operator_and():
@@ -140,6 +145,10 @@ def test_access_resource(test_client, token):
     assert resp["username"] == "foo"
 
     rv = test_client.get("/info", headers=headers)
+    resp = json.loads(rv.data)
+    assert resp["status"] == "ok"
+
+    rv = test_client.get("/no-parens", headers=headers)
     resp = json.loads(rv.data)
     assert resp["status"] == "ok"
 

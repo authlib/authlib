@@ -270,3 +270,9 @@ def create_resource_server(app, use_cache=False, lazy=False):
     def user_profile():
         user = current_credential.user
         return jsonify(id=user.id, username=user.username)
+
+    @app.route("/user-no-parens")
+    @require_oauth
+    def user_profile_no_parens():
+        user = current_credential.user
+        return jsonify(id=user.id, username=user.username)

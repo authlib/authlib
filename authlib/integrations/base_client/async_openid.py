@@ -1,5 +1,9 @@
-from authlib.jose import JsonWebKey
-from authlib.jose import JsonWebToken
+from joserfc import jwt
+from joserfc.errors import InvalidKeyIdError
+from joserfc.jwk import KeySet
+
+from authlib.common.security import generate_token
+from authlib.common.urls import add_params_to_uri
 from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core import UserInfo
@@ -18,7 +22,7 @@ class AsyncOpenIDMixin:
         if not uri:
             raise RuntimeError('Missing "jwks_uri" in metadata')
 
-        async with self.client_cls(**self.client_kwargs) as client:
+        async with self._get_session() as client:
             resp = await client.request("GET", uri, withhold_token=True)
             resp.raise_for_status()
             jwk_set = resp.json()
@@ -57,29 +61,63 @@ class AsyncOpenIDMixin:
         if not alg_values:
             alg_values = ["RS256"]
 
-        jwt = JsonWebToken(alg_values)
-
-        jwk_set = await self.fetch_jwk_set()
+        jwks = await self.fetch_jwk_set()
+        key_set = KeySet.import_key_set(jwks)
         try:
-            claims = jwt.decode(
+            token = jwt.decode(
                 token["id_token"],
-                key=JsonWebKey.import_key_set(jwk_set),
-                claims_cls=claims_cls,
-                claims_options=claims_options,
-                claims_params=claims_params,
+                key=key_set,
+                algorithms=alg_values,
             )
-        except ValueError:
-            jwk_set = await self.fetch_jwk_set(force=True)
-            claims = jwt.decode(
+        except InvalidKeyIdError:
+            jwks = await self.fetch_jwk_set(force=True)
+            key_set = KeySet.import_key_set(jwks)
+            token = jwt.decode(
                 token["id_token"],
-                key=JsonWebKey.import_key_set(jwk_set),
-                claims_cls=claims_cls,
-                claims_options=claims_options,
-                claims_params=claims_params,
+                key=key_set,
+                algorithms=alg_values,
             )
 
+        claims = claims_cls(token.claims, token.header, claims_options, claims_params)
         # https://github.com/authlib/authlib/issues/259
         if claims.get("nonce_supported") is False:
             claims.params["nonce"] = None
         claims.validate(leeway=leeway)
         return UserInfo(claims)
+
+    async def create_logout_url(
+        self,
+        post_logout_redirect_uri=None,
+        id_token_hint=None,
+        state=None,
+        **kwargs,
+    ):
+        """Generate the end session URL for RP-Initiated Logout.
+
+        :param post_logout_redirect_uri: URI to redirect after logout.
+        :param id_token_hint: ID Token previously issued to the RP.
+        :param state: Opaque value for maintaining state.
+        :param kwargs: Extra parameters (client_id, logout_hint, ui_locales).
+        :return: dict with 'url' and 'state' keys.
+        """
+        metadata = await self.load_server_metadata()
+        end_session_endpoint = metadata.get("end_session_endpoint")
+
+        if not end_session_endpoint:
+            raise RuntimeError('Missing "end_session_endpoint" in metadata')
+
+        params = {}
+        if id_token_hint:
+            params["id_token_hint"] = id_token_hint
+        if post_logout_redirect_uri:
+            params["post_logout_redirect_uri"] = post_logout_redirect_uri
+            if state is None:
+                state = generate_token(20)
+            params["state"] = state
+
+        for key in ("client_id", "logout_hint", "ui_locales"):
+            if key in kwargs:
+                params[key] = kwargs[key]
+
+        url = add_params_to_uri(end_session_endpoint, params)
+        return {"url": url, "state": state}

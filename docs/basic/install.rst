@@ -46,12 +46,6 @@ Using Authlib with Starlette::
 
     $ pip install Authlib httpx Starlette
 
-.. versionchanged:: v0.12
-
-    "requests" is an optional dependency since v0.12. If you want to use
-    Authlib client, you have to install "requests" by yourself::
-
-    $ pip install Authlib requests
 
 Get the Source Code
 -------------------

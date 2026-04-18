@@ -1,7 +1,14 @@
 import logging
 
-from authlib.jose import JoseError
-from authlib.jose import jwt
+from joserfc import jwk
+from joserfc import jws
+from joserfc import jwt
+from joserfc.errors import JoseError
+from joserfc.util import to_bytes
+
+from authlib._joserfc_helpers import import_any_key
+from authlib.common.encoding import json_loads
+from authlib.deprecate import deprecate
 
 from ..rfc6749 import BaseGrant
 from ..rfc6749 import InvalidClientError
@@ -45,6 +52,25 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
             key, issuer, audience, subject, issued_at, expires_at, claims, **kwargs
         )
 
+    def verify_claims(self, claims: jwt.Claims):
+        options = dict(self.CLAIMS_OPTIONS)
+        audiences = self.get_audiences()
+        if audiences:
+            options["aud"] = {"essential": True, "values": audiences}
+        else:
+            deprecate(
+                "'get_audiences' must return a non-empty list. "
+                "Audience validation will become mandatory.",
+                version="1.8",
+            )
+
+        claims_requests = jwt.JWTClaimsRegistry(leeway=self.LEEWAY, **options)
+        try:
+            claims_requests.validate(claims)
+        except JoseError as e:
+            log.debug("Assertion Error: %r", e)
+            raise InvalidGrantError(description=e.description) from e
+
     def process_assertion_claims(self, assertion):
         """Extract JWT payload claims from request "assertion", per
         `Section 3.1`_.
@@ -55,19 +81,37 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
 
         .. _`Section 3.1`: https://tools.ietf.org/html/rfc7523#section-3.1
         """
-        try:
-            claims = jwt.decode(
-                assertion, self.resolve_public_key, claims_options=self.CLAIMS_OPTIONS
+        headers, claims = self.extract_assertion(assertion)
+        client = self.resolve_issuer_client(claims["iss"])
+
+        if hasattr(self, "resolve_client_key"):  # pragma: no cover
+            key = import_any_key(self.resolve_client_key(client, headers, claims))
+            deprecate(
+                "Use resolve_client_public_key instead of resolve_client_key.",
+                version="1.8",
             )
-            claims.validate(leeway=self.LEEWAY)
+        else:
+            key = import_any_key(self.resolve_client_public_key(client))
+
+        try:
+            token = jwt.decode(assertion, key)
         except JoseError as e:
             log.debug("Assertion Error: %r", e)
             raise InvalidGrantError(description=e.description) from e
-        return claims
+        except ValueError as e:
+            log.debug("Assertion Error: %r", e)
+            raise InvalidGrantError("Invalid JWT assertion") from None
 
-    def resolve_public_key(self, headers, payload):
-        client = self.resolve_issuer_client(payload["iss"])
-        return self.resolve_client_key(client, headers, payload)
+        self.verify_claims(token.claims)
+        return token.claims
+
+    def extract_assertion(self, assertion: str):
+        obj = jws.extract_compact(to_bytes(assertion))
+        try:
+            claims = json_loads(obj.payload)
+        except ValueError:
+            raise InvalidGrantError(description="Invalid JWT payload.") from None
+        return obj.headers(), claims
 
     def validate_token_request(self):
         """The client makes a request to the token endpoint by sending the
@@ -154,21 +198,19 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
         """
         raise NotImplementedError()
 
-    def resolve_client_key(self, client, headers, payload):
+    def resolve_client_public_key(self, client) -> jwk.Key | jwk.KeySet:
         """Resolve client key to decode assertion data. Developers MUST
         implement this method in subclass. For instance, there is a
         "jwks" column on client table, e.g.::
 
-            def resolve_client_key(self, client, headers, payload):
-                # from authlib.jose import JsonWebKey
+            def resolve_client_public_key(self, client):
+                from joserfc import KeySet
 
-                key_set = JsonWebKey.import_key_set(client.jwks)
-                return key_set.find_by_kid(headers["kid"])
+                key_set = KeySet.import_key_set(client.jwks)
+                return key_set
 
         :param client: instance of OAuth client model
-        :param headers: headers part of the JWT
-        :param payload: payload part of the JWT
-        :return: ``authlib.jose.Key`` instance
+        :return: OctKey, RSAKey, ECKey, OKPKey or KeySet instance
         """
         raise NotImplementedError()
 
@@ -183,6 +225,27 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
         :return: User instance
         """
         raise NotImplementedError()
+
+    def get_audiences(self):
+        """Return a list of valid audience identifiers for this authorization
+        server. Per RFC 7523 Section 3:
+
+            The authorization server MUST reject any JWT that does not
+            contain its own identity as the intended audience.
+
+        Developers SHOULD implement this method to return the list of valid
+        audience values, typically including the token endpoint URL and/or
+        the issuer identifier. For example::
+
+            def get_audiences(self):
+                return ["https://example.com/oauth/token", "https://example.com"]
+
+        If this method returns an empty list, audience value validation is
+        skipped (only presence is checked).
+
+        :return: list of valid audience strings
+        """
+        return []
 
     def has_granted_permission(self, client, user):
         """Check if the client has permission to access the given user's resource.

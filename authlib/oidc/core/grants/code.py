@@ -4,15 +4,19 @@
 Implementation of Authentication using the Authorization Code Flow
 per `Section 3.1`_.
 
-.. _`Section 3.1`: http://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth
+.. _`Section 3.1`: https://openid.net/specs/openid-connect-core-1_0.html#CodeFlowAuth
 """
 
 import logging
-import warnings
 
+from joserfc import jwt
+
+from authlib._joserfc_helpers import import_any_key
 from authlib.oauth2.rfc6749 import OAuth2Request
 
-from .util import generate_id_token
+from ..models import AuthorizationCodeMixin
+from ._legacy import LegacyMixin
+from .util import create_half_hash
 from .util import is_openid_scope
 from .util import validate_nonce
 from .util import validate_request_prompt
@@ -20,29 +24,19 @@ from .util import validate_request_prompt
 log = logging.getLogger(__name__)
 
 
-class OpenIDToken:
-    def get_jwt_config(self, grant, client):  # pragma: no cover
-        """Get the JWT configuration for OpenIDCode extension. The JWT
-        configuration will be used to generate ``id_token``.
-        If ``alg`` is undefined, the ``id_token_signed_response_alg`` client
-        metadata will be used. By default ``RS256`` will be used.
-        If ``key`` is undefined, the ``jwks_uri`` or ``jwks`` client metadata
-        will be used.
-        Developers MUST implement this method in subclass, e.g.::
+class OpenIDToken(LegacyMixin):
+    def get_authorization_code_claims(self, authorization_code: AuthorizationCodeMixin):
+        claims = {
+            "nonce": authorization_code.get_nonce(),
+            "auth_time": authorization_code.get_auth_time(),
+        }
 
-            def get_jwt_config(self, grant, client):
-                return {
-                    "key": read_private_key_file(key_path),
-                    "alg": client.id_token_signed_response_alg or "RS256",
-                    "iss": "issuer-identity",
-                    "exp": 3600,
-                }
+        if acr := authorization_code.get_acr():
+            claims["acr"] = acr
 
-        :param grant: AuthorizationCodeGrant instance
-        :param client: OAuth2 client instance
-        :return: dict
-        """
-        raise NotImplementedError()
+        if amr := authorization_code.get_amr():
+            claims["amr"] = amr
+        return claims
 
     def generate_user_info(self, user, scope):
         """Provide user information for the given scope. Developers
@@ -63,12 +57,32 @@ class OpenIDToken:
         """
         raise NotImplementedError()
 
-    def get_audiences(self, request):
-        """Parse `aud` value for id_token, default value is client id. Developers
-        MAY rewrite this method to provide a customized audience value.
-        """
-        client = request.client
-        return [client.get_client_id()]
+    def encode_id_token(self, token, request: OAuth2Request):
+        alg = self.get_client_algorithm(request.client)
+        header = self.get_encode_header(request.client)
+
+        claims = self.get_compatible_claims(request)
+        if request.authorization_code:
+            claims.update(
+                self.get_authorization_code_claims(request.authorization_code)
+            )
+
+        access_token = token.get("access_token")
+        if access_token:
+            at_hash = create_half_hash(access_token, alg)
+            if at_hash is not None:
+                claims["at_hash"] = at_hash.decode("utf-8")
+
+        user_info = self.generate_user_info(request.user, token["scope"])
+        claims.update(user_info)
+
+        if alg == "none":
+            private_key = None
+        else:
+            key = self.resolve_client_private_key(request.client)
+            private_key = import_any_key(key)
+
+        return jwt.encode(header, claims, private_key, [alg])
 
     def process_token(self, grant, response):
         _, token, _ = response
@@ -78,40 +92,7 @@ class OpenIDToken:
             return token
 
         request: OAuth2Request = grant.request
-        authorization_code = request.authorization_code
-
-        try:
-            config = self.get_jwt_config(grant, request.client)
-        except TypeError:
-            warnings.warn(
-                "get_jwt_config(self, grant) is deprecated and will be removed in version 1.8. "
-                "Use get_jwt_config(self, grant, client) instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            config = self.get_jwt_config(grant)
-
-        config["aud"] = self.get_audiences(request)
-
-        # Per OpenID Connect Registration 1.0 Section 2:
-        # Use client's id_token_signed_response_alg if specified
-        if not config.get("alg") and (
-            client_alg := request.client.id_token_signed_response_alg
-        ):
-            config["alg"] = client_alg
-
-        if authorization_code:
-            config["nonce"] = authorization_code.get_nonce()
-            config["auth_time"] = authorization_code.get_auth_time()
-
-            if acr := authorization_code.get_acr():
-                config["acr"] = acr
-
-            if amr := authorization_code.get_amr():
-                config["amr"] = amr
-
-        user_info = self.generate_user_info(request.user, token["scope"])
-        id_token = generate_id_token(token, user_info, **config)
+        id_token = self.encode_id_token(token, request)
         token["id_token"] = id_token
         return token
 
@@ -124,8 +105,10 @@ class OpenIDCode(OpenIDToken):
     MUST implement the missing methods::
 
         class MyOpenIDCode(OpenIDCode):
-            def get_jwt_config(self, grant):
-                return {...}
+            def resolve_client_private_key(self, client):
+                with open(jwks_file_path) as f:
+                    data = json.load(f)
+                return KeySet.import_key_set(data)
 
             def exists_nonce(self, nonce, request):
                 return check_if_nonce_in_cache(request.payload.client_id, nonce)

@@ -77,7 +77,7 @@ class BaseClaims(dict):
         if validate and not validate(self, value):
             raise InvalidClaimError(claim_name)
 
-    def get_registered_claims(self):
+    def get_registered_claims(self):  # pragma: no cover
         rv = {}
         for k in self.REGISTERED_CLAIMS:
             if k in self:

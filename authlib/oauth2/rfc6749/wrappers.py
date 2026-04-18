@@ -3,7 +3,7 @@ import time
 
 class OAuth2Token(dict):
     def __init__(self, params):
-        if params.get("expires_at"):
+        if params.get("expires_at") is not None:
             try:
                 params["expires_at"] = int(params["expires_at"])
             except ValueError:
@@ -19,7 +19,7 @@ class OAuth2Token(dict):
 
     def is_expired(self, leeway=60):
         expires_at = self.get("expires_at")
-        if not expires_at:
+        if expires_at is None:
             return None
         # Only check expiration if expires_at is an integer
         if not isinstance(expires_at, int):

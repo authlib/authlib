@@ -1,5 +1,6 @@
+from joserfc.errors import JoseError
+
 from authlib.consts import default_json_headers
-from authlib.jose import JoseError
 
 from ..rfc6749 import AccessDeniedError
 from ..rfc6749 import InvalidClientError
@@ -117,6 +118,7 @@ class ClientConfigurationEndpoint:
             try:
                 claims.validate()
             except JoseError as error:
+                print(error)
                 raise InvalidClientMetadataError(error.description) from error
 
             client_metadata.update(**claims.get_registered_claims())

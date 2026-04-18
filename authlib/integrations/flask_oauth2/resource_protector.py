@@ -93,10 +93,9 @@ class ResourceProtector(_ResourceProtector):
 
     def __call__(self, scopes=None, optional=False, **kwargs):
         claims = kwargs
-        # backward compatibility
-        claims["scopes"] = scopes
+        claims["scopes"] = scopes if not callable(scopes) else None
 
-        def wrapper(f):
+        def decorator(f):
             @functools.wraps(f)
             def decorated(*args, **kwargs):
                 try:
@@ -111,7 +110,9 @@ class ResourceProtector(_ResourceProtector):
 
             return decorated
 
-        return wrapper
+        if callable(scopes):
+            return decorator(scopes)
+        return decorator
 
 
 def _get_current_token():

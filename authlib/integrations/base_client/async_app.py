@@ -75,7 +75,7 @@ class AsyncOAuth2Mixin(OAuth2Base):
 
     async def load_server_metadata(self):
         if self._server_metadata_url and "_loaded_at" not in self.server_metadata:
-            async with self.client_cls(**self.client_kwargs) as client:
+            async with self._get_session() as client:
                 resp = await client.request(
                     "GET", self._server_metadata_url, withhold_token=True
                 )

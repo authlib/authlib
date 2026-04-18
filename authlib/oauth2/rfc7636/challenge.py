@@ -103,6 +103,15 @@ class CodeChallenge:
         if not challenge and not verifier:
             return
 
+        # RFC 9700 Section 4.8: the authorization server MUST ensure that if
+        # there was no code_challenge in the authorization request, a request
+        # to the token endpoint containing a code_verifier is rejected.
+        if not challenge and verifier:
+            raise InvalidRequestError(
+                "The authorization request had no 'code_challenge', "
+                "but a 'code_verifier' was provided."
+            )
+
         # challenge exists, code_verifier is required
         if not verifier:
             raise InvalidRequestError("Missing 'code_verifier'")

@@ -1,6 +1,9 @@
-from authlib.jose import JsonWebKey
-from authlib.jose import JsonWebToken
-from authlib.jose import jwt
+from joserfc import jwt
+from joserfc.errors import InvalidKeyIdError
+from joserfc.jwk import KeySet
+
+from authlib.common.security import generate_token
+from authlib.common.urls import add_params_to_uri
 from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core import UserInfo
@@ -17,7 +20,7 @@ class OpenIDMixin:
         if not uri:
             raise RuntimeError('Missing "jwks_uri" in metadata')
 
-        with self.client_cls(**self.client_kwargs) as session:
+        with self._get_session() as session:
             resp = session.request("GET", uri, withhold_token=True)
             resp.raise_for_status()
             jwk_set = resp.json()
@@ -40,8 +43,6 @@ class OpenIDMixin:
         if "id_token" not in token:
             return None
 
-        load_key = self.create_load_key()
-
         claims_params = dict(
             nonce=nonce,
             client_id=self.client_id,
@@ -59,18 +60,23 @@ class OpenIDMixin:
             claims_options = {"iss": {"values": [metadata["issuer"]]}}
 
         alg_values = metadata.get("id_token_signing_alg_values_supported")
-        if alg_values:
-            _jwt = JsonWebToken(alg_values)
-        else:
-            _jwt = jwt
 
-        claims = _jwt.decode(
-            token["id_token"],
-            key=load_key,
-            claims_cls=claims_cls,
-            claims_options=claims_options,
-            claims_params=claims_params,
-        )
+        key_set = KeySet.import_key_set(self.fetch_jwk_set())
+        try:
+            token = jwt.decode(
+                token["id_token"],
+                key=key_set,
+                algorithms=alg_values,
+            )
+        except InvalidKeyIdError:
+            key_set = KeySet.import_key_set(self.fetch_jwk_set(force=True))
+            token = jwt.decode(
+                token["id_token"],
+                key=key_set,
+                algorithms=alg_values,
+            )
+
+        claims = claims_cls(token.claims, token.header, claims_options, claims_params)
         # https://github.com/authlib/authlib/issues/259
         if claims.get("nonce_supported") is False:
             claims.params["nonce"] = None
@@ -78,18 +84,39 @@ class OpenIDMixin:
         claims.validate(leeway=leeway)
         return UserInfo(claims)
 
-    def create_load_key(self):
-        def load_key(header, _):
-            jwk_set = JsonWebKey.import_key_set(self.fetch_jwk_set())
-            try:
-                return jwk_set.find_by_kid(
-                    header.get("kid"), use="sig", alg=header.get("alg")
-                )
-            except ValueError:
-                # re-try with new jwk set
-                jwk_set = JsonWebKey.import_key_set(self.fetch_jwk_set(force=True))
-                return jwk_set.find_by_kid(
-                    header.get("kid"), use="sig", alg=header.get("alg")
-                )
+    def create_logout_url(
+        self,
+        post_logout_redirect_uri=None,
+        id_token_hint=None,
+        state=None,
+        **kwargs,
+    ):
+        """Generate the end session URL for RP-Initiated Logout.
 
-        return load_key
+        :param post_logout_redirect_uri: URI to redirect after logout.
+        :param id_token_hint: ID Token previously issued to the RP.
+        :param state: Opaque value for maintaining state.
+        :param kwargs: Extra parameters (client_id, logout_hint, ui_locales).
+        :return: dict with 'url' and 'state' keys.
+        """
+        metadata = self.load_server_metadata()
+        end_session_endpoint = metadata.get("end_session_endpoint")
+
+        if not end_session_endpoint:
+            raise RuntimeError('Missing "end_session_endpoint" in metadata')
+
+        params = {}
+        if id_token_hint:
+            params["id_token_hint"] = id_token_hint
+        if post_logout_redirect_uri:
+            params["post_logout_redirect_uri"] = post_logout_redirect_uri
+            if state is None:
+                state = generate_token(20)
+            params["state"] = state
+
+        for key in ("client_id", "logout_hint", "ui_locales"):
+            if key in kwargs:
+                params[key] = kwargs[key]
+
+        url = add_params_to_uri(end_session_endpoint, params)
+        return {"url": url, "state": state}

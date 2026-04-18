@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import hmac
-import time
+
+from joserfc.errors import InvalidClaimError
+from joserfc.errors import MissingClaimError
 
 from authlib.common.encoding import to_bytes
-from authlib.jose import JWTClaims
-from authlib.jose.errors import InvalidClaimError
-from authlib.jose.errors import MissingClaimError
+from authlib.oauth2.claims import JWTClaims
 from authlib.oauth2.rfc6749.util import scope_to_list
 
 from .util import create_half_hash
@@ -42,19 +44,9 @@ class IDToken(JWTClaims):
             if k not in self:
                 raise MissingClaimError(k)
 
-        self._validate_essential_claims()
-        if now is None:
-            now = int(time.time())
-
-        self.validate_iss()
-        self.validate_sub()
-        self.validate_aud()
-        self.validate_exp(now, leeway)
-        self.validate_nbf(now, leeway)
-        self.validate_iat(now, leeway)
+        super().validate(now, leeway)
         self.validate_auth_time()
         self.validate_nonce()
-        self.validate_acr()
         self.validate_amr()
         self.validate_azp()
         self.validate_at_hash()
@@ -91,26 +83,6 @@ class IDToken(JWTClaims):
                 raise MissingClaimError("nonce")
             if nonce_value != self["nonce"]:
                 raise InvalidClaimError("nonce")
-
-    def validate_acr(self):
-        """OPTIONAL. Authentication Context Class Reference. String specifying
-        an Authentication Context Class Reference value that identifies the
-        Authentication Context Class that the authentication performed
-        satisfied. The value "0" indicates the End-User authentication did not
-        meet the requirements of `ISO/IEC 29115`_ level 1. Authentication
-        using a long-lived browser cookie, for instance, is one example where
-        the use of "level 0" is appropriate. Authentications with level 0
-        SHOULD NOT be used to authorize access to any resource of any monetary
-        value. An absolute URI or an `RFC 6711`_ registered name SHOULD be
-        used as the acr value; registered names MUST NOT be used with a
-        different meaning than that which is registered. Parties using this
-        claim will need to agree upon the meanings of the values used, which
-        may be context-specific. The acr value is a case sensitive string.
-
-        .. _`ISO/IEC 29115`: https://www.iso.org/standard/45138.html
-        .. _`RFC 6711`: https://tools.ietf.org/html/rfc6711
-        """
-        return self._validate_claim_value("acr")
 
     def validate_amr(self):
         """OPTIONAL. Authentication Methods References. JSON array of strings

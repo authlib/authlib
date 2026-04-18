@@ -2,7 +2,6 @@ import json
 import time
 from collections.abc import Hashable
 from typing import Any
-from typing import Optional
 
 from ..base_client import FrameworkIntegration
 
@@ -18,7 +17,7 @@ class StarletteIntegration(FrameworkIntegration):
             return None
 
     async def get_state_data(
-        self, session: Optional[dict[str, Any]], state: str
+        self, session: dict[str, Any] | None, state: str
     ) -> dict[str, Any]:
         key = f"_state_{self.name}_{state}"
         if self.cache:
@@ -37,7 +36,7 @@ class StarletteIntegration(FrameworkIntegration):
         return None
 
     async def set_state_data(
-        self, session: Optional[dict[str, Any]], state: str, data: Any
+        self, session: dict[str, Any] | None, state: str, data: Any
     ):
         key_prefix = f"_state_{self.name}_"
         key = f"{key_prefix}{state}"
@@ -57,7 +56,7 @@ class StarletteIntegration(FrameworkIntegration):
                     session.pop(old_key)
             session[key] = {"data": data, "exp": now + self.expires_in}
 
-    async def clear_state_data(self, session: Optional[dict[str, Any]], state: str):
+    async def clear_state_data(self, session: dict[str, Any] | None, state: str):
         key = f"_state_{self.name}_{state}"
         if self.cache:
             await self.cache.delete(key)

@@ -1,5 +1,6 @@
-from authlib.jose import BaseClaims
-from authlib.jose.errors import InvalidClaimError
+from joserfc.errors import InvalidClaimError
+
+from authlib.oauth2.claims import BaseClaims
 
 
 class ClientMetadataClaims(BaseClaims):
@@ -31,8 +32,8 @@ class ClientMetadataClaims(BaseClaims):
         "require_signed_request_object",
     ]
 
-    def validate(self):
-        self._validate_essential_claims()
+    def validate(self, now=None, leeway=0):
+        super().validate(now, leeway)
         self.validate_require_signed_request_object()
 
     def validate_require_signed_request_object(self):
@@ -40,5 +41,3 @@ class ClientMetadataClaims(BaseClaims):
 
         if not isinstance(self["require_signed_request_object"], bool):
             raise InvalidClaimError("require_signed_request_object")
-
-        self._validate_claim_value("require_signed_request_object")

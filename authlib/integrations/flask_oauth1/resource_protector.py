@@ -95,7 +95,7 @@ class ResourceProtector(_ResourceProtector):
         return req.credential
 
     def __call__(self, scope=None):
-        def wrapper(f):
+        def decorator(f):
             @functools.wraps(f)
             def decorated(*args, **kwargs):
                 try:
@@ -111,7 +111,9 @@ class ResourceProtector(_ResourceProtector):
 
             return decorated
 
-        return wrapper
+        if callable(scope):
+            return decorator(scope)
+        return decorator
 
 
 def _get_current_credential():

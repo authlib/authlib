@@ -173,3 +173,24 @@ def test_rsa_sha1_signature(factory):
     resp = handle(request)
     data = json.loads(to_unicode(resp.content))
     assert data["error"] == "invalid_signature"
+
+
+@override_settings(AUTHLIB_OAUTH1_PROVIDER={"signature_methods": ["PLAINTEXT"]})
+def test_decorator_without_parentheses(factory):
+    require_oauth = ResourceProtector(Client, TokenCredential)
+
+    @require_oauth
+    def handle(request):
+        user = request.oauth1_credential.user
+        return JsonResponse(dict(username=user.username))
+
+    auth_header = (
+        'OAuth oauth_consumer_key="client",'
+        'oauth_signature_method="PLAINTEXT",'
+        'oauth_token="valid-token",'
+        'oauth_signature="secret&valid-token-secret"'
+    )
+    request = factory.get("/user", HTTP_AUTHORIZATION=auth_header)
+    resp = handle(request)
+    data = json.loads(to_unicode(resp.content))
+    assert "username" in data
