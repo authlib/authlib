@@ -82,13 +82,13 @@ class OpenIDImplicitGrant(ImplicitGrant):
         return [client.get_client_id()]
 
     def validate_authorization_request(self):
+        redirect_uri = super().validate_authorization_request()
         if not is_openid_scope(self.request.payload.scope):
             raise InvalidScopeError(
                 "Missing 'openid' scope",
-                redirect_uri=self.request.payload.redirect_uri,
+                redirect_uri=redirect_uri,
                 redirect_fragment=True,
             )
-        redirect_uri = super().validate_authorization_request()
         try:
             validate_nonce(self.request, self.exists_nonce, required=True)
         except OAuth2Error as error:
