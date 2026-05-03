@@ -13,7 +13,11 @@ from .parameters import add_bearer_token
 from .token import BearerTokenGenerator
 from .validator import BearerTokenValidator
 
-# TODO: add deprecation
+# Backwards-compatibility alias:
+# Historically, Authlib exported `BearerToken` as a generator type.
+# Keep this alias for existing integrations, but prefer
+# `BearerTokenGenerator` for new code. When the deprecation policy is
+# implemented, `BearerToken` should emit a DeprecationWarning.
 BearerToken = BearerTokenGenerator
 
 

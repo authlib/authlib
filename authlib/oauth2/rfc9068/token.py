@@ -158,10 +158,20 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         # resulting JWT access token 'aud' claim SHOULD have the same value as the
         # 'resource' parameter in the request.
 
-        # TODO: Implement this with RFC8707
+        # RFC8707 ("Resource Indicators") support:
+        # - If the client includes a `resource` parameter, we should set the JWT
+        #   access token `aud` claim accordingly.
+        # - Authlib currently does not implement RFC8707 resource indicator
+        #   handling here, so this branch is intentionally disabled.
+
+        # RFC8707 requires parsing/validating the optional `resource` parameter
+        # and mapping it into the `aud` claim. This generator currently always
+        # falls back to `get_audiences()` for token creation, so the RFC8707
+        # branch remains disabled until proper resource-indicator support is
+        # implemented.
         if False:  # pragma: no cover
             ...
-
+        
         # If the request does not include a 'resource' parameter, the authorization
         # server MUST use a default resource indicator in the 'aud' claim. If a 'scope'
         # parameter is present in the request, the authorization server SHOULD use it to
@@ -175,7 +185,10 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         # If the values in the 'scope' parameter refer to different default resource
         # indicator values, the authorization server SHOULD reject the request with
         # 'invalid_scope' as described in Section 4.1.2.1 of [RFC6749].
-        # TODO: Implement this with RFC8707
+        #
+        # NOTE: RFC8707 introduces a `resource` parameter that can affect how
+        # default resource indicators are inferred/validated. Authlib currently
+        # does not implement the RFC8707-driven validation logic here.
 
         if auth_time := self.get_auth_time(user):
             token_data["auth_time"] = auth_time

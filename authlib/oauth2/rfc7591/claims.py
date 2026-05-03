@@ -158,7 +158,10 @@ class ClientMetadataClaims(BaseClaims):
         parameters MUST NOT both be present in the same request or
         response.
         """
-        # TODO: use real HTTP library
+        # NOTE: Authlib currently only validates URI syntax via `is_valid_url`.
+        # It does not perform an actual HTTP fetch to confirm reachability/content
+        # type of `jwks_uri`. Implementing "real HTTP" fetching/validation should
+        # be done carefully (network latency, timeouts, privacy, testability).
         self._validate_uri("jwks_uri")
 
     def validate_jwks(self):

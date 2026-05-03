@@ -137,7 +137,10 @@ class OAuth2ClientMixin(ClientMixin):
     def check_endpoint_auth_method(self, method, endpoint):
         if endpoint == "token":
             return self.token_endpoint_auth_method == method
-        # TODO
+        # TODO: Other endpoints currently don't have a metadata-driven mapping for
+        # client authentication methods in RFC 7591 dynamic client registration.
+        # Keep returning True until/if Authlib adds structured checks for those
+        # endpoints.
         return True
 
     def check_response_type(self, response_type):
