@@ -13,6 +13,7 @@ to :ref:`RFC 7523 <specs/rfc7523>` that enables cross-application access
 using identity assertions issued by an external enterprise IdP.
 
 .. module:: authlib.oauth2.rfc7523
+   :no-index:
 
 
 How ID-JAG Works
