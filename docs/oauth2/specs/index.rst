@@ -8,6 +8,7 @@ Specifications
     rfc6750
     rfc7009
     rfc7523
+    rfc7523-id-jag
     rfc7591
     rfc7592
     rfc7636
