@@ -31,6 +31,7 @@ class AsyncAssertionClient(_AssertionClient, httpx.AsyncClient):
         claims=None,
         token_placement="header",
         scope=None,
+        client_id=None,
         **kwargs,
     ):
         client_kwargs = extract_client_kwargs(kwargs)
@@ -47,6 +48,7 @@ class AsyncAssertionClient(_AssertionClient, httpx.AsyncClient):
             claims=claims,
             token_placement=token_placement,
             scope=scope,
+            client_id=client_id,
             **kwargs,
         )
 
@@ -88,6 +90,7 @@ class AssertionClient(_AssertionClient, httpx.Client):
         claims=None,
         token_placement="header",
         scope=None,
+        client_id=None,
         **kwargs,
     ):
         client_kwargs = extract_client_kwargs(kwargs)
@@ -109,6 +112,7 @@ class AssertionClient(_AssertionClient, httpx.Client):
             claims=claims,
             token_placement=token_placement,
             scope=scope,
+            client_id=client_id,
             **kwargs,
         )
 

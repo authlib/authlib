@@ -50,6 +50,9 @@ Version 1.7.0
 - RFC7523 accepts the issuer URL as a valid audience. :issue:`730`
 - Fix ``InvalidTokenError`` extra attributes being wrapped instead of passed as
   individual key=value pairs in the ``WWW-Authenticate`` header. :pr:`872`
+- Add optional ``client_id`` parameter to ``AssertionClient`` (and its
+  ``AssertionSession`` / httpx wrappers) so it can be sent in the token
+  endpoint request body per :rfc:`7521` §4.1 and :rfc:`6749` §3.2.1. :pr:`476`
 
 Upgrade Guide: :ref:`joserfc_upgrade`.
 
