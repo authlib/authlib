@@ -249,8 +249,8 @@ def test_prompt_none_not_logged(test_client, server):
 
 
 def test_client_metadata_custom_alg(test_client, server, client, db, app):
-    """If the client metadata 'id_token_signed_response_alg' is defined,
-    it should be used to sign id_tokens."""
+    """The client metadata 'id_token_signed_response_alg' must take
+    precedence over the server-wide ``get_jwt_config()`` ``alg``."""
     register_oidc_code_grant(
         server,
     )
@@ -265,7 +265,7 @@ def test_client_metadata_custom_alg(test_client, server, client, db, app):
     )
     db.session.add(client)
     db.session.commit()
-    del app.config["OAUTH2_JWT_ALG"]
+    assert app.config["OAUTH2_JWT_ALG"] == "HS256"
 
     rv = test_client.post(
         "/oauth/authorize",
@@ -303,6 +303,54 @@ def test_client_metadata_custom_alg(test_client, server, client, db, app):
     )
     claims.validate()
     assert claims.header["alg"] == "HS384"
+
+
+def test_jwt_config_alg_fallback(test_client, server, client, db, app):
+    """When the client has no ``id_token_signed_response_alg`` defined,
+    ``get_jwt_config()["alg"]`` is used as the server-wide default."""
+    register_oidc_code_grant(server)
+    client.set_client_metadata(
+        {
+            "redirect_uris": ["https://client.test"],
+            "scope": "openid profile address",
+            "response_types": ["code"],
+            "grant_types": ["authorization_code"],
+        }
+    )
+    db.session.add(client)
+    db.session.commit()
+    app.config["OAUTH2_JWT_ALG"] = "HS384"
+
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "code",
+            "client_id": "client-id",
+            "state": "bar",
+            "scope": "openid profile",
+            "redirect_uri": "https://client.test",
+            "user_id": "1",
+        },
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    code = params["code"]
+    headers = create_basic_header("client-id", "client-secret")
+    rv = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "redirect_uri": "https://client.test",
+            "code": code,
+        },
+        headers=headers,
+    )
+    resp = json.loads(rv.data)
+    token = jwt.decode(
+        resp["id_token"],
+        key=OctKey.import_key("secret"),
+        algorithms=["HS384"],
+    )
+    assert token.header["alg"] == "HS384"
 
 
 def test_client_metadata_alg_none(test_client, server, app, db, client):

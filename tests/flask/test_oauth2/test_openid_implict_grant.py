@@ -231,7 +231,7 @@ def test_client_metadata_custom_alg(test_client, app, db, client):
     db.session.add(client)
     db.session.commit()
 
-    app.config["OAUTH2_JWT_ALG"] = None
+    app.config["OAUTH2_JWT_ALG"] = "HS256"
     rv = test_client.post(
         "/oauth/authorize",
         data={

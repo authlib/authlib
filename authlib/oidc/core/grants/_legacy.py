@@ -24,20 +24,24 @@ class LegacyMixin:
         return config["key"]
 
     def get_client_algorithm(self, client):
-        """Return the algorithm for encoding ``id_token``. By default, it will
-        use ``client.id_token_signed_response_alg``, if not defined, ``RS256``
-        will be used. But you can override this method to customize the returned
-        algorithm.
+        """Return the algorithm for encoding ``id_token``.
+
+        Per `OpenID Connect Registration 1.0 Section 2
+        <https://openid.net/specs/openid-connect-registration-1_0.html#ClientMetadata>`_,
+        the client metadata ``id_token_signed_response_alg`` takes precedence.
+        It falls back to ``get_jwt_config()["alg"]`` (acting as a server-wide
+        default) and finally to ``RS256``.
         """
-        # Per OpenID Connect Registration 1.0 Section 2:
-        # Use client's id_token_signed_response_alg if specified
+        if hasattr(client, "id_token_signed_response_alg") and (
+            client_alg := client.id_token_signed_response_alg
+        ):
+            return client_alg
+
         config = self._compatible_resolve_jwt_config(None, client)
         alg = config.get("alg")
         if alg:
             return alg
 
-        if hasattr(client, "id_token_signed_response_alg"):
-            return client.id_token_signed_response_alg or "RS256"
         return "RS256"
 
     def get_client_claims(self, client):

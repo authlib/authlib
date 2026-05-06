@@ -6,6 +6,20 @@ Changelog
 
 Here you can see the full list of changes between each Authlib release.
 
+Version 1.8.0
+-------------
+
+**Unreleased**
+
+- **Breaking change**: the client metadata ``id_token_signed_response_alg``
+  now takes precedence over ``get_jwt_config()["alg"]`` when signing OIDC
+  ``id_token``, in line with `OpenID Connect Registration 1.0 Section 2
+  <https://openid.net/specs/openid-connect-registration-1_0.html#ClientMetadata>`_.
+  ``get_jwt_config()["alg"]`` is now used as a server-wide default when the
+  client did not configure an algorithm. Override
+  ``get_client_algorithm(client)`` if you need the previous behaviour.
+  :issue:`806`
+
 Version 1.7.2
 -------------
 
