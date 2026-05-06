@@ -44,7 +44,7 @@ def sign_jwt_bearer_assertion(
     if claims:
         payload.update(claims)
 
-    return jwt.encode(header, payload, import_any_key(key))
+    return jwt.encode(header, payload, import_any_key(key), algorithms=[header["alg"]])
 
 
 def client_secret_jwt_sign(

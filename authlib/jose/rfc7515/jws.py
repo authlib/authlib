@@ -261,16 +261,18 @@ class JsonWebSignature:
             raise MissingAlgorithmError()
 
         alg = header["alg"]
-        if self._algorithms is not None and alg not in self._algorithms:
-            raise UnsupportedAlgorithmError()
         if alg not in self.ALGORITHMS_REGISTRY:
             raise UnsupportedAlgorithmError()
 
         algorithm = self.ALGORITHMS_REGISTRY[alg]
+        if self._algorithms is None:
+            if algorithm.deprecated:
+                raise UnsupportedAlgorithmError()
+        elif alg not in self._algorithms:
+            raise UnsupportedAlgorithmError()
+
         if callable(key):
             key = key(header, payload)
-        elif key is None and "jwk" in header:
-            key = header["jwk"]
         key = algorithm.prepare_key(key)
         return algorithm, key
 

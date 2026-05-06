@@ -1,3 +1,4 @@
+import sys
 from typing import Any
 
 from joserfc.jwk import KeySet
@@ -5,16 +6,18 @@ from joserfc.jwk import import_key
 
 from authlib.common.encoding import json_loads
 from authlib.deprecate import deprecate
-from authlib.jose import ECKey
-from authlib.jose import OctKey
-from authlib.jose import OKPKey
-from authlib.jose import RSAKey
 
 
 def import_any_key(data: Any):
-    if isinstance(data, (OctKey, RSAKey, ECKey, OKPKey)):
-        deprecate("Please use joserfc to import keys.", version="2.0.0")
-        return import_key(data.as_dict(is_private=not data.public_only))
+    if "authlib.jose" in sys.modules:
+        from authlib.jose.rfc7518 import ECKey
+        from authlib.jose.rfc7518 import OctKey
+        from authlib.jose.rfc7518 import RSAKey
+        from authlib.jose.rfc8037 import OKPKey
+
+        if isinstance(data, (OctKey, RSAKey, ECKey, OKPKey)):
+            deprecate("Please use joserfc to import keys.", version="2.0.0")
+            return import_key(data.as_dict(is_private=not data.public_only))
 
     if (
         isinstance(data, str)

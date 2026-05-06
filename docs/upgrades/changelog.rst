@@ -6,10 +6,29 @@ Changelog
 
 Here you can see the full list of changes between each Authlib release.
 
-Version 1.7.0
+Version 1.7.2
 -------------
 
 **Unreleased**
+
+- Allow ``ClientSecretJWT`` and ``PrivateKeyJWT`` to sign client assertions
+  with non-recommended algorithms (e.g. ``RS384``) when explicitly set via the
+  ``alg`` parameter. :issue:`883`
+
+Version 1.7.1
+-------------
+
+**Released on may 4, 2026**
+
+- Fix ``AuthlibDeprecationWarning`` being emitted on import when using integrations
+  that do not use ``authlib.jose`` directly. :issue:`880`
+- Fix redirecting to unvalidated ``redirect_uri`` on ``InvalidScopeError``
+  in ``OpenIDImplicitGrant`` and ``OpenIDHybridGrant``.
+
+Version 1.7.0
+-------------
+
+**Released on Apr 18, 2026**
 
 - Add support for `OpenID Connect RP-Initiated Logout 1.0
   <https://openid.net/specs/openid-connect-rpinitiated-1_0.html>`_.
@@ -26,10 +45,27 @@ Version 1.7.0
 - RFC7523 accepts the issuer URL as a valid audience. :issue:`730`
 - Fix ``InvalidTokenError`` extra attributes being wrapped instead of passed as
   individual key=value pairs in the ``WWW-Authenticate`` header. :pr:`872`
+- Validate BCP 47 language tags in ``ui_locales_supported``, ``claims_locales_supported``
+  and ``UserInfo.locale``. :pr:`873`
 - Add support for :rfc:`9728` OAuth 2.0 Protected Resource Metadata for
   resource servers and authorization servers.
 
 Upgrade Guide: :ref:`joserfc_upgrade`.
+
+Version 1.6.11
+--------------
+
+**Released on Apr 16, 2026**
+
+- Fix CSRF vulnerability in the Starlette OAuth client when a ``cache`` is
+  configured.
+
+Version 1.6.10
+--------------
+
+**Released on Apr 13, 2026**
+
+- Fix redirecting to unvalidated ``redirect_uri`` on ``UnsupportedResponseTypeError``.
 
 Version 1.6.9
 -------------

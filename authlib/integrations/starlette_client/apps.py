@@ -14,11 +14,7 @@ class StarletteAppMixin:
     async def save_authorize_data(self, request, **kwargs):
         state = kwargs.pop("state", None)
         if state:
-            if self.framework.cache:
-                session = None
-            else:
-                session = request.session
-            await self.framework.set_state_data(session, state, kwargs)
+            await self.framework.set_state_data(request.session, state, kwargs)
         else:
             raise RuntimeError("Missing state value")
 
@@ -81,12 +77,8 @@ class StarletteOAuth2App(
             **kwargs,
         )
         if result.get("state"):
-            if self.framework.cache:
-                session = None
-            else:
-                session = request.session
             await self.framework.set_state_data(
-                session,
+                request.session,
                 result["state"],
                 {
                     "post_logout_redirect_uri": post_logout_redirect_uri,
@@ -105,16 +97,11 @@ class StarletteOAuth2App(
         if not state:
             raise OAuthError(description='Missing "state" parameter')
 
-        if self.framework.cache:
-            session = None
-        else:
-            session = request.session
-
-        state_data = await self.framework.get_state_data(session, state)
+        state_data = await self.framework.get_state_data(request.session, state)
         if not state_data:
             raise OAuthError(description='Invalid "state" parameter')
 
-        await self.framework.clear_state_data(session, state)
+        await self.framework.clear_state_data(request.session, state)
         return state_data
 
     async def authorize_access_token(self, request, **kwargs):
@@ -135,13 +122,10 @@ class StarletteOAuth2App(
                     "state": form.get("state"),
                 }
 
-        if self.framework.cache:
-            session = None
-        else:
-            session = request.session
-
-        state_data = await self.framework.get_state_data(session, params.get("state"))
-        await self.framework.clear_state_data(session, params.get("state"))
+        state_data = await self.framework.get_state_data(
+            request.session, params.get("state")
+        )
+        await self.framework.clear_state_data(request.session, params.get("state"))
         params = self._format_state_params(state_data, params)
 
         claims_options = kwargs.pop("claims_options", None)

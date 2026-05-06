@@ -243,10 +243,21 @@ class AuthorizationServer(Hookable):
             if grant_cls.check_authorization_endpoint(request):
                 return _create_grant(grant_cls, extensions, request, self)
 
+        # Per RFC 6749 §4.1.2.1, only redirect with the error if the client
+        # exists and the redirect_uri has been validated against it.
+        redirect_uri = None
+        if client_id := request.payload.client_id:
+            if client := self.query_client(client_id):
+                if requested_uri := request.payload.redirect_uri:
+                    if client.check_redirect_uri(requested_uri):
+                        redirect_uri = requested_uri
+                else:
+                    redirect_uri = client.get_default_redirect_uri()
+
         raise UnsupportedResponseTypeError(
             f"The response type '{request.payload.response_type}' is not supported by the server.",
             request.payload.response_type,
-            redirect_uri=request.payload.redirect_uri,
+            redirect_uri=redirect_uri,
         )
 
     def get_consent_grant(self, request=None, end_user=None):

@@ -148,9 +148,9 @@ def test_introspection(test_client, client, user, access_token):
 def test_introspection_username(
     test_client, client, user, introspection_endpoint, access_token
 ):
-    introspection_endpoint.get_username = lambda user_id: db.session.get(
-        User, user_id
-    ).username
+    introspection_endpoint.get_username = lambda user_id: (
+        db.session.get(User, user_id).username
+    )
 
     headers = create_basic_header(client.client_id, client.client_secret)
     rv = test_client.post(

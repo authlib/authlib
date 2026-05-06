@@ -1,6 +1,7 @@
 from authlib.oauth2.rfc8414 import AuthorizationServerMetadata
 from authlib.oauth2.rfc8414.models import validate_array_value
 from authlib.oauth2.rfc8414.models import validate_boolean_value
+from authlib.oauth2.rfc8414.models import validate_language_tags_array
 
 
 class OpenIDProviderMetadata(AuthorizationServerMetadata):
@@ -236,7 +237,7 @@ class OpenIDProviderMetadata(AuthorizationServerMetadata):
         language tag values. Not all languages and scripts are necessarily
         supported for all Claim values.
         """
-        validate_array_value(self, "claims_locales_supported")
+        validate_language_tags_array(self, "claims_locales_supported")
 
     def validate_claims_parameter_supported(self):
         """OPTIONAL. Boolean value specifying whether the OP supports use of

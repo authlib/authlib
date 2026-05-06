@@ -49,19 +49,20 @@ class OpenIDHybridGrant(OpenIDImplicitGrant):
         raise NotImplementedError()
 
     def validate_authorization_request(self):
-        if not is_openid_scope(self.request.payload.scope):
-            raise InvalidScopeError(
-                "Missing 'openid' scope",
-                redirect_uri=self.request.payload.redirect_uri,
-                redirect_fragment=True,
-            )
         self.register_hook(
             "after_validate_authorization_request_payload",
             lambda grant, redirect_uri: validate_nonce(
                 grant.request, grant.exists_nonce, required=True
             ),
         )
-        return validate_code_authorization_request(self)
+        redirect_uri = validate_code_authorization_request(self)
+        if not is_openid_scope(self.request.payload.scope):
+            raise InvalidScopeError(
+                "Missing 'openid' scope",
+                redirect_uri=redirect_uri,
+                redirect_fragment=True,
+            )
+        return redirect_uri
 
     def create_granted_params(self, grant_user):
         self.request.user = grant_user

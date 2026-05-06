@@ -1,4 +1,5 @@
 import pytest
+from cryptography.exceptions import InvalidTag
 
 from authlib.jose import JsonWebEncryption
 from authlib.jose import OctKey
@@ -16,7 +17,7 @@ def test_dir_alg_c20p():
     assert rv["payload"] == b"hello"
 
     key2 = OctKey.generate_key(128, is_private=True)
-    with pytest.raises(ValueError):
+    with pytest.raises(InvalidTag):
         jwe.deserialize_compact(data, key2)
 
     with pytest.raises(ValueError):

@@ -229,3 +229,17 @@ def test_sign_with_additional_claims():
         "role": "bar",
     }
     assert {"alg": "RS256", "typ": "JWT"} == decoded.header
+
+
+def test_sign_with_non_recommended_alg():
+    """Signing must work with algorithms outside joserfc's recommended set."""
+    jwt_signer = PrivateKeyJWT(alg="RS384")
+
+    auth = mock.MagicMock()
+    auth.client_id = "client_id_1"
+    auth.client_secret = private_key
+
+    data = jwt_signer.sign(auth, "https://provider.test/oauth/access_token")
+    decoded = jwt.decode(data, RSAKey.import_key(public_key), algorithms=["RS384"])
+
+    assert decoded.header["alg"] == "RS384"

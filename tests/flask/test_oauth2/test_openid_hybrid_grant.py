@@ -160,6 +160,23 @@ def test_invalid_scope(test_client):
     assert "error=invalid_scope" in rv.location
 
 
+def test_missing_openid_in_scope_does_not_redirect_to_unregistered_uri(test_client):
+    """An unregistered redirect_uri must not be followed even when openid scope is missing."""
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "client_id": "client-id",
+            "response_type": "code id_token",
+            "state": "s",
+            "nonce": "n",
+            "scope": "profile",
+            "redirect_uri": "https://evil.example.com/phish",
+        },
+    )
+    assert rv.status_code == 400
+    assert rv.headers.get("Location") is None
+
+
 def test_access_denied(test_client):
     rv = test_client.post(
         "/oauth/authorize",

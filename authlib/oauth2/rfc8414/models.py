@@ -1,3 +1,4 @@
+from authlib.common.language import is_valid_language_tag
 from authlib.common.security import is_secure_transport
 from authlib.common.urls import is_valid_url
 from authlib.common.urls import urlparse
@@ -208,7 +209,7 @@ class AuthorizationServerMetadata(dict):
         [RFC5646].  If omitted, the set of supported languages and scripts
         is unspecified.
         """
-        validate_array_value(self, "ui_locales_supported")
+        validate_language_tags_array(self, "ui_locales_supported")
 
     def validate_op_policy_uri(self):
         """OPTIONAL.  URL that the authorization server provides to the
@@ -409,6 +410,15 @@ def validate_array_value(metadata, key):
     values = metadata.get(key)
     if values is not None and not isinstance(values, list):
         raise ValueError(f'"{key}" MUST be JSON array')
+
+
+def validate_language_tags_array(metadata, key):
+    validate_array_value(metadata, key)
+    values = metadata.get(key)
+    if values is not None:
+        for tag in values:
+            if not is_valid_language_tag(tag):
+                raise ValueError(f'"{key}" MUST contain BCP 47 language tags')
 
 
 def validate_boolean_value(metadata, key):
