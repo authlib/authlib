@@ -47,6 +47,8 @@ Version 1.7.0
   individual key=value pairs in the ``WWW-Authenticate`` header. :pr:`872`
 - Validate BCP 47 language tags in ``ui_locales_supported``, ``claims_locales_supported``
   and ``UserInfo.locale``. :pr:`873`
+- Add support for :rfc:`9728` OAuth 2.0 Protected Resource Metadata for
+  resource servers and authorization servers.
 
 Upgrade Guide: :ref:`joserfc_upgrade`.
 
