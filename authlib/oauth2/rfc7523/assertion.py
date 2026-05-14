@@ -1,9 +1,26 @@
 import time
+from typing import Any
 
 from joserfc import jwt
+from joserfc._rfc7517.models import BaseKey
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.security import generate_token
+
+
+def set_jwt_header_parameter_from_key(
+    header: dict[str, Any], key: Any, parameter_name: str
+) -> None:
+    """
+    Copy a JWK parameter (e.g. alg, kid) from key into header.
+
+    The key's value is an enforced constraint and takes priority over any
+    value already present in header.
+    """
+    if isinstance(key, BaseKey):
+        parameter_value = key.get(parameter_name)
+        if parameter_value:
+            header[parameter_name] = parameter_value
 
 
 def sign_jwt_bearer_assertion(
@@ -17,13 +34,18 @@ def sign_jwt_bearer_assertion(
     header=None,
     **kwargs,
 ):
+    _key = import_any_key(key)
+
     if header is None:
         header = {}
     alg = kwargs.pop("alg", None)
     if alg:
         header["alg"] = alg
+    set_jwt_header_parameter_from_key(header=header, key=_key, parameter_name="alg")
     if "alg" not in header:
         raise ValueError("Missing 'alg' in header")
+
+    set_jwt_header_parameter_from_key(header=header, key=_key, parameter_name="kid")
 
     payload = {"iss": issuer, "aud": audience}
 
@@ -44,7 +66,7 @@ def sign_jwt_bearer_assertion(
     if claims:
         payload.update(claims)
 
-    return jwt.encode(header, payload, import_any_key(key), algorithms=[header["alg"]])
+    return jwt.encode(header, payload, _key, algorithms=[header["alg"]])
 
 
 def client_secret_jwt_sign(
