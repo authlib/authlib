@@ -1,7 +1,7 @@
-from joserfc.jwk import OctKey
-from joserfc.jwk import RSAKey
 from joserfc.jwk import ECKey
+from joserfc.jwk import OctKey
 from joserfc.jwk import OKPKey
+from joserfc.jwk import RSAKey
 
 from authlib.common.urls import add_params_to_qs
 
@@ -32,17 +32,22 @@ class ClientSecretJWT:
     :param claims: Extra JWT claims
     :param headers: Extra JWT headers
     :param alg: ``alg`` value, default is HS256
+    :param kwargs: Extra keyword arguments forwarded to client_secret_jwt_sign(...),
+        e.g. expires_in (default 3600) and issued_at.
     """
 
     name = "client_secret_jwt"
     alg = "HS256"
 
-    def __init__(self, token_endpoint=None, claims=None, headers=None, alg=None):
+    def __init__(
+        self, token_endpoint=None, claims=None, headers=None, alg=None, **kwargs
+    ):
         self.token_endpoint = token_endpoint
         self.claims = claims
         self.headers = headers
         if alg is not None:
             self.alg = alg
+        self.kwargs = kwargs
 
     def sign(self, auth, token_endpoint):
         if isinstance(auth.client_secret, OctKey):
@@ -56,6 +61,7 @@ class ClientSecretJWT:
             claims=self.claims,
             header=self.headers,
             alg=self.alg,
+            **self.kwargs,
         )
 
     def __call__(self, auth, method, uri, headers, body):
@@ -96,6 +102,8 @@ class PrivateKeyJWT(ClientSecretJWT):
     :param claims: Extra JWT claims
     :param headers: Extra JWT headers
     :param alg: ``alg`` value, default is RS256
+    :param kwargs: Extra keyword arguments forwarded to private_key_jwt_sign(...),
+        e.g. expires_in (default 3600) and issued_at.
     """
 
     name = "private_key_jwt"
@@ -113,4 +121,5 @@ class PrivateKeyJWT(ClientSecretJWT):
             claims=self.claims,
             header=self.headers,
             alg=self.alg,
+            **self.kwargs,
         )
