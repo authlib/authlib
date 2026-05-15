@@ -46,6 +46,8 @@ class JWTBearerClientAssertion:
         assertion = data.get("client_assertion")
         if assertion_type == ASSERTION_TYPE and assertion:
             headers, claims = self.extract_assertion(assertion)
+            if not self.should_handle(headers, claims):
+                return None
             client_id = claims["sub"]
             client = query_client(client_id)
             if not client:
@@ -135,6 +137,36 @@ class JWTBearerClientAssertion:
         raise InvalidClientError(
             description=f"The client cannot authenticate with method: {self.CLIENT_AUTH_METHOD}"
         )
+
+    def should_handle(self, headers: dict, claims: dict) -> bool:
+        """Determine whether this auth method should handle the given assertion.
+
+        Subclasses can override this to route JWT assertions by algorithm,
+        enabling separate handlers for symmetric and asymmetric auth methods.
+
+        When multiple JWT-based auth methods are registered, the dispatch loop
+        calls each handler in order. Returning False makes this handler yield
+        to the next one::
+
+            SYMMETRIC_ALGS = {"HS256", "HS384", "HS512"}
+
+            class ClientSecretJWTAuth(JWTBearerClientAssertion):
+                CLIENT_AUTH_METHOD = "client_secret_jwt"
+
+                def should_handle(self, headers, claims):
+                    return headers.get("alg") in SYMMETRIC_ALGS
+
+            class PrivateKeyJWTAuth(JWTBearerClientAssertion):
+                CLIENT_AUTH_METHOD = "private_key_jwt"
+
+                def should_handle(self, headers, claims):
+                    return headers.get("alg") not in SYMMETRIC_ALGS
+
+        :param headers: The JWT header dict (contains 'alg', 'typ', etc.)
+        :param claims: The JWT payload claims dict
+        :return: True if this handler should process the assertion
+        """
+        return True
 
     def extract_assertion(self, assertion: str):
         obj = jws.extract_compact(to_bytes(assertion))
