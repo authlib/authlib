@@ -23,6 +23,7 @@ def create_save_token_func(session, token_model):
     :param session: SQLAlchemy session
     :param token_model: Token model class
     """
+    columns = set(token_model.__table__.columns.keys())
 
     def save_token(token, request):
         if request.user:
@@ -30,7 +31,8 @@ def create_save_token_func(session, token_model):
         else:
             user_id = None
         client = request.client
-        item = token_model(client_id=client.client_id, user_id=user_id, **token)
+        token_data = {k: v for k, v in token.items() if k in columns}
+        item = token_model(client_id=client.client_id, user_id=user_id, **token_data)
         session.add(item)
         session.commit()
 

@@ -115,6 +115,42 @@ def test_generate_jwt_access_token(test_client, client, user, jwks):
     assert claims.header["typ"] == "at+jwt"
 
 
+def test_jwt_expires_at_matches_exp_claim(test_client, client, user, jwks):
+    """Token response expires_at must exactly match the JWT exp claim."""
+    res = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": client.response_types[0],
+            "client_id": client.client_id,
+            "redirect_uri": client.redirect_uris[0],
+            "scope": client.scope,
+            "user_id": user.id,
+        },
+    )
+
+    params = dict(url_decode(urlparse.urlparse(res.location).query))
+    code = params["code"]
+    res = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": code,
+            "client_id": client.client_id,
+            "client_secret": client.client_secret,
+            "scope": " ".join(client.scope),
+            "redirect_uri": client.redirect_uris[0],
+        },
+    )
+
+    access_token = res.json["access_token"]
+    claims = jwt.decode(access_token, jwks)
+
+    assert "expires_in" in res.json
+    assert res.json["expires_in"] == claims["exp"] - claims["iat"]
+    assert res.json["expires_at"] == claims["exp"]
+    assert res.json["issued_at"] == claims["iat"]
+
+
 def test_generate_jwt_access_token_extra_claims(
     test_client, token_generator, user, client, jwks
 ):
