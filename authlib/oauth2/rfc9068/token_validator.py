@@ -7,7 +7,6 @@ Implementation of Validating JWT Access Tokens per `Section 4`_.
 """
 
 from joserfc import jwt
-from joserfc.errors import DecodeError
 from joserfc.errors import JoseError
 
 from authlib._joserfc_helpers import import_any_key
@@ -115,7 +114,7 @@ class JWTBearerTokenValidator(BearerTokenValidator):
         try:
             token = jwt.decode(token_string, key=key)
             return JWTAccessTokenClaims(token.claims, token.header, claims_options)
-        except DecodeError as exc:
+        except JoseError as exc:
             raise InvalidTokenError(
                 realm=self.realm, extra_attributes=self.extra_attributes
             ) from exc
