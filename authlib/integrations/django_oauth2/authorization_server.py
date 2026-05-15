@@ -54,7 +54,9 @@ class AuthorizationServer(_AuthorizationServer):
             user_id = request.user.pk
         else:
             user_id = client.user_id
-        item = self.token_model(client_id=client.client_id, user_id=user_id, **token)
+        fields = {f.name for f in self.token_model._meta.get_fields()}
+        token_data = {k: v for k, v in token.items() if k in fields}
+        item = self.token_model(client_id=client.client_id, user_id=user_id, **token_data)
         item.save()
         return item
 
