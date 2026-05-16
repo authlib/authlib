@@ -1,4 +1,6 @@
 from joserfc import jwt
+from joserfc.errors import BadSignatureError
+from joserfc.errors import DecodeError
 from joserfc.errors import InvalidKeyIdError
 from joserfc.jwk import KeySet
 
@@ -43,6 +45,8 @@ class OpenIDMixin:
         if "id_token" not in token:
             return None
 
+        id_token_value = token["id_token"]
+
         claims_params = dict(
             nonce=nonce,
             client_id=self.client_id,
@@ -63,26 +67,44 @@ class OpenIDMixin:
 
         key_set = KeySet.import_key_set(self.fetch_jwk_set())
         try:
-            token = jwt.decode(
-                token["id_token"],
-                key=key_set,
-                algorithms=alg_values,
-            )
+            token = jwt.decode(id_token_value, key=key_set, algorithms=alg_values)
         except InvalidKeyIdError:
+            # Refresh JWKS — keys may have rotated
             key_set = KeySet.import_key_set(self.fetch_jwk_set(force=True))
-            token = jwt.decode(
-                token["id_token"],
-                key=key_set,
-                algorithms=alg_values,
-            )
+            try:
+                token = jwt.decode(
+                    id_token_value, key=key_set, algorithms=alg_values
+                )
+            except InvalidKeyIdError:
+                if self.should_try_all_keys():
+                    token = try_all_keys(
+                        id_token_value=id_token_value,
+                        key_set=key_set,
+                        algorithms=alg_values,
+                    )
+                else:
+                    raise
 
-        claims = claims_cls(token.claims, token.header, claims_options, claims_params)
+        claims = claims_cls(
+            token.claims, token.header, claims_options, claims_params
+        )
         # https://github.com/authlib/authlib/issues/259
         if claims.get("nonce_supported") is False:
             claims.params["nonce"] = None
 
         claims.validate(leeway=leeway)
         return UserInfo(claims)
+
+    def should_try_all_keys(self):
+        """Control whether to attempt signature verification against every key
+        in the JWKS when the token's kid does not match any key.
+
+        The default is False, which preserves the standard behavior of raising
+        InvalidKeyIdError immediately.  Override this method to return True in
+        subclasses that integrate with providers whose JWKS keys lack a kid or
+        use mismatched kid values.
+        """
+        return False
 
     def create_logout_url(
         self,
@@ -120,3 +142,18 @@ class OpenIDMixin:
 
         url = add_params_to_uri(end_session_endpoint, params)
         return {"url": url, "state": state}
+
+
+def try_all_keys(id_token_value: str, key_set: KeySet, algorithms) -> jwt.Token:
+    """Try each key in the JWKS individually to find one that verifies the
+    token signature.  Handles providers whose JWKS keys lack a kid field or
+    use kid values that do not match the token header.
+
+    Raises InvalidKeyIdError if no key verifies the signature.
+    """
+    for key in key_set.keys:
+        try:
+            return jwt.decode(id_token_value, key=key, algorithms=algorithms)
+        except (BadSignatureError, DecodeError, ValueError):
+            continue
+    raise InvalidKeyIdError("No key in JWKS verifies the token signature.")
