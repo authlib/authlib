@@ -2,7 +2,10 @@ import time
 from typing import Any
 
 from joserfc import jwt
-from joserfc._rfc7517.models import BaseKey
+from joserfc.jwk import ECKey
+from joserfc.jwk import OctKey
+from joserfc.jwk import OKPKey
+from joserfc.jwk import RSAKey
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.security import generate_token
@@ -17,7 +20,7 @@ def set_jwt_header_parameter_from_key(
     The key's value is an enforced constraint and takes priority over any
     value already present in header.
     """
-    if isinstance(key, BaseKey):
+    if isinstance(key, (OctKey, RSAKey, ECKey, OKPKey)):
         parameter_value = key.get(parameter_name)
         if parameter_value:
             header[parameter_name] = parameter_value
