@@ -620,3 +620,32 @@ def test_override_default_request_timeout(token):
     client.request(
         "GET", "https://provider.test", withhold_token=False, timeout=expected_timeout
     )
+
+
+def test_client_credentials_auto_fetch_token_on_first_request(token):
+    url = "https://provider.test/token"
+
+    def fake_send(r, **kwargs):
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        if "grant_type=client_credentials" in (r.body or ""):
+            resp.json = lambda: token
+        return resp
+
+    sess = OAuth2Session(
+        client_id="foo",
+        client_secret="bar",
+        token_endpoint=url,
+        grant_type="client_credentials",
+    )
+    sess.send = fake_send
+    sess.get("https://provider.test/resource")
+    assert sess.token["access_token"] == token["access_token"]
+
+
+def test_non_client_credentials_raises_missing_token():
+    from authlib.integrations.base_client import MissingTokenError
+
+    sess = OAuth2Session(client_id="foo")
+    with pytest.raises(MissingTokenError):
+        sess.get("https://provider.test/resource")

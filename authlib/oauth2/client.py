@@ -300,6 +300,23 @@ class OAuth2Client:
 
     def ensure_active_token(self, token=None):
         if token is None:
+            if not self.token:
+                if self.metadata.get("grant_type") == "client_credentials":
+                    self.fetch_token()
+                else:
+                    # Lazy import to avoid circular dependency:
+                    #   authlib/oauth2/client.py (this file)
+                    #     → authlib/integrations/base_client/__init__.py (imports sync_openid)
+                    #       → authlib/integrations/base_client/sync_openid.py (imports authlib.oidc.core)
+                    #         → authlib/oidc/core/__init__.py (imports .grants)
+                    #           → authlib/oidc/core/grants/__init__.py (imports .code)
+                    #             → authlib/oidc/core/grants/code.py (imports ._legacy)
+                    #               → authlib/oidc/core/grants/_legacy.py (imports authlib.oauth2)
+                    #                 → authlib/oauth2/__init__.py (imports .client) → CIRCULAR
+                    # Python triggers __init__.py even when importing a submodule directly.
+                    from authlib.integrations.base_client.errors import MissingTokenError
+
+                    raise MissingTokenError()
             token = self.token
         if not token.is_expired(leeway=self.leeway):
             return True

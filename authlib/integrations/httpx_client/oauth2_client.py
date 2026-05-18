@@ -14,7 +14,6 @@ from authlib.oauth2.auth import TokenAuth
 from authlib.oauth2.client import OAuth2Client as _OAuth2Client
 
 from ..base_client import InvalidTokenError
-from ..base_client import MissingTokenError
 from ..base_client import OAuthError
 from ..base_client import UnsupportedTokenTypeError
 from .utils import HTTPX_CLIENT_KWARGS
@@ -109,11 +108,7 @@ class AsyncOAuth2Client(_OAuth2Client, httpx.AsyncClient):
         self, method, url, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs
     ):
         if not withhold_token and auth is USE_CLIENT_DEFAULT:
-            if not self.token:
-                raise MissingTokenError()
-
-            await self.ensure_active_token(self.token)
-
+            await self.ensure_active_token()
             auth = self.token_auth
 
         return await super().request(method, url, auth=auth, **kwargs)
@@ -123,17 +118,32 @@ class AsyncOAuth2Client(_OAuth2Client, httpx.AsyncClient):
         self, method, url, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs
     ):
         if not withhold_token and auth is USE_CLIENT_DEFAULT:
-            if not self.token:
-                raise MissingTokenError()
-
-            await self.ensure_active_token(self.token)
-
+            await self.ensure_active_token()
             auth = self.token_auth
 
         async with super().stream(method, url, auth=auth, **kwargs) as resp:
             yield resp
 
-    async def ensure_active_token(self, token):
+    async def ensure_active_token(self, token=None):
+        if token is None:
+            if not self.token:
+                if self.metadata.get("grant_type") == "client_credentials":
+                    await self.fetch_token()
+                else:
+                    # Lazy import to avoid circular dependency:
+                    #   authlib/oauth2/client.py
+                    #     → authlib/integrations/base_client/__init__.py (imports sync_openid)
+                    #       → authlib/integrations/base_client/sync_openid.py (imports authlib.oidc.core)
+                    #         → authlib/oidc/core/__init__.py (imports .grants)
+                    #           → authlib/oidc/core/grants/__init__.py (imports .code)
+                    #             → authlib/oidc/core/grants/code.py (imports ._legacy)
+                    #               → authlib/oidc/core/grants/_legacy.py (imports authlib.oauth2)
+                    #                 → authlib/oauth2/__init__.py (imports .client) → CIRCULAR
+                    # Python triggers __init__.py even when importing a submodule directly.
+                    from authlib.integrations.base_client.errors import MissingTokenError
+
+                    raise MissingTokenError()
+            token = self.token
         async with self._token_refresh_lock:
             if self.token.is_expired(leeway=self.leeway):
                 refresh_token = token.get("refresh_token")
@@ -260,10 +270,7 @@ class OAuth2Client(_OAuth2Client, httpx.Client):
         self, method, url, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs
     ):
         if not withhold_token and auth is USE_CLIENT_DEFAULT:
-            if not self.token:
-                raise MissingTokenError()
-
-            if not self.ensure_active_token(self.token):
+            if not self.ensure_active_token():
                 raise InvalidTokenError()
 
             auth = self.token_auth
@@ -274,10 +281,7 @@ class OAuth2Client(_OAuth2Client, httpx.Client):
         self, method, url, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs
     ):
         if not withhold_token and auth is USE_CLIENT_DEFAULT:
-            if not self.token:
-                raise MissingTokenError()
-
-            if not self.ensure_active_token(self.token):
+            if not self.ensure_active_token():
                 raise InvalidTokenError()
 
             auth = self.token_auth
