@@ -68,3 +68,70 @@ def test_without_alg():
     )
     with pytest.raises(ValueError):
         sess.get("https://provider.test")
+
+
+def test_token_endpoint_verify_passed_to_refresh_token():
+    ca_path = "/path/to/custom-ca.pem"
+    token = {
+        "token_type": "Bearer",
+        "access_token": "a",
+        "expires_in": "3600",
+    }
+    calls = []
+
+    def fake_send(r, **kwargs):
+        calls.append((r.url, kwargs.get("verify")))
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        resp.json = lambda: token
+        return resp
+
+    now = int(time.time())
+    sess = AssertionSession(
+        "https://provider.test/token",
+        issuer="foo",
+        subject="foo",
+        audience="foo",
+        issued_at=now,
+        expires_at=now + 3600,
+        header={"alg": "HS256"},
+        key="secret",
+        token_endpoint_verify=ca_path,
+    )
+    sess.send = fake_send
+    sess.get("https://provider.test")
+    # First call is the token request — should use custom CA
+    assert calls[0] == ("https://provider.test/token", ca_path)
+
+
+def test_token_endpoint_verify_false_disables_verification():
+    token = {
+        "token_type": "Bearer",
+        "access_token": "a",
+        "expires_in": "3600",
+    }
+    calls = []
+
+    def fake_send(r, **kwargs):
+        calls.append((r.url, kwargs.get("verify")))
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        resp.json = lambda: token
+        return resp
+
+    now = int(time.time())
+    sess = AssertionSession(
+        "https://provider.test/token",
+        issuer="foo",
+        subject="foo",
+        audience="foo",
+        issued_at=now,
+        expires_at=now + 3600,
+        header={"alg": "HS256"},
+        key="secret",
+        token_endpoint_verify=False,
+    )
+    sess.send = fake_send
+    sess.get("https://provider.test")
+    # Token request should have verify=False
+    assert calls[0] == ("https://provider.test/token", False)

@@ -445,3 +445,18 @@ async def test_request_without_token():
     async with AsyncOAuth2Client("a", transport=transport) as client:
         with pytest.raises(OAuthError):
             await client.get("https://provider.test/token")
+
+
+@pytest.mark.asyncio
+async def test_token_endpoint_verify_does_not_crash_httpx():
+    """token_endpoint_verify is accepted but ignored for httpx (client-level verify only)."""
+    transport = ASGITransport(AsyncMockDispatch(default_token))
+    async with AsyncOAuth2Client(
+        "foo",
+        token_endpoint="https://provider.test/token",
+        grant_type="client_credentials",
+        token_endpoint_verify="/path/to/ca.pem",
+        transport=transport,
+    ) as client:
+        token = await client.fetch_token("https://provider.test/token")
+        assert token["access_token"] == "a"

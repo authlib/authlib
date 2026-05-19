@@ -67,6 +67,10 @@ class AsyncOAuth2Client(_OAuth2Client, httpx.AsyncClient):
     token_auth_class = OAuth2Auth
     oauth_error_class = OAuthError
 
+    def _apply_token_endpoint_kwargs(self, session_kwargs):
+        # httpx does not support per-request verify; it's set at client level.
+        pass
+
     def __init__(
         self,
         client_id=None,
@@ -214,6 +218,10 @@ class OAuth2Client(_OAuth2Client, httpx.Client):
     client_auth_class = OAuth2ClientAuth
     token_auth_class = OAuth2Auth
     oauth_error_class = OAuthError
+
+    def _apply_token_endpoint_kwargs(self, session_kwargs):
+        # httpx does not support per-request verify; it's set at client level.
+        pass
 
     def __init__(
         self,

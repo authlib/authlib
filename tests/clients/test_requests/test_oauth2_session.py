@@ -620,3 +620,142 @@ def test_override_default_request_timeout(token):
     client.request(
         "GET", "https://provider.test", withhold_token=False, timeout=expected_timeout
     )
+
+
+def test_token_endpoint_verify_passed_to_fetch_token(token):
+    ca_path = "/path/to/custom-ca.pem"
+
+    def fake_send(r, **kwargs):
+        assert kwargs.get("verify") == ca_path
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        resp.json = lambda: token
+        return resp
+
+    sess = OAuth2Session(
+        client_id="foo",
+        client_secret="bar",
+        token_endpoint="https://provider.test/token",
+        grant_type="client_credentials",
+        token_endpoint_verify=ca_path,
+    )
+    sess.send = fake_send
+    sess.fetch_token()
+    assert sess.token["access_token"] == token["access_token"]
+
+
+def test_token_endpoint_verify_does_not_affect_resource_requests(token):
+    ca_path = "/path/to/custom-ca.pem"
+
+    def fake_send(r, **kwargs):
+        # Resource requests should NOT have the custom CA
+        assert kwargs.get("verify") != ca_path
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        resp.json = lambda: {}
+        return resp
+
+    sess = OAuth2Session(
+        client_id="foo",
+        token=token,
+        token_endpoint_verify=ca_path,
+    )
+    sess.send = fake_send
+    sess.get("https://provider.test/resource")
+
+
+def test_token_endpoint_verify_explicit_verify_kwarg_takes_precedence(token):
+    ca_path = "/path/to/custom-ca.pem"
+    override_path = "/path/to/override-ca.pem"
+
+    def fake_send(r, **kwargs):
+        assert kwargs.get("verify") == override_path
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        resp.json = lambda: token
+        return resp
+
+    sess = OAuth2Session(
+        client_id="foo",
+        client_secret="bar",
+        token_endpoint="https://provider.test/token",
+        grant_type="client_credentials",
+        token_endpoint_verify=ca_path,
+    )
+    sess.send = fake_send
+    sess.fetch_token(verify=override_path)
+
+
+def test_token_endpoint_verify_passed_to_refresh_token(token):
+    ca_path = "/path/to/custom-ca.pem"
+    refreshed_token = {
+        "token_type": "Bearer",
+        "access_token": "refreshed",
+        "refresh_token": "new_rt",
+        "expires_in": 3600,
+    }
+
+    def fake_send(r, **kwargs):
+        assert kwargs.get("verify") == ca_path
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        resp.json = lambda: refreshed_token
+        return resp
+
+    # Give the token an expired state
+    expired_token = deepcopy(token)
+    expired_token["expires_at"] = time.time() - 100
+
+    sess = OAuth2Session(
+        client_id="foo",
+        client_secret="bar",
+        token_endpoint="https://provider.test/token",
+        token_endpoint_verify=ca_path,
+        token=expired_token,
+    )
+    sess.send = fake_send
+    sess.refresh_token("https://provider.test/token")
+    assert sess.token["access_token"] == "refreshed"
+
+
+def test_token_endpoint_verify_false_disables_verification(token):
+    def fake_send(r, **kwargs):
+        assert kwargs.get("verify") is False
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        resp.json = lambda: token
+        return resp
+
+    sess = OAuth2Session(
+        client_id="foo",
+        client_secret="bar",
+        token_endpoint="https://provider.test/token",
+        grant_type="client_credentials",
+        token_endpoint_verify=False,
+    )
+    sess.send = fake_send
+    sess.fetch_token()
+    assert sess.token["access_token"] == token["access_token"]
+
+
+def test_token_endpoint_verify_none_uses_session_default(token):
+    def fake_send(r, **kwargs):
+        # When token_endpoint_verify is None, no extra verify kwarg is injected;
+        # the session's own verify setting is used (requests.Session.verify
+        # defaults to True).
+        assert kwargs.get("verify") is True
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        resp.json = lambda: token
+        return resp
+
+    sess = OAuth2Session(
+        client_id="foo",
+        client_secret="bar",
+        token_endpoint="https://provider.test/token",
+        grant_type="client_credentials",
+        # token_endpoint_verify defaults to None
+    )
+    sess.send = fake_send
+    sess.fetch_token()
+    assert sess.token["access_token"] == token["access_token"]

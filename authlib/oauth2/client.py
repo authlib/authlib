@@ -38,6 +38,14 @@ class OAuth2Client:
         values: "header", "body", "uri".
     :param update_token: A function for you to update token. It accept a
         :class:`OAuth2Token` as parameter.
+    :param token_endpoint_verify: SSL verification for token endpoint requests.
+        Defaults to ``None``, which means the session's default verify setting
+        is used (same as resource requests). Set to a CA bundle path to use a
+        custom certificate, ``True`` to use the default CA bundle, or ``False``
+        to disable verification. When not ``None``, it applies only to
+        ``fetch_token`` and ``refresh_token`` requests without affecting
+        resource requests. Only works with the requests integration (httpx
+        uses client-level verify).
     :param leeway: Time window in seconds before the actual expiration of the
         authentication token, that the token is considered expired and will
         be refreshed.
@@ -64,6 +72,7 @@ class OAuth2Client:
         token=None,
         token_placement="header",
         update_token=None,
+        token_endpoint_verify=None,
         leeway=60,
         **metadata,
     ):
@@ -101,6 +110,7 @@ class OAuth2Client:
                 "update token has been redesigned, checkout the documentation"
             )
 
+        self.token_endpoint_verify = token_endpoint_verify
         self.metadata = metadata
 
         self.compliance_hook = {
@@ -216,6 +226,7 @@ class OAuth2Client:
             return self.token_from_fragment(authorization_response, state)
 
         session_kwargs = self._extract_session_request_params(kwargs)
+        self._apply_token_endpoint_kwargs(session_kwargs)
 
         if authorization_response and "code=" in authorization_response:
             grant_type = "authorization_code"
@@ -270,6 +281,7 @@ class OAuth2Client:
         :return: A :class:`OAuth2Token` object (a dict too).
         """
         session_kwargs = self._extract_session_request_params(kwargs)
+        self._apply_token_endpoint_kwargs(session_kwargs)
         refresh_token = refresh_token or self.token.get("refresh_token")
         if "scope" not in kwargs and self.scope:
             kwargs["scope"] = self.scope
@@ -508,6 +520,10 @@ class OAuth2Client:
             if k in kwargs:
                 rv[k] = kwargs.pop(k)
         return rv
+
+    def _apply_token_endpoint_kwargs(self, session_kwargs):
+        """Apply token-endpoint-specific kwargs (e.g., verify) to session kwargs."""
+        session_kwargs.setdefault("verify", self.token_endpoint_verify)
 
     def _http_post(self, url, body=None, auth=None, headers=None, **kwargs):
         return self.session.post(

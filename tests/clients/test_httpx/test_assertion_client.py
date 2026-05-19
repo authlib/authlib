@@ -63,3 +63,19 @@ def test_without_alg():
     ) as client:
         with pytest.raises(ValueError):
             client.get("https://provider.test")
+
+
+def test_token_endpoint_verify_does_not_crash_httpx():
+    """token_endpoint_verify is accepted but ignored for httpx (client-level verify only)."""
+    with AssertionClient(
+        "https://provider.test/token",
+        issuer="foo",
+        subject="foo",
+        audience="foo",
+        alg="HS256",
+        key="secret",
+        token_endpoint_verify="/path/to/ca.pem",
+        transport=WSGITransport(MockDispatch(default_token)),
+    ) as client:
+        client.get("https://provider.test")
+        assert client.token["access_token"] == "a"

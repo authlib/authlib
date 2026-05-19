@@ -66,3 +66,20 @@ async def test_without_alg():
     ) as client:
         with pytest.raises(ValueError):
             await client.get("https://provider.test")
+
+
+@pytest.mark.asyncio
+async def test_token_endpoint_verify_does_not_crash_httpx():
+    """token_endpoint_verify is accepted but ignored for httpx (client-level verify only)."""
+    async with AsyncAssertionClient(
+        "https://provider.test/token",
+        issuer="foo",
+        subject="foo",
+        audience="foo",
+        alg="HS256",
+        key="secret",
+        token_endpoint_verify="/path/to/ca.pem",
+        transport=ASGITransport(AsyncMockDispatch(default_token)),
+    ) as client:
+        await client.get("https://provider.test")
+        assert client.token["access_token"] == "a"
