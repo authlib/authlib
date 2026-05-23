@@ -25,6 +25,7 @@ class AssertionClient:
         claims=None,
         token_placement="header",
         scope=None,
+        token_endpoint_verify=None,
         leeway=60,
         **kwargs,
     ):
@@ -46,6 +47,7 @@ class AssertionClient:
         self.audience = audience
         self.claims = claims
         self.scope = scope
+        self.token_endpoint_verify = token_endpoint_verify
         if self.token_auth_class is not None:
             self.token_auth = self.token_auth_class(None, token_placement, self)
         self._kwargs = kwargs
@@ -95,9 +97,15 @@ class AssertionClient:
         self.token = token
         return self.token
 
+    def _apply_token_endpoint_kwargs(self, kwargs):
+        """Apply token-endpoint-specific kwargs (e.g., verify) to request kwargs."""
+        kwargs.setdefault("verify", self.token_endpoint_verify)
+
     def _refresh_token(self, data):
+        kwargs = {}
+        self._apply_token_endpoint_kwargs(kwargs)
         resp = self.session.request(
-            "POST", self.token_endpoint, data=data, withhold_token=True
+            "POST", self.token_endpoint, data=data, withhold_token=True, **kwargs
         )
 
         return self.parse_response_token(resp)

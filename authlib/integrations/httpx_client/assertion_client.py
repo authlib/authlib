@@ -78,6 +78,10 @@ class AssertionClient(_AssertionClient, httpx.Client):
     }
     DEFAULT_GRANT_TYPE = JWT_BEARER_GRANT_TYPE
 
+    def _apply_token_endpoint_kwargs(self, kwargs):
+        # httpx does not support per-request verify; it's set at client level.
+        pass
+
     def __init__(
         self,
         token_endpoint,
