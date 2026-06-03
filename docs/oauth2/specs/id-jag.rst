@@ -12,8 +12,7 @@ The **Identity Assertion JWT Authorization Grant (ID-JAG)** is an extension
 to :ref:`RFC 7523 <specs/rfc7523>` that enables cross-application access
 using identity assertions issued by an external enterprise IdP.
 
-.. module:: authlib.oauth2.rfc7523
-   :no-index:
+.. module:: authlib.oauth2.drafts
 
 
 How ID-JAG Works
