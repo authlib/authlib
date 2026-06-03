@@ -9,7 +9,7 @@ from authlib.oauth2.rfc6749 import InvalidClientError
 from authlib.oauth2.rfc6749 import InvalidGrantError
 from authlib.oauth2.rfc6749 import InvalidRequestError
 from authlib.oauth2.rfc6749 import UnauthorizedClientError
-from authlib.oauth2.rfc7523 import IDJAGGrant
+from authlib.oauth2.drafts import IDJAGGrant
 from authlib.oauth2.rfc7523 import JWTBearerGrant
 from tests.util import read_file_path
 
@@ -185,7 +185,7 @@ def test_malformed_assertion_value_error(rsa_private):
     assertion = _sign(rsa_private)
     g = _grant({"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": assertion})
 
-    with patch("authlib.oauth2.rfc7523.id_jag.jwt.decode", side_effect=ValueError("bad key")):
+    with patch("authlib.oauth2.drafts.id_jag.jwt.decode", side_effect=ValueError("bad key")):
         with pytest.raises(InvalidGrantError):
             g.validate_token_request()
 

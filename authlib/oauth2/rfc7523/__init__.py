@@ -13,14 +13,12 @@ from .assertion import private_key_jwt_sign
 from .auth import ClientSecretJWT
 from .auth import PrivateKeyJWT
 from .client import JWTBearerClientAssertion
-from .id_jag import IDJAGGrant
 from .jwt_bearer import JWTBearerGrant
 from .token import JWTBearerTokenGenerator
 from .validator import JWTBearerToken
 from .validator import JWTBearerTokenValidator
 
 __all__ = [
-    "IDJAGGrant",
     "JWTBearerGrant",
     "JWTBearerClientAssertion",
     "client_secret_jwt_sign",

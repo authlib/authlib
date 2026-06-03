@@ -5,7 +5,7 @@ from flask import json
 from joserfc.jwk import RSAKey
 
 from authlib.oauth2.rfc6749 import InvalidGrantError
-from authlib.oauth2.rfc7523 import IDJAGGrant as _IDJAGGrant
+from authlib.oauth2.drafts import IDJAGGrant as _IDJAGGrant
 from tests.util import read_file_path
 
 from .models import Client

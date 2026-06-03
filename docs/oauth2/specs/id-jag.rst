@@ -51,7 +51,7 @@ Flask Example
 ::
 
     from authlib.oauth2.rfc6749 import InvalidGrantError
-    from authlib.oauth2.rfc7523 import IDJAGGrant as _IDJAGGrant
+    from authlib.oauth2.drafts import IDJAGGrant as _IDJAGGrant
     from joserfc.jwk import KeySet
 
     class IDJAGGrant(_IDJAGGrant):
@@ -94,7 +94,7 @@ Django Example
 ::
 
     from authlib.oauth2.rfc6749 import InvalidGrantError
-    from authlib.oauth2.rfc7523 import IDJAGGrant as _IDJAGGrant
+    from authlib.oauth2.drafts import IDJAGGrant as _IDJAGGrant
     from joserfc.jwk import KeySet
 
     class IDJAGGrant(_IDJAGGrant):

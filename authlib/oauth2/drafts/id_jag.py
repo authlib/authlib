@@ -21,9 +21,9 @@ from ..rfc6749 import InvalidGrantError
 from ..rfc6749 import InvalidRequestError
 from ..rfc6749 import UnauthorizedClientError
 from ..rfc6749 import scope_to_list
-from .assertion import sign_jwt_bearer_assertion
-from .jwt_bearer import JWT_BEARER_GRANT_TYPE
-from .jwt_bearer import JWTBearerGrant
+from ..rfc7523.assertion import sign_jwt_bearer_assertion
+from ..rfc7523.jwt_bearer import JWT_BEARER_GRANT_TYPE
+from ..rfc7523.jwt_bearer import JWTBearerGrant
 
 log = logging.getLogger(__name__)
 
