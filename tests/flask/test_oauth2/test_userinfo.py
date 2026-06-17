@@ -153,6 +153,49 @@ def test_post(test_client, db, token):
     }
 
 
+def test_post_token_in_body(test_client, db, token):
+    token.scope = "openid profile email address phone"
+    db.session.add(token)
+    db.session.commit()
+
+    rv = test_client.post(
+        "/oauth/userinfo",
+        data={"access_token": "access-token"},
+    )
+    assert rv.headers["Content-Type"] == "application/json"
+
+    resp = json.loads(rv.data)
+    assert resp == {
+        "sub": "1",
+        "address": {
+            "country": "USA",
+            "formatted": "742 Evergreen Terrace, Springfield",
+            "locality": "Springfield",
+            "postal_code": "1245",
+            "region": "Unknown",
+            "street_address": "742 Evergreen Terrace",
+        },
+        "birthdate": "2000-12-01",
+        "email": "janedoe@example.com",
+        "email_verified": True,
+        "family_name": "Doe",
+        "gender": "female",
+        "given_name": "Jane",
+        "locale": "fr-FR",
+        "middle_name": "Middle",
+        "name": "foo",
+        "nickname": "Jany",
+        "phone_number": "+1 (425) 555-1212",
+        "phone_number_verified": False,
+        "picture": "https://resource.test/janedoe/me.jpg",
+        "preferred_username": "j.doe",
+        "profile": "https://resource.test/janedoe",
+        "updated_at": 1745315119,
+        "website": "https://resource.test",
+        "zoneinfo": "Europe/Paris",
+    }
+
+
 def test_no_token(test_client):
     rv = test_client.post("/oauth/userinfo")
     resp = json.loads(rv.data)
