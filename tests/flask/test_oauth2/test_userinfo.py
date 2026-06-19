@@ -202,6 +202,13 @@ def test_no_token(test_client):
     assert resp["error"] == "missing_authorization"
 
 
+def test_missing_token_type(test_client):
+    headers = {"Authorization": "token_string"}
+    rv = test_client.post("/oauth/userinfo", headers=headers)
+    resp = json.loads(rv.data)
+    assert resp["error"] == "unsupported_token_type"
+
+
 def test_bad_token(test_client):
     headers = {"Authorization": "invalid token_string"}
     rv = test_client.post("/oauth/userinfo", headers=headers)
