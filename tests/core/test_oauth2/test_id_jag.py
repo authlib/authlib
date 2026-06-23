@@ -477,3 +477,39 @@ def test_does_not_expose_rfc7523_hooks():
 
 def test_same_grant_type_as_jwt_bearer():
     assert IDJAGGrant.GRANT_TYPE == JWTBearerGrant.GRANT_TYPE
+
+
+# === Coverage for default / fallback branches ===
+
+
+def test_base_get_audiences_returns_empty_list():
+    """The base ``IDJAGGrant.get_audiences`` default returns ``[]``.
+
+    Application subclasses override this; the default exists only as a
+    backward-compatible soft-deprecation path inherited from RFC 7523.
+    """
+    g = IDJAGGrant.__new__(IDJAGGrant)
+    assert g.get_audiences() == []
+
+
+def test_extract_assertion_rejects_non_json_payload(rsa_private):
+    """A JWS whose payload is valid base64url but not valid JSON must
+    raise ``InvalidGrantError`` via the ValueError branch in
+    ``_extract_assertion``."""
+    import base64
+
+    from joserfc import jws as _jws
+    from joserfc.jwk import RSAKey  # noqa: F401  (rsa_private already supplies one)
+
+    # Build a compact JWS whose payload is "not json" (raw bytes, not JSON).
+    header = {"alg": "RS256", "typ": "oauth-id-jag+jwt"}
+    bad_payload = b"this-is-not-json"
+    compact = _jws.serialize_compact(header, bad_payload, rsa_private)
+    # Sanity-check: the payload segment base64-decodes to our bytes.
+    payload_segment = compact.split(".")[1]
+    padded = payload_segment + "=" * (-len(payload_segment) % 4)
+    assert base64.urlsafe_b64decode(padded) == bad_payload
+
+    g = _grant({"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": compact})
+    with pytest.raises(InvalidGrantError, match="Invalid JWT payload"):
+        g.validate_token_request()
