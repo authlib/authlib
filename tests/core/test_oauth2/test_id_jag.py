@@ -450,25 +450,26 @@ def test_missing_assertion():
         g.validate_token_request()
 
 
-# === Dead hooks ===
+# === Independence from JWTBearerGrant ===
 
 
-def test_resolve_issuer_client_raises():
-    g = _TestIDJAGGrant.__new__(_TestIDJAGGrant)
-    with pytest.raises(NotImplementedError, match="resolve_client_by_id"):
-        g.resolve_issuer_client("some-issuer")
+def test_does_not_inherit_from_jwt_bearer_grant():
+    """ID-JAG intentionally does not inherit from JWTBearerGrant; it
+    shares only the grant_type URI."""
+    assert not issubclass(IDJAGGrant, JWTBearerGrant)
 
 
-def test_resolve_client_public_key_raises():
-    g = _TestIDJAGGrant.__new__(_TestIDJAGGrant)
-    with pytest.raises(NotImplementedError, match="resolve_issuer_key"):
-        g.resolve_client_public_key(None)
-
-
-def test_has_granted_permission_raises():
-    g = _TestIDJAGGrant.__new__(_TestIDJAGGrant)
-    with pytest.raises(NotImplementedError, match="check_id_jag_permission"):
-        g.has_granted_permission(None, None)
+def test_does_not_expose_rfc7523_hooks():
+    """The RFC 7523 hooks that don't apply to ID-JAG must not exist on
+    the class (no useless NotImplementedError stubs)."""
+    for name in (
+        "resolve_issuer_client",
+        "resolve_client_public_key",
+        "has_granted_permission",
+    ):
+        assert not hasattr(IDJAGGrant, name), (
+            f"IDJAGGrant should not expose {name!r}"
+        )
 
 
 # === Registration ===

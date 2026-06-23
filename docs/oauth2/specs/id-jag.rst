@@ -38,10 +38,17 @@ The key differences from standard RFC 7523:
 Using IDJAGGrant
 ----------------
 
-``IDJAGGrant`` works the same way as :class:`JWTBearerGrant` — register it
-with :meth:`~authlib.oauth2.rfc6749.AuthorizationServer.register_grant`.
+``IDJAGGrant`` is a standalone grant — it inherits directly from
+:class:`~authlib.oauth2.rfc6749.BaseGrant` and
+:class:`~authlib.oauth2.rfc6749.TokenEndpointMixin`, **not** from
+:class:`~authlib.oauth2.rfc7523.JWTBearerGrant`.  The two grants share
+only the ``grant_type`` URI; the ID-JAG three-party model has different
+hooks (issuer-keyed key resolution, ``client_id``-keyed client lookup,
+``jti`` replay protection) than the RFC 7523 two-party model.
 
-You must subclass :class:`IDJAGGrant` and implement all required hooks.
+Register it with
+:meth:`~authlib.oauth2.rfc6749.AuthorizationServer.register_grant`,
+after subclassing it to implement all required hooks.
 
 
 Flask Example
