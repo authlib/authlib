@@ -81,6 +81,16 @@ def test_validate_expected_issuer_received_None():
         claims.validate()
 
 
+def test_validate_essential_claim_with_falsy_numeric_value():
+    # Essential claims with falsy but valid values (e.g. nbf=0) must not
+    # raise InvalidClaimError — only a missing or None claim should.
+    id_token = jwt.encode({"alg": "HS256"}, {"nbf": 0}, "k")
+    claims_options = {"nbf": {"essential": True}}
+    claims = jwt.decode(id_token, "k", claims_options=claims_options)
+    # nbf=0 is present and valid; essential check must pass
+    claims._validate_essential_claims()
+
+
 def test_validate_aud():
     id_token = jwt.encode({"alg": "HS256"}, {"aud": "foo"}, "k")
     claims_options = {"aud": {"essential": True, "value": "foo"}}
