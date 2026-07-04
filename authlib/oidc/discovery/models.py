@@ -273,7 +273,7 @@ class OpenIDProviderMetadata(AuthorizationServerMetadata):
 
         if not isinstance(values, list):
             raise ValueError('"prompt_values_supported" MUST be JSON array')
-        
+
         valid_values = {"none", "login", "consent", "select_account", "create"}
         if not valid_values.issuperset(set(values)):
             raise ValueError('"prompt_values_supported" contains invalid values')
