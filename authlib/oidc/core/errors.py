@@ -85,3 +85,15 @@ class RegistrationNotSupportedError(OAuth2Error):
     """The OP does not support use of the registration parameter."""
 
     error = "registration_not_supported"
+
+
+class RegistrationRequiredError(OAuth2Error):
+    """The Authorization Server requires the End-User to register.
+
+    This is used to indicate the authorization request included the
+    `prompt=create` value and the server wants to redirect the user
+    to a registration page. Integrations can raise this with
+    ``redirect_uri`` to perform the redirect.
+    """
+
+    error = "registration_required"
