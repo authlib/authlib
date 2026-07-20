@@ -28,7 +28,6 @@ from joserfc.util import to_bytes
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.encoding import json_loads
 from authlib.common.security import generate_token
-from authlib.deprecate import deprecate
 
 from ..rfc6749 import BaseGrant
 from ..rfc6749 import InvalidClientError
@@ -53,16 +52,12 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
 
     Subclasses **must** implement:
 
+    - :meth:`get_audiences`
     - :meth:`resolve_issuer_key`
     - :meth:`resolve_client_by_id`
     - :meth:`authenticate_user`
     - :meth:`check_jti`
     - :meth:`check_id_jag_permission`
-
-    Subclasses **should** implement (currently emits a deprecation
-    warning when omitted; will become mandatory in a future release):
-
-    - :meth:`get_audiences`
     """
 
     #: Same grant_type URI as RFC 7523.  Cannot coexist with
@@ -244,7 +239,13 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
         return token.claims
 
     def _extract_assertion(self, assertion: str):
-        obj = jws.extract_compact(to_bytes(assertion))
+        try:
+            obj = jws.extract_compact(to_bytes(assertion))
+        except (JoseError, ValueError) as e:
+            log.debug("Assertion Error: %r", e)
+            raise InvalidGrantError(
+                description="Invalid JWT assertion"
+            ) from e
         try:
             claims = json_loads(obj.payload)
         except ValueError:
@@ -263,15 +264,7 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
 
     def _verify_claims(self, claims: jwt.Claims):
         options = dict(self.CLAIMS_OPTIONS)
-        audiences = self.get_audiences()
-        if audiences:
-            options["aud"] = {"essential": True, "values": audiences}
-        else:
-            deprecate(
-                "'get_audiences' must return a non-empty list. "
-                "Audience validation will become mandatory.",
-                version="1.8",
-            )
+        options["aud"] = {"essential": True, "values": self.get_audiences()}
 
         claims_requests = jwt.JWTClaimsRegistry(leeway=self.LEEWAY, **options)
         try:
@@ -283,30 +276,21 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
     # ------------------------------------------------------------------
     # Application hooks
     #
-    # The five hooks below raise NotImplementedError and MUST be
-    # overridden by application subclasses.  This follows the established
-    # Authlib pattern (see authlib/oauth2/rfc7523/jwt_bearer.py:199 ff.)
-    # rather than abc.abstractmethod, because grants compose via mixins
-    # and are instantiated by the framework.
-    #
-    # ``get_audiences`` is treated separately: it returns ``[]`` by
-    # default to preserve backward-compatibility with RFC 7523's
-    # ``JWTBearerGrant.get_audiences`` (which has the same default and
-    # the same deprecation path).  ``_verify_claims`` emits a
-    # deprecation warning when an empty list is returned; audience
-    # validation will become mandatory in 1.8.
+    # All hooks below raise NotImplementedError and MUST be overridden by
+    # application subclasses.  This follows the established Authlib
+    # pattern (see authlib/oauth2/rfc7523/jwt_bearer.py:199 ff.) rather
+    # than abc.abstractmethod, because grants compose via mixins and are
+    # instantiated by the framework.
     # ------------------------------------------------------------------
 
     def get_audiences(self) -> list:
         """Return the list of valid ``aud`` values for this AS.
 
         Typically the token endpoint URL and/or the AS issuer identifier.
-        Returning an empty list currently triggers a deprecation warning
-        and skips audience-value validation; this fallback will be
-        removed in a future release, after which subclasses MUST
-        override this hook.
+        The returned list must be non-empty; ``aud`` validation is
+        mandatory for ID-JAG assertions.
         """
-        return []
+        raise NotImplementedError()
 
     def resolve_issuer_key(self, issuer, headers) -> jwk.Key | jwk.KeySet:
         """Return the IdP's public key(s) for the given ``issuer``.

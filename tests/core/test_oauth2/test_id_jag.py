@@ -482,14 +482,13 @@ def test_same_grant_type_as_jwt_bearer():
 # === Coverage for default / fallback branches ===
 
 
-def test_base_get_audiences_returns_empty_list():
-    """The base ``IDJAGGrant.get_audiences`` default returns ``[]``.
-
-    Application subclasses override this; the default exists only as a
-    backward-compatible soft-deprecation path inherited from RFC 7523.
+def test_base_get_audiences_raises_not_implemented():
+    """The base ``IDJAGGrant.get_audiences`` must be overridden by
+    application subclasses; the default raises ``NotImplementedError``.
     """
     g = IDJAGGrant.__new__(IDJAGGrant)
-    assert g.get_audiences() == []
+    with pytest.raises(NotImplementedError):
+        g.get_audiences()
 
 
 def test_extract_assertion_rejects_non_json_payload(rsa_private):
@@ -513,3 +512,13 @@ def test_extract_assertion_rejects_non_json_payload(rsa_private):
     g = _grant({"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": compact})
     with pytest.raises(InvalidGrantError, match="Invalid JWT payload"):
         g.validate_token_request()
+
+
+def test_extract_assertion_rejects_malformed_compact():
+    """A syntactically malformed compact JWT must surface as
+    ``InvalidGrantError`` (not a joserfc ``DecodeError`` propagating to
+    a 500)."""
+    g = _grant({"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": "not.a.jwt"})
+    with pytest.raises(InvalidGrantError, match="Invalid JWT assertion"):
+        g.validate_token_request()
+
