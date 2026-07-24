@@ -273,6 +273,19 @@ def test_jwk_import_key_set():
         JsonWebKey.import_key_set("invalid")
 
 
+def test_jwk_import_key_set_ignores_unknown_kty():
+    # RFC 7517 Section 5: a key whose "kty" is not understood is ignored, not fatal.
+    jwks = {
+        "keys": [
+            {"kty": "AKP", "alg": "ML-DSA-65", "pub": "AAAA", "kid": "pq"},
+            {"kty": "oct", "k": "c2VjcmV0", "kid": "classical"},
+        ]
+    }
+    key_set = JsonWebKey.import_key_set(jwks)
+    assert len(key_set.keys) == 1
+    assert key_set.keys[0].kid == "classical"
+
+
 def test_jwk_find_by_kid_with_use():
     key1 = OctKey.import_key("secret", {"kid": "abc", "use": "sig"})
     key2 = OctKey.import_key("secret", {"kid": "abc", "use": "enc"})

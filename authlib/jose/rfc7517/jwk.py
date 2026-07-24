@@ -51,8 +51,16 @@ class JsonWebKey:
         """
         raw = _transform_raw_key(raw)
         if isinstance(raw, dict) and "keys" in raw:
-            keys = raw.get("keys")
-            return KeySet([cls.import_key(k) for k in keys])
+            keys = []
+            for k in raw["keys"]:
+                # RFC 7517, Section 5: ignore a key whose "kty" is not understood
+                # rather than failing the whole set. Matters as post-quantum keys
+                # (e.g. ML-DSA, kty "AKP") start appearing alongside classical ones.
+                kty = k.get("kty") if isinstance(k, dict) else None
+                if kty is not None and kty not in cls.JWK_KEY_CLS:
+                    continue
+                keys.append(cls.import_key(k))
+            return KeySet(keys)
         raise ValueError("Invalid key set format")
 
 
