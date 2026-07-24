@@ -47,12 +47,23 @@ class JsonWebKey:
     def import_key_set(cls, raw):
         """Import KeySet from string, dict or a list of keys.
 
+        Per RFC 7517 Section 5, members of a JWK Set whose ``kty`` is not
+        understood are ignored rather than treated as a fatal error, so a
+        single unsupported key does not prevent the rest of the set from
+        being imported.
+
         :return: KeySet instance
         """
         raw = _transform_raw_key(raw)
         if isinstance(raw, dict) and "keys" in raw:
             keys = raw.get("keys")
-            return KeySet([cls.import_key(k) for k in keys])
+            imported_keys = []
+            for k in keys:
+                kty = k.get("kty") if isinstance(k, dict) else None
+                if kty is not None and kty not in cls.JWK_KEY_CLS:
+                    continue
+                imported_keys.append(cls.import_key(k))
+            return KeySet(imported_keys)
         raise ValueError("Invalid key set format")
 
 

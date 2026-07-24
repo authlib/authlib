@@ -273,6 +273,23 @@ def test_jwk_import_key_set():
         JsonWebKey.import_key_set("invalid")
 
 
+def test_jwk_import_key_set_ignores_unknown_kty():
+    # RFC 7517 Section 5: JWKs with an unrecognised "kty" SHOULD be
+    # ignored instead of failing the whole set.
+    jwks_public = read_file_path("jwks_public.json")
+    keys = list(jwks_public["keys"])
+    keys.append({"kty": "AKP", "kid": "pq", "pub": "somevalue"})
+
+    key_set = JsonWebKey.import_key_set({"keys": keys})
+    assert len(key_set.keys) == len(jwks_public["keys"])
+
+    key = key_set.find_by_kid("abc")
+    assert key["e"] == "AQAB"
+
+    with pytest.raises(ValueError):
+        key_set.find_by_kid("pq")
+
+
 def test_jwk_find_by_kid_with_use():
     key1 = OctKey.import_key("secret", {"kid": "abc", "use": "sig"})
     key2 = OctKey.import_key("secret", {"kid": "abc", "use": "enc"})
