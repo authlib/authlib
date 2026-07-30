@@ -53,6 +53,7 @@ class OpenIDProviderMetadata(AuthorizationServerMetadata):
         "request_parameter_supported",
         "request_uri_parameter_supported",
         "require_request_uri_registration",
+        "prompt_values_supported",
         # not defined by OpenID
         # 'revocation_endpoint',
         # 'revocation_endpoint_auth_methods_supported',
@@ -259,6 +260,23 @@ class OpenIDProviderMetadata(AuthorizationServerMetadata):
         the default value is true.
         """
         validate_boolean_value(self, "request_uri_parameter_supported")
+
+    def validate_prompt_values_supported(self):
+        """OPTIONAL. JSON array containing the list of prompt values that
+        this OpenID Provider supports. Values defined by OpenID Connect Core
+        are: "none", "login", "consent", "select_account". This
+        specification defines the additional value "create".
+        """
+        values = self.get("prompt_values_supported")
+        if not values:
+            return
+
+        if not isinstance(values, list):
+            raise ValueError('"prompt_values_supported" MUST be JSON array')
+
+        valid_values = {"none", "login", "consent", "select_account", "create"}
+        if not valid_values.issuperset(set(values)):
+            raise ValueError('"prompt_values_supported" contains invalid values')
 
     def validate_require_request_uri_registration(self):
         """OPTIONAL. Boolean value specifying whether the OP requires any

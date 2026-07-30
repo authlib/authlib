@@ -150,6 +150,9 @@ def create_response_mode_response(redirect_uri, params, response_mode):
 def _guess_prompt_value(end_user, prompts, redirect_uri, redirect_fragment):
     # http://openid.net/specs/openid-connect-core-1_0.html#AuthRequest
 
+    if "create" in prompts:
+        return "create"
+
     if not end_user or "login" in prompts:
         return "login"
 

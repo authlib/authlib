@@ -7,6 +7,7 @@ from authlib.common.urls import url_decode
 from authlib.common.urls import urlparse
 from authlib.oauth2.rfc6749 import errors
 from authlib.oauth2.rfc6749 import grants
+from authlib.oidc.core.grants import OpenIDCode as _OpenIDCode
 
 from .models import Client
 from .models import CodeGrantMixin
@@ -54,6 +55,23 @@ def client(user):
     client.save()
     yield client
     client.delete()
+
+
+@pytest.fixture
+def oidc_server(server):
+    class OpenIDCode(_OpenIDCode):
+        pass
+
+    grant_cls, _ = server._authorization_grants[0]
+    server._authorization_grants = [(grant_cls, [OpenIDCode()])]
+    return server
+
+
+@pytest.fixture
+def openid_client(client):
+    client.scope = "openid"
+    client.save()
+    return client
 
 
 def test_get_consent_grant_client(factory, server, client):
@@ -117,6 +135,30 @@ def test_create_authorization_response(factory, server):
     )
     assert resp.status_code == 302
     assert "code=" in resp["Location"]
+
+
+def test_prompt_create_sets_grant_prompt(factory, oidc_server, openid_client):
+    data = {
+        "response_type": "code",
+        "client_id": "client-id",
+        "redirect_uri": "https://client.test",
+        "scope": "openid",
+        "prompt": "create",
+    }
+    request = factory.post("/authorize", data=data)
+    grant = oidc_server.get_consent_grant(request)
+
+    resp = oidc_server.create_authorization_response(request, grant=grant)
+    assert resp.status_code == 302
+    assert "error=access_denied" in resp["Location"]
+
+    grant_user = User.objects.get(username="foo")
+    resp = oidc_server.create_authorization_response(
+        request, grant=grant, grant_user=grant_user
+    )
+    assert resp.status_code == 302
+    assert "code=" in resp["Location"]
+    assert grant.prompt == "create"
 
 
 def test_create_token_response_invalid(factory, server):
