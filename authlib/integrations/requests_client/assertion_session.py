@@ -39,6 +39,7 @@ class AssertionSession(AssertionClient, Session):
         claims=None,
         token_placement="header",
         scope=None,
+        client_id=None,
         default_timeout=None,
         leeway=60,
         **kwargs,
@@ -57,6 +58,7 @@ class AssertionSession(AssertionClient, Session):
             claims=claims,
             token_placement=token_placement,
             scope=scope,
+            client_id=client_id,
             leeway=leeway,
             **kwargs,
         )
