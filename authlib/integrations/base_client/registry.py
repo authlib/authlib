@@ -94,6 +94,16 @@ class BaseOAuth:
         self._registry[name] = (overwrite, kwargs)
         return self.create_client(name)
 
+    def remove_client(self, name):
+        if name not in self._registry:
+            raise KeyError(f'Client {name} not found in registry.')
+
+        if name not in self._clients:
+            raise KeyError(f'Client {name} not found in clients.')
+
+        del self._registry[name]
+        del self._clients[name]
+
     def generate_client_kwargs(self, name, overwrite, **kwargs):
         fetch_token = kwargs.pop("fetch_token", None)
         update_token = kwargs.pop("update_token", None)
