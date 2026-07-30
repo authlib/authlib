@@ -369,3 +369,45 @@ def test_request_without_token():
     with OAuth2Client("a", transport=transport) as client:
         with pytest.raises(OAuthError):
             client.get("https://provider.test/token")
+
+
+def test_client_credentials_auto_fetch_token_on_first_request():
+    transport = WSGITransport(MockDispatch(default_token))
+    with OAuth2Client(
+        "foo",
+        client_secret="bar",
+        token_endpoint="https://provider.test/token",
+        grant_type="client_credentials",
+        transport=transport,
+    ) as client:
+        client.get("https://provider.test/resource")
+        assert client.token["access_token"] == default_token["access_token"]
+
+
+def test_non_client_credentials_raises_missing_token():
+    transport = WSGITransport(MockDispatch())
+    with OAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(OAuthError):
+            client.get("https://provider.test/resource")
+
+
+def test_client_credentials_auto_fetch_token_on_first_stream():
+    transport = WSGITransport(MockDispatch(default_token))
+    with OAuth2Client(
+        "foo",
+        client_secret="bar",
+        token_endpoint="https://provider.test/token",
+        grant_type="client_credentials",
+        transport=transport,
+    ) as client:
+        with client.stream("GET", "https://provider.test/resource") as stream:
+            stream.read()
+        assert client.token["access_token"] == default_token["access_token"]
+
+
+def test_non_client_credentials_raises_missing_token_on_stream():
+    transport = WSGITransport(MockDispatch())
+    with OAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(OAuthError):
+            with client.stream("GET", "https://provider.test/resource") as stream:
+                stream.read()
