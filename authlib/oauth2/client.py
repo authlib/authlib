@@ -412,8 +412,7 @@ class OAuth2Client:
         self.compliance_hook[hook_type].add(hook)
 
     def parse_response_token(self, resp):
-        if resp.status_code >= 500:
-            resp.raise_for_status()
+        _ = resp.raise_for_status()
 
         token = resp.json()
         if "error" in token:
