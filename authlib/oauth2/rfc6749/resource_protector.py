@@ -110,7 +110,7 @@ class ResourceProtector:
         return validator
 
     def parse_request_authorization(self, request):
-        """Parse the token and token validator from request Authorization header.
+        """Parse the token and token validator from request Authorization header or payload.
         Here is an example of Authorization header::
 
             Authorization: Bearer a-token-string
@@ -118,24 +118,33 @@ class ResourceProtector:
         This method will parse this header, if it can find the validator for
         ``Bearer``, it will return the validator and ``a-token-string``.
 
+        If it cannot find an Authorization header, it will also search for the
+        ``access_token`` in the request payload.
+
         :return: validator, token_string
         :raise: MissingAuthorizationError
         :raise: UnsupportedTokenTypeError
         """
+        token_type = token_string = None
         auth = request.headers.get("Authorization")
-        if not auth:
+        if auth:
+            # https://tools.ietf.org/html/rfc6749#section-7.1
+            token_parts = auth.split(None, 1)
+            if len(token_parts) != 2:
+                raise UnsupportedTokenTypeError(
+                    self._default_auth_type, self._default_realm
+                )
+            token_type, token_string = token_parts
+        elif hasattr(request, "form"):
+            # https://www.rfc-editor.org/info/rfc6750/#section-2.2
+            token_type = "Bearer"
+            token_string = request.form.get("access_token")
+
+        if not token_string or not token_type:
             raise MissingAuthorizationError(
                 self._default_auth_type, self._default_realm
             )
 
-        # https://tools.ietf.org/html/rfc6749#section-7.1
-        token_parts = auth.split(None, 1)
-        if len(token_parts) != 2:
-            raise UnsupportedTokenTypeError(
-                self._default_auth_type, self._default_realm
-            )
-
-        token_type, token_string = token_parts
         validator = self.get_token_validator(token_type)
         return validator, token_string
 
