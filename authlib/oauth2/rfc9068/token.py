@@ -1,5 +1,3 @@
-import time
-
 from joserfc import jwt
 
 from authlib._joserfc_helpers import import_any_key
@@ -127,14 +125,11 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         return generate_token(16)
 
     def access_token_generator(self, client, grant_type, user, scope):
-        now = int(time.time())
-        expires_in = now + self._get_expires_in(client, grant_type)
-
         token_data = {
             "iss": self.issuer,
-            "exp": expires_in,
+            "exp": self._expires_at,
             "client_id": client.get_client_id(),
-            "iat": now,
+            "iat": self._issued_at,
             "jti": self.get_jti(client, grant_type, user, scope),
             "scope": scope,
         }
