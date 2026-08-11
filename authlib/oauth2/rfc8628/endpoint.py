@@ -115,7 +115,7 @@ class DeviceAuthorizationEndpoint:
         }
 
         self.save_device_credential(
-            request.payload.client_id, request.payload.scope, data
+            request.client.get_client_id(), request.payload.scope, data
         )
         return 200, data, default_json_headers
 
