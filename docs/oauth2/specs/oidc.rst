@@ -67,6 +67,23 @@ OpenID Claims
 .. autoclass:: UserInfo
     :members:
 
+Prompt Create Extension
+-----------------------
+
+Authlib supports the
+`Initiating User Registration via OpenID Connect 1.0 <https://openid.net/specs/openid-connect-prompt-create-1_0.html>`__
+extension.
+
+This extension adds a ``create`` value for the ``prompt`` authorization
+request parameter, which can be used to initiate a user registration flow.
+
+Authlib also supports advertising supported prompt values through OpenID
+Provider discovery metadata via ``prompt_values_supported``.
+
+When using OpenID Connect grants (for example ``OpenIDCode``),
+``prompt=create`` is parsed and exposed on the grant as ``grant.prompt`` for
+application-specific handling in your authorization flow.
+
 Dynamic client registration
 ---------------------------
 

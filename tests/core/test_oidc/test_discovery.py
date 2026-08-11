@@ -105,6 +105,11 @@ def test_validate_display_values_supported():
     _call_contains_invalid_value("display_values_supported", ["invalid"])
 
 
+def test_validate_prompt_values_supported():
+    _call_validate_array("prompt_values_supported", ["none", "login", "create"])
+    _call_contains_invalid_value("prompt_values_supported", ["invalid"])
+
+
 def test_validate_claim_types_supported():
     _call_validate_array("claim_types_supported", ["normal"])
     _call_contains_invalid_value("claim_types_supported", ["invalid"])
