@@ -1,6 +1,7 @@
 from joserfc import jwt
 from joserfc.errors import InvalidKeyIdError
 from joserfc.jwk import KeySet
+from joserfc.jws import JWSRegistry
 
 from authlib.common.security import generate_token
 from authlib.common.urls import add_params_to_uri
@@ -67,7 +68,7 @@ class AsyncOpenIDMixin:
             token = jwt.decode(
                 token["id_token"],
                 key=key_set,
-                algorithms=alg_values,
+                registry=JWSRegistry(algorithms=alg_values, strict_check_header=False),
             )
         except InvalidKeyIdError:
             jwks = await self.fetch_jwk_set(force=True)
@@ -75,7 +76,7 @@ class AsyncOpenIDMixin:
             token = jwt.decode(
                 token["id_token"],
                 key=key_set,
-                algorithms=alg_values,
+                registry=JWSRegistry(algorithms=alg_values, strict_check_header=False),
             )
 
         claims = claims_cls(token.claims, token.header, claims_options, claims_params)
