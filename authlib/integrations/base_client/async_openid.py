@@ -8,6 +8,8 @@ from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core import UserInfo
 
+from .sync_openid import try_all_keys
+
 __all__ = ["AsyncOpenIDMixin"]
 
 
@@ -63,20 +65,26 @@ class AsyncOpenIDMixin:
 
         jwks = await self.fetch_jwk_set()
         key_set = KeySet.import_key_set(jwks)
+        id_token_value = token["id_token"]
         try:
-            token = jwt.decode(
-                token["id_token"],
-                key=key_set,
-                algorithms=alg_values,
-            )
+            token = jwt.decode(id_token_value, key=key_set, algorithms=alg_values)
         except InvalidKeyIdError:
+            # Refresh JWKS — keys may have rotated
             jwks = await self.fetch_jwk_set(force=True)
             key_set = KeySet.import_key_set(jwks)
-            token = jwt.decode(
-                token["id_token"],
-                key=key_set,
-                algorithms=alg_values,
-            )
+            try:
+                token = jwt.decode(
+                    id_token_value, key=key_set, algorithms=alg_values
+                )
+            except InvalidKeyIdError:
+                if self.should_try_all_keys():
+                    token = try_all_keys(
+                        id_token_value=id_token_value,
+                        key_set=key_set,
+                        algorithms=alg_values,
+                    )
+                else:
+                    raise
 
         claims = claims_cls(token.claims, token.header, claims_options, claims_params)
         # https://github.com/authlib/authlib/issues/259
@@ -84,6 +92,17 @@ class AsyncOpenIDMixin:
             claims.params["nonce"] = None
         claims.validate(leeway=leeway)
         return UserInfo(claims)
+
+    def should_try_all_keys(self):
+        """Control whether to attempt signature verification against every key
+        in the JWKS when the token's kid does not match any key.
+
+        The default is False, which preserves the standard behavior of raising
+        InvalidKeyIdError immediately.  Override this method to return True in
+        subclasses that integrate with providers whose JWKS keys lack a kid or
+        use mismatched kid values.
+        """
+        return False
 
     async def create_logout_url(
         self,
