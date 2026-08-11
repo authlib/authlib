@@ -3,6 +3,8 @@ import warnings
 import authlib
 from authlib.deprecate import AuthlibDeprecationWarning
 
+from sphinx.locale import _
+
 # we will keep authlib.jose module until 2.0.0
 warnings.simplefilter("ignore", AuthlibDeprecationWarning)
 
@@ -55,26 +57,26 @@ html_theme_options = {
     "discord_url": "https://discord.gg/HvBVAeNAaV",
     "nav_links": [
         {
-            "title": "Projects",
+            "title": _("Projects"),
             "children": [
                 {
-                    "title": "Authlib",
+                    "title": _("Authlib"),
                     "url": "https://authlib.org/",
-                    "summary": "OAuth, JOSE, OpenID, etc.",
+                    "summary": _("OAuth, JOSE, OpenID, etc."),
                 },
                 {
-                    "title": "JOSE RFC",
+                    "title": _("JOSE RFC"),
                     "url": "https://jose.authlib.org/",
-                    "summary": "JWS, JWE, JWK, and JWT.",
+                    "summary": _("JWS, JWE, JWK, and JWT."),
                 },
                 {
-                    "title": "OTP Auth",
+                    "title": _("OTP Auth"),
                     "url": "https://otp.authlib.org/",
-                    "summary": "One time password, HOTP/TOTP.",
+                    "summary": _("One time password, HOTP/TOTP."),
                 },
             ],
         },
-        {"title": "Sponsor me", "url": "https://github.com/sponsors/lepture"},
+        {"title": _("Sponsor me"), "url": "https://github.com/sponsors/lepture"},
     ],
 }
 
