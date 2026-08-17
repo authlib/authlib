@@ -63,7 +63,6 @@ async def test_parse_id_token():
         "at_hash": create_half_hash(token["access_token"], "HS256").decode("utf-8"),
     }
     id_token = jwt.encode({"alg": "HS256"}, claims, secret_key)
-    token["id_token"] = id_token
 
     oauth = OAuth()
     client = oauth.register(
@@ -75,6 +74,9 @@ async def test_parse_id_token():
         issuer="https://provider.test",
         id_token_signing_alg_values_supported=["HS256", "RS256"],
     )
+    assert await client.parse_id_token(token, nonce="n") is None
+
+    token["id_token"] = id_token
     user = await client.parse_id_token(token, nonce="n")
     assert user.sub == "123"
 
@@ -112,11 +114,9 @@ async def test_runtime_error_fetch_jwks_uri():
         issuer="https://provider.test",
         id_token_signing_alg_values_supported=["HS256"],
     )
-    req_scope = {"type": "http", "session": {"_dev_authlib_nonce_": "n"}}
-    req = Request(req_scope)
     token["id_token"] = id_token
     with pytest.raises(RuntimeError):
-        await client.parse_id_token(req, token)
+        await client.parse_id_token(token, nonce="n")
 
 
 @pytest.mark.asyncio
