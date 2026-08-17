@@ -42,6 +42,9 @@ class AsyncOpenIDMixin:
         self, token, nonce, claims_options=None, claims_cls=None, leeway=120
     ):
         """Return an instance of UserInfo from token's ``id_token``."""
+        if "id_token" not in token:
+            return None
+
         claims_params = dict(
             nonce=nonce,
             client_id=self.client_id,
