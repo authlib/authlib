@@ -84,10 +84,12 @@ class TokenValidator:
 
 
 class ResourceProtector:
-    def __init__(self):
+    def __init__(self, token_validator: TokenValidator | None = None):
         self._token_validators = {}
         self._default_realm = None
         self._default_auth_type = None
+        if token_validator is not None:
+            self.register_token_validator(token_validator)
 
     def register_token_validator(self, validator: TokenValidator):
         """Register a token validator for a given Authorization type.

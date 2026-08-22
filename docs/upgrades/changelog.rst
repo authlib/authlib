@@ -31,6 +31,12 @@ Version 1.8.0
   validation, as in ``https://client.test@attacker.test/cb``. URIs that
   ``urlparse`` refuses to parse, such as ``http://[not-an-ip]/``, are also
   rejected instead of raising an unhandled ``ValueError``.
+- ``ResourceProtector`` now accepts an optional ``token_validator`` argument,
+  so ``ResourceProtector(token_validator=MyBearerTokenValidator())`` registers
+  it immediately instead of requiring a separate
+  ``register_token_validator()`` call. ``register_token_validator()`` is
+  unchanged and still the way to register additional validators (e.g. more
+  than one token type). :issue:`603`
 - Cast the ``sub`` claim to a string in the RFC 9068 and RFC 7523
   ``JWTBearerTokenGenerator``, as required by RFC 7519 Section 4.1.2.
   ``joserfc`` 1.7.3 started validating this claim and rejected the previously
