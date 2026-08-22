@@ -17,9 +17,14 @@ server. Authlib offers a **decorator** to protect your API endpoints::
         def authenticate_token(self, token_string):
             return Token.query.filter_by(access_token=token_string).first()
 
-    require_oauth = ResourceProtector()
-
     # only bearer token is supported currently
+    require_oauth = ResourceProtector(token_validator=MyBearerTokenValidator())
+
+You can also register the validator afterwards, which is useful if you need
+to register more than one (for instance, to support both bearer tokens and
+another token type)::
+
+    require_oauth = ResourceProtector()
     require_oauth.register_token_validator(MyBearerTokenValidator())
 
 When the resource server has no access to the ``Token`` model (database), and
