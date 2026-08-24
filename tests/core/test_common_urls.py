@@ -1,6 +1,6 @@
 import pytest
 
-from authlib.common.urls import is_valid_url
+from authlib.common.urls import extract_params, is_valid_url
 
 
 @pytest.mark.parametrize(
@@ -64,3 +64,42 @@ def test_fragments_not_allowed():
         is_valid_url("https://provider.test/cb#fragment", fragments_allowed=False)
         is False
     )
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        pytest.param("", id="string"),
+        pytest.param({}, id="dict"),
+        pytest.param([], id="list"),
+        pytest.param((), id="tuple"),
+    ],
+)
+def test_extract_params_empty(raw):
+    """An empty input of any accepted kind means no parameters, not a failure."""
+    assert extract_params(raw) == []
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        pytest.param("a=1&b=2", [("a", "1"), ("b", "2")], id="query-string"),
+        pytest.param({"a": "1"}, [("a", "1")], id="dict"),
+        pytest.param([("a", "1")], [("a", "1")], id="list-of-pairs"),
+    ],
+)
+def test_extract_params(raw, expected):
+    assert extract_params(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        pytest.param(None, id="none"),
+        pytest.param(5, id="int"),
+        pytest.param(object(), id="object"),
+    ],
+)
+def test_extract_params_unsupported(raw):
+    """Anything that is not a string, dict or sequence of pairs is rejected."""
+    assert extract_params(raw) is None
