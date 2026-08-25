@@ -23,6 +23,12 @@ Version 1.8.0
   client did not configure an algorithm. Override
   ``get_client_algorithm(client)`` if you need the previous behaviour.
   :issue:`806`
+- Support the ``form_post`` response mode on the OAuth 2.0 authorization code
+  and implicit grants, following `OAuth 2.0 Form Post Response Mode
+  <https://openid.net/specs/oauth-v2-form-post-response-mode-1_0.html>`_. The
+  ``query`` and ``fragment`` modes stay the default, so existing responses are
+  unchanged. An unknown ``response_mode`` value is now rejected with an
+  ``invalid_request`` error. :issue:`816`
 - Fix ``is_secure_transport()`` accepting cleartext URIs whose ``userinfo``
   component looks like a loopback host, such as
   ``http://localhost:80@attacker.test/cb``. The loopback exemption is now

@@ -4,8 +4,6 @@ from joserfc import jwt
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.encoding import to_native
-from authlib.common.urls import add_params_to_uri
-from authlib.common.urls import quote_url
 from authlib.oauth2.rfc6749 import InvalidRequestError
 from authlib.oauth2.rfc6749 import scope_to_list
 
@@ -119,32 +117,6 @@ def generate_id_token(
         private_key = import_any_key(key)
 
     return jwt.encode(header, payload, private_key, [alg])
-
-
-def create_response_mode_response(redirect_uri, params, response_mode):
-    if response_mode == "form_post":
-        tpl = (
-            "<html><head><title>Redirecting</title></head>"
-            '<body onload="javascript:document.forms[0].submit()">'
-            '<form method="post" action="{}">{}</form></body></html>'
-        )
-        inputs = "".join(
-            [
-                f'<input type="hidden" name="{quote_url(k)}" value="{quote_url(v)}"/>'
-                for k, v in params
-            ]
-        )
-        body = tpl.format(quote_url(redirect_uri), inputs)
-        return 200, body, [("Content-Type", "text/html; charset=utf-8")]
-
-    if response_mode == "query":
-        uri = add_params_to_uri(redirect_uri, params, fragment=False)
-    elif response_mode == "fragment":
-        uri = add_params_to_uri(redirect_uri, params, fragment=True)
-    else:
-        raise InvalidRequestError('Invalid "response_mode" value')
-
-    return 302, "", [("Location", uri)]
 
 
 def _guess_prompt_value(end_user, prompts, redirect_uri, redirect_fragment):
