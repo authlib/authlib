@@ -122,6 +122,10 @@ def test_authorize_token(test_client, server):
     assert claims["auth_time"] >= int(auth_request_time)
     assert claims["acr"] == "urn:mace:incommon:iap:silver"
     assert claims["amr"] == ["pwd", "otp"]
+    # No nonce was sent in the authorization request, so per the OIDC spec's
+    # JSON serialization rules, it must be omitted from the ID token claims
+    # rather than present with a None/null value.
+    assert "nonce" not in token.claims
 
 
 def test_pure_code_flow(test_client, server):

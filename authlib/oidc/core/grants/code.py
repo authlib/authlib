@@ -27,9 +27,11 @@ log = logging.getLogger(__name__)
 class OpenIDToken(LegacyMixin):
     def get_authorization_code_claims(self, authorization_code: AuthorizationCodeMixin):
         claims = {
-            "nonce": authorization_code.get_nonce(),
             "auth_time": authorization_code.get_auth_time(),
         }
+
+        if nonce := authorization_code.get_nonce():
+            claims["nonce"] = nonce
 
         if acr := authorization_code.get_acr():
             claims["acr"] = acr
