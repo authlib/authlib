@@ -442,7 +442,12 @@ class OAuth2Client:
         for hook in self.compliance_hook["access_token_response"]:
             resp = hook(resp)
 
-        return self.parse_response_token(resp)
+        self.parse_response_token(resp)
+
+        if callable(self.update_token):
+            self.update_token(self.token)
+
+        return self.token
 
     def _refresh_token(
         self, url, refresh_token=None, body="", headers=None, auth=None, **kwargs
