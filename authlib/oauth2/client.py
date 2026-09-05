@@ -311,7 +311,7 @@ class OAuth2Client:
         elif self.metadata.get("grant_type") == "client_credentials":
             access_token = token["access_token"]
             new_token = self.fetch_token(url, grant_type="client_credentials")
-            if self.update_token:
+            if callable(self.update_token):
                 self.update_token(new_token, access_token=access_token)
             return True
 
