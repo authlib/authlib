@@ -2,6 +2,7 @@ import time
 from copy import deepcopy
 from unittest import mock
 
+import httpx2
 import pytest
 from httpx2 import WSGITransport
 
@@ -137,6 +138,19 @@ def test_fetch_token_post():
     with OAuth2Client("foo", transport=transport) as client:
         with pytest.raises(OAuthError):
             client.fetch_token(url)
+
+
+def test_fetch_token_non_json_error_response():
+    # Regression test for #928.
+    url = "https://provider.test/token"
+    transport = WSGITransport(
+        MockDispatch(body="429 Too Many Requests", status_code=429)
+    )
+    with OAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(httpx2.HTTPStatusError):
+            client.fetch_token(url)
+
+
 
 
 def test_fetch_token_get():

@@ -415,7 +415,13 @@ class OAuth2Client:
         if resp.status_code >= 500:
             resp.raise_for_status()
 
-        token = resp.json()
+        try:
+            token = resp.json()
+        except ValueError:
+            # Non-JSON body (e.g. a gateway/WAF page) - surface the HTTP status instead.
+            resp.raise_for_status()
+            raise
+
         if "error" in token:
             raise self.oauth_error_class(
                 error=token["error"], description=token.get("error_description")
