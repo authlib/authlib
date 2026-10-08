@@ -151,6 +151,13 @@ def test_fetch_token_non_json_error_response():
             client.fetch_token(url)
 
 
+def test_fetch_token_non_json_success_response():
+    # A malformed body on a 2xx should still raise - raise_for_status() won't catch it.
+    url = "https://provider.test/token"
+    transport = WSGITransport(MockDispatch(body="not json", status_code=200))
+    with OAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(ValueError):
+            client.fetch_token(url)
 
 
 def test_fetch_token_get():
