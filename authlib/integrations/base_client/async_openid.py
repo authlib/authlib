@@ -83,9 +83,6 @@ class AsyncOpenIDMixin:
             )
 
         claims = claims_cls(token.claims, token.header, claims_options, claims_params)
-        # https://github.com/authlib/authlib/issues/259
-        if claims.get("nonce_supported") is False:
-            claims.params["nonce"] = None
         claims.validate(leeway=leeway)
         return UserInfo(claims)
 

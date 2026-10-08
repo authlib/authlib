@@ -31,17 +31,19 @@ class JWTAuthenticationRequest:
             def resolve_client_public_key(self, client: ClientMixin):
                 return get_jwks_for_client(client)
 
+            def get_client_request_uris(self, client: ClientMixin):
+                return client.request_uris
+
             def get_request_object(self, request_uri: str):
-                try:
-                    return requests.get(request_uri).text
-                except requests.Exception:
-                    return None
+                # Apply the retrieval safeguards documented in get_request_object.
+                return fetch_approved_request_object(request_uri)
 
             def get_server_metadata(self):
                 return {
                     "issuer": ...,
                     "authorization_endpoint": ...,
                     "require_signed_request_object": ...,
+                    "require_request_uri_registration": True,
                 }
 
             def get_client_require_signed_request_object(self, client: ClientMixin):
@@ -67,7 +69,8 @@ class JWTAuthenticationRequest:
     def get_request_object_signing_algorithms(self, client):
         """Return the supported algorithms for verifying the ``request_object`` JWT signature.
         By default, this method will only return the recommended algorithms. If signed request
-        object is not required, "none" algorithm will be included.
+        object is not required, "none" algorithm will be included. The signature
+        requirement is enforced independently, even if this method returns "none".
 
         Developers can override this method to customize the supported algorithms::
 
@@ -105,7 +108,7 @@ class JWTAuthenticationRequest:
         if not self._shoud_proceed_with_request_object(request, client):
             return
 
-        raw_request_object = self._get_raw_request_object(request)
+        raw_request_object = self._get_raw_request_object(request, client)
         request_object = self._decode_request_object(
             request, client, raw_request_object
         )
@@ -154,11 +157,20 @@ class JWTAuthenticationRequest:
 
         return False
 
-    def _get_raw_request_object(self, request: OAuth2Request) -> str:
+    def _get_raw_request_object(
+        self, request: OAuth2Request, client: ClientMixin
+    ) -> str:
         if "request_uri" in request.payload.data:
-            raw_request_object = self.get_request_object(
-                request.payload.data["request_uri"]
-            )
+            request_uri = request.payload.data["request_uri"]
+            metadata = self.get_server_metadata()
+            if not request_uri or (
+                metadata.get("require_request_uri_registration", False)
+                and request_uri not in self.get_client_request_uris(client)
+            ):
+                raise InvalidRequestUriError(state=request.payload.state)
+            if not self.validate_request_uri(request_uri, client):
+                raise InvalidRequestUriError(state=request.payload.state)
+            raw_request_object = self.get_request_object(request_uri)
             if not raw_request_object:
                 raise InvalidRequestUriError(state=request.payload.state)
 
@@ -173,8 +185,16 @@ class JWTAuthenticationRequest:
         jwks = self.resolve_client_public_key(client)
         key = import_any_key(jwks)
         algorithms = self.get_request_object_signing_algorithms(client)
+        metadata = self.get_server_metadata()
+        if self.get_client_require_signed_request_object(client) or metadata.get(
+            "require_signed_request_object", False
+        ):
+            # Algorithm customization must not weaken the signature requirement.
+            algorithms = [algorithm for algorithm in algorithms if algorithm != "none"]
 
         try:
+            if not algorithms:
+                raise UnsupportedAlgorithmError()
             request_object = jwt.decode(raw_request_object, key, algorithms=algorithms)
             self.claims_validator.validate(request_object.claims)
         except UnsupportedAlgorithmError as error:
@@ -210,17 +230,75 @@ class JWTAuthenticationRequest:
 
         return request_object
 
+    def get_client_request_uris(self, client: ClientMixin) -> list[str]:
+        """Return the approved ``request_uris`` registered for this client.
+
+        Validate destinations when registering URIs; client-supplied metadata
+        alone does not establish that a destination is safe to retrieve.
+        If not implemented, no URI is approved by default::
+
+            def get_client_request_uris(self, client):
+                return client.request_uris
+        """
+        return []
+
+    def validate_request_uri(self, request_uri: str, client: ClientMixin) -> bool:
+        """Return whether ``request_uri`` may be retrieved for this client.
+
+        Called before :meth:`get_request_object`. By default, only an exact
+        match with a URI returned by :meth:`get_client_request_uris` is allowed.
+        Override this method to support other trusted references, such as URNs
+        identifying request objects stored by the authorization server. Such
+        references must belong to the requesting client.
+
+        When server metadata ``require_request_uri_registration`` is true,
+        registration is also checked independently of this method.
+        Any custom policy that permits network retrieval must prevent SSRF,
+        including requests to private destinations and DNS rebinding.
+        """
+        return request_uri in self.get_client_request_uris(client)
+
     def get_request_object(self, request_uri: str):
-        """Download the request object at ``request_uri``.
+        """Retrieve the request object at an approved ``request_uri``.
 
-        This method must be implemented if the ``request_uri`` parameter is supported::
+        This method must be implemented if ``request_uri`` is supported.
+        For network retrieval, enforce HTTPS and restrict outbound connections
+        to approved public destinations, including the resolved IP addresses.
+        Do not follow redirects. Limit response size and retrieval time, and
+        check the response media type, as described in :rfc:`9101` Section 10.4.1.
 
-            class JWTAuthenticationRequest(rfc9101.JWTAuthenticationRequest):
-                def get_request_object(self, request_uri: str):
-                    try:
-                        return requests.get(request_uri).text
-                    except requests.Exception:
-                        return None
+        The following example adds HTTP response safeguards. The application's
+        HTTP transport or network policy must also block private destinations
+        and prevent DNS rebinding::
+
+            def get_request_object(self, request_uri: str):
+                try:
+                    with requests.get(
+                        request_uri,
+                        timeout=(3, 5),
+                        allow_redirects=False,
+                        stream=True,
+                        headers={"Accept": "application/oauth-authz-req+jwt"},
+                    ) as response:
+                        media_type = response.headers.get("Content-Type", "").split(
+                            ";", 1
+                        )[0]
+                        if (
+                            response.status_code != 200
+                            or media_type != "application/oauth-authz-req+jwt"
+                        ):
+                            return None
+                        content = bytearray()
+                        for chunk in response.iter_content(chunk_size=4096):
+                            content.extend(chunk)
+                            if len(content) > 262144:
+                                return None
+                        return content.decode("utf-8")
+                except (requests.RequestException, UnicodeError):
+                    return None
+
+        A timeout between reads is not an overall deadline. Also enforce an
+        overall retrieval deadline in the transport or application.
         """
         raise NotImplementedError()
 
@@ -258,6 +336,7 @@ class JWTAuthenticationRequest:
                         "authorization_endpoint": ...,
                         "require_signed_request_object": ...,
                         "request_object_signing_alg_values_supported": ["RS256", ...],
+                        "require_request_uri_registration": True,
                     }
 
         """
