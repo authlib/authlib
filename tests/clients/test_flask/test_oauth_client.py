@@ -921,6 +921,7 @@ def test_validate_logout_response_invalid_state():
     [
         "https://provider.test",
         "https://Provider.test:443/tenant/v2.0",
+        "https://provider.test:not-a-port",
     ],
 )
 def test_oauth2_metadata_issuer_same_origin(issuer):
