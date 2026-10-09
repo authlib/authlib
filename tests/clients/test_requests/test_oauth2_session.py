@@ -205,6 +205,13 @@ def test_fetch_token_json_error_response():
         sess.fetch_token("https://provider.test/token")
 
 
+def test_fetch_token_server_error_json_response():
+    sess = OAuth2Session("foo")
+    sess.send = mock_raw_response(b'{"message": "upstream timeout"}', 500)
+    with pytest.raises(requests.HTTPError):
+        sess.fetch_token("https://provider.test/token")
+
+
 def test_fetch_token_get(token):
     url = "https://provider.test/token"
 

@@ -166,6 +166,16 @@ def test_fetch_token_json_error_response():
             client.fetch_token(url)
 
 
+def test_fetch_token_server_error_json_response():
+    url = "https://provider.test/token"
+    transport = WSGITransport(
+        MockDispatch({"message": "upstream timeout"}, status_code=500)
+    )
+    with OAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(httpx2.HTTPStatusError):
+            client.fetch_token(url)
+
+
 def test_fetch_token_get():
     url = "https://provider.test/token"
 
