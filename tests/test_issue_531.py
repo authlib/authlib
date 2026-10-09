@@ -1,9 +1,8 @@
 import httpx
 import pytest
 
-from authlib.integrations.httpx_client import OAuth2Client
-
 from authlib.integrations.base_client import MissingTokenError
+from authlib.integrations.httpx_client import OAuth2Client
 
 
 def test_automatic_initial_token_fetch():
