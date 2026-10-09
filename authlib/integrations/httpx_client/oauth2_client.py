@@ -109,12 +109,36 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
             **kwargs,
         )
 
+    # async def request(
+    #     self, method, url, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs
+    # ):
+    #     if not withhold_token and auth is USE_CLIENT_DEFAULT:
+    #         if not self.token:
+    #             raise MissingTokenError()
+
+    #         await self.ensure_active_token(self.token)
+
+    #         auth = self.token_auth
+
+    #     return await super().request(method, url, auth=auth, **kwargs)
+
     async def request(
         self, method, url, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs
     ):
         if not withhold_token and auth is USE_CLIENT_DEFAULT:
             if not self.token:
-                raise MissingTokenError()
+                token_endpoint = self.metadata.get("token_endpoint")
+                grant_type = self.metadata.get("grant_type")
+
+                if grant_type == "client_credentials" and token_endpoint:
+                    async with self._token_refresh_lock:
+                        if not self.token:
+                            await self.fetch_token(
+                                token_endpoint,
+                                grant_type="client_credentials",
+                            )
+                else:
+                    raise MissingTokenError()
 
             await self.ensure_active_token(self.token)
 
@@ -128,7 +152,18 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
     ):
         if not withhold_token and auth is USE_CLIENT_DEFAULT:
             if not self.token:
-                raise MissingTokenError()
+                token_endpoint = self.metadata.get("token_endpoint")
+                grant_type = self.metadata.get("grant_type")
+
+                if grant_type == "client_credentials" and token_endpoint:
+                    async with self._token_refresh_lock:
+                        if not self.token:
+                            await self.fetch_token(
+                                token_endpoint,
+                                grant_type="client_credentials",
+                            )
+                else:
+                    raise MissingTokenError()
 
             await self.ensure_active_token(self.token)
 
