@@ -125,3 +125,51 @@ def test_missing_token_configuration():
 
     # The request should never reach the API server.
     assert requests_received == []
+
+
+def test_stream_automatically_fetches_initial_token():
+    """Streaming requests should fetch an initial token."""
+
+    requests_received = []
+
+    def mock_handler(request):
+        requests_received.append(str(request.url))
+
+        if request.url.path == "/oauth/token":
+            return httpx.Response(
+                200,
+                json={
+                    "access_token": "stream-token",
+                    "token_type": "Bearer",
+                    "expires_in": 3600,
+                },
+            )
+
+        if request.url.path == "/api/data":
+            if request.headers.get("Authorization") == "Bearer stream-token":
+                return httpx.Response(
+                    200,
+                    json={"message": "Stream success"},
+                )
+
+            return httpx.Response(401)
+
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(mock_handler)
+
+    with OAuth2Client(
+        client_id="test-client",
+        client_secret="test-secret",
+        token_endpoint="https://example.com/oauth/token",
+        grant_type="client_credentials",
+        transport=transport,
+    ) as client:
+        with client.stream("GET", "https://example.com/api/data") as response:
+            assert response.status_code == 200
+            assert response.json()["message"] == "Stream success"
+
+    assert requests_received == [
+        "https://example.com/oauth/token",
+        "https://example.com/api/data",
+    ]
