@@ -241,10 +241,9 @@ class OAuth2Base:
         raise NotImplementedError()
 
     def _validate_metadata_origin(self, metadata):
-        # OIDC Discovery 4.3 / RFC8414 3.3: issuer must match where metadata was fetched
+        # OIDC Discovery 4.3 / RFC8414 3.3: issuer is required and must match
+        # the origin the metadata was fetched from
         issuer = metadata.get("issuer")
-        if issuer is None:
-            return
         if not isinstance(issuer, str) or _url_origin(issuer) != _url_origin(
             self._server_metadata_url
         ):

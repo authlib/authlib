@@ -375,6 +375,7 @@ async def test_oauth2_fetch_metadata():
             path_maps={
                 "/.well-known/openid-configuration": {
                     "body": {
+                        "issuer": "https://provider.test",
                         "authorization_endpoint": "https://provider.test/authorize",
                         "jwks_uri": "https://provider.test/.well-known/keys",
                     }
@@ -409,7 +410,8 @@ async def test_oauth2_authorize_with_metadata():
             {
                 "/.well-known/openid-configuration": {
                     "body": {
-                        "authorization_endpoint": "https://provider.test/authorize"
+                        "issuer": "https://provider.test",
+                        "authorization_endpoint": "https://provider.test/authorize",
                     }
                 }
             }
