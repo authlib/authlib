@@ -45,6 +45,11 @@ Version 1.8.0
   ``invalid_client`` or ``invalid_grant`` error instead of raising an unhandled
   exception. ``JWTBearerGrant.resolve_issuer_client()`` may return ``None`` for
   an unknown issuer.
+- OAuth 2 and assertion clients raise the HTTP error of the token endpoint
+  response when its body is not a JSON object, such as a plain-text 429 page
+  from a gateway. They used to raise a ``JSONDecodeError`` or a ``TypeError``.
+  A success response with such a body raises a ``ValueError``.
+  :issue:`928` :pr:`929`
 
 Version 1.7.2
 -------------

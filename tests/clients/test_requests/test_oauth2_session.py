@@ -3,6 +3,7 @@ from copy import deepcopy
 from unittest import mock
 
 import pytest
+import requests
 from joserfc.jwk import OctKey
 from joserfc.jwk import RSAKey
 
@@ -23,6 +24,17 @@ def mock_json_response(payload):
         resp = mock.MagicMock()
         resp.status_code = 200
         resp.json = lambda: payload
+        return resp
+
+    return fake_send
+
+
+def mock_raw_response(body, status_code):
+    def fake_send(r, **kwargs):
+        resp = requests.Response()
+        resp.status_code = status_code
+        resp._content = body
+        resp.url = r.url
         return resp
 
     return fake_send
@@ -168,6 +180,29 @@ def test_fetch_token_post(token):
     sess.send = mock_json_response(error)
     with pytest.raises(OAuthError):
         sess.fetch_access_token(url)
+
+
+@pytest.mark.parametrize("body", [b"429 Too Many Requests", b"429", b"null"])
+def test_fetch_token_non_json_object_error_response(body):
+    sess = OAuth2Session("foo")
+    sess.send = mock_raw_response(body, 429)
+    with pytest.raises(requests.HTTPError):
+        sess.fetch_token("https://provider.test/token")
+
+
+@pytest.mark.parametrize("status_code", [200, 302])
+def test_fetch_token_non_json_object_success_response(status_code):
+    sess = OAuth2Session("foo")
+    sess.send = mock_raw_response(b"<html></html>", status_code)
+    with pytest.raises(ValueError, match="not a JSON object"):
+        sess.fetch_token("https://provider.test/token")
+
+
+def test_fetch_token_json_error_response():
+    sess = OAuth2Session("foo")
+    sess.send = mock_raw_response(b'{"error": "invalid_grant"}', 400)
+    with pytest.raises(OAuthError, match="invalid_grant"):
+        sess.fetch_token("https://provider.test/token")
 
 
 def test_fetch_token_get(token):
