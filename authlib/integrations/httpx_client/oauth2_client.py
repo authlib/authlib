@@ -255,12 +255,36 @@ class OAuth2Client(_OAuth2Client, httpx2.Client):
     def handle_error(error_type, error_description):
         raise OAuthError(error_type, error_description)
 
+    # def request(
+    #     self, method, url, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs
+    # ):
+    #     if not withhold_token and auth is USE_CLIENT_DEFAULT:
+    #         if not self.token:
+    #             raise MissingTokenError()
+
+    #         if not self.ensure_active_token(self.token):
+    #             raise InvalidTokenError()
+
+    #         auth = self.token_auth
+
+    #     return super().request(method, url, auth=auth, **kwargs)
+
+
     def request(
         self, method, url, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs
     ):
         if not withhold_token and auth is USE_CLIENT_DEFAULT:
             if not self.token:
-                raise MissingTokenError()
+                token_endpoint = self.metadata.get("token_endpoint")
+                grant_type = self.metadata.get("grant_type")
+
+                if grant_type == "client_credentials" and token_endpoint:
+                    self.fetch_token(
+                        token_endpoint,
+                        grant_type="client_credentials",
+                    )
+                else:
+                    raise MissingTokenError()
 
             if not self.ensure_active_token(self.token):
                 raise InvalidTokenError()
@@ -268,6 +292,7 @@ class OAuth2Client(_OAuth2Client, httpx2.Client):
             auth = self.token_auth
 
         return super().request(method, url, auth=auth, **kwargs)
+
 
     def stream(
         self, method, url, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs
