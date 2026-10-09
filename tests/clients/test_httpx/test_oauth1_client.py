@@ -1,3 +1,5 @@
+from unittest import mock
+
 import pytest
 from httpx2 import WSGITransport
 
@@ -5,10 +7,24 @@ from authlib.integrations.httpx_client import SIGNATURE_TYPE_BODY
 from authlib.integrations.httpx_client import SIGNATURE_TYPE_QUERY
 from authlib.integrations.httpx_client import OAuth1Client
 from authlib.integrations.httpx_client import OAuthError
+from authlib.oauth1.rfc5849.signature import verify_hmac_sha1
+from authlib.oauth1.rfc5849.wrapper import OAuth1Request
 
 from ..wsgi_helper import MockDispatch
 
 oauth_url = "https://provider.test/oauth"
+
+
+def assert_valid_signature(request, client_secret="secret", token_secret=None):
+    oauth_request = OAuth1Request(
+        request.method,
+        request.url,
+        body=request.get_data(as_text=True),
+        headers=request.headers,
+    )
+    oauth_request.client = mock.Mock(get_client_secret=lambda: client_secret)
+    oauth_request.credential = mock.Mock(get_oauth_token_secret=lambda: token_secret)
+    assert verify_hmac_sha1(oauth_request)
 
 
 def test_fetch_request_token_via_header():
@@ -18,6 +34,11 @@ def test_fetch_request_token_via_header():
         auth_header = request.headers.get("authorization")
         assert 'oauth_consumer_key="id"' in auth_header
         assert "oauth_signature=" in auth_header
+
+        params = auth_header[len("OAuth ") :].split(", ")
+        keys = [param.split("=")[0] for param in params]
+        assert len(keys) == len(set(keys))
+        assert_valid_signature(request)
 
     transport = WSGITransport(MockDispatch(request_token, assert_func=assert_func))
     with OAuth1Client("id", "secret", transport=transport) as client:
@@ -33,9 +54,16 @@ def test_fetch_request_token_via_body():
         auth_header = request.headers.get("authorization")
         assert auth_header is None
 
+        assert_valid_signature(request)
+
         content = request.form
         assert content.get("oauth_consumer_key") == "id"
         assert "oauth_signature" in content
+        assert all(
+            len(values) == 1
+            for key, values in content.lists()
+            if key.startswith("oauth_")
+        )
 
     transport = WSGITransport(MockDispatch(request_token, assert_func=assert_func))
 
@@ -60,6 +88,12 @@ def test_fetch_request_token_via_query():
         url = str(request.url)
         assert "oauth_consumer_key=id" in url
         assert "&oauth_signature=" in url
+        assert all(
+            len(values) == 1
+            for key, values in request.args.lists()
+            if key.startswith("oauth_")
+        )
+        assert_valid_signature(request)
 
     transport = WSGITransport(MockDispatch(request_token, assert_func=assert_func))
 

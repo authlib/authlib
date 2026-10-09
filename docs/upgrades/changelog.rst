@@ -6,15 +6,27 @@ Changelog
 
 Here you can see the full list of changes between each Authlib release.
 
-Version 1.8.0
+Version 1.x.x
 -------------
 
 **Unreleased**
 
+- Add support for the Identity Assertion JWT Authorization Grant (ID-JAG),
+  a draft extension to :rfc:`7523` for cross-application access using identity
+  assertions issued by an external enterprise IdP.
+  See :ref:`specs/rfc7523-id-jag` for details. :pr:`898`
+
+Version 1.8.0
+-------------
+
+**Released on Aug 30, 2026**
+
 - **Breaking change**: ``authlib.integrations.httpx_client`` is now powered by
-  ``httpx2`` instead of ``httpx``. Install ``httpx2`` instead of ``httpx`` to
-  keep using this integration; the public import path and class names are
-  unchanged. :issue:`904`
+  ``httpx2`` instead of ``httpx``. Install ``httpx2`` to keep using this
+  integration; the public import path and class names are unchanged. When
+  ``httpx2`` is not installed, the integration falls back to ``httpx`` and emits
+  an ``AuthlibDeprecationWarning``. This fallback will be removed in a future
+  release. :issue:`904`
 - **Breaking change**: the client metadata ``id_token_signed_response_alg``
   now takes precedence over ``get_jwt_config()["alg"]`` when signing OIDC
   ``id_token``, in line with `OpenID Connect Registration 1.0 Section 2
@@ -45,6 +57,29 @@ Version 1.8.0
   ``invalid_client`` or ``invalid_grant`` error instead of raising an unhandled
   exception. ``JWTBearerGrant.resolve_issuer_client()`` may return ``None`` for
   an unknown issuer.
+- The RFC 9068 ``JWTBearerTokenValidator`` answers with an ``invalid_token``
+  error for any ``JoseError`` raised while decoding an access token, instead of
+  only ``DecodeError``. An unknown ``kid`` used to raise an unhandled
+  ``InvalidKeyIdError``. :pr:`891`
+- Add a ``leeway`` parameter to the RFC 7523 ``JWTBearerTokenValidator``, which
+  used to be hardcoded to 60 seconds. :pr:`903`
+- ``sign_jwt_bearer_assertion()`` generates a default ``jti`` claim when the
+  caller did not provide one, as :rfc:`7523` §3 recommends against replay
+  attacks. This matches what ``OAuth2Session`` already did for client
+  assertions. :pr:`897`
+- Add optional ``client_id`` parameter to ``AssertionClient`` (and its
+  ``AssertionSession`` / httpx wrappers) so it can be sent in the token
+  endpoint request body per :rfc:`7521` §4.1 and :rfc:`6749` §3.2.1. :pr:`476`
+- The OpenID Connect client no longer rejects an ``id_token`` whose JWS header
+  carries unregistered parameters. :issue:`902`
+- Omit the ``nonce`` and ``auth_time`` claims from the ``id_token`` instead of
+  emitting them with a ``null`` value. :issue:`921`
+- ``DeviceAuthorizationEndpoint`` saves the device credential with the
+  authenticated client id. It used to read ``request.payload.client_id``, which
+  is ``None`` when the client authenticates with ``client_secret_basic``.
+  :issue:`798` :pr:`908`
+- Fix the OAuth 1.0a ``InsecureTransportError`` description telling users that
+  OAuth 2 must use HTTPS. :pr:`919`
 - OAuth 2 and assertion clients raise the HTTP error of the token endpoint
   response when its body is not a JSON object, such as a plain-text 429 page
   from a gateway. They used to raise a ``JSONDecodeError`` or a ``TypeError``.
@@ -95,9 +130,6 @@ Version 1.7.0
 - RFC7523 accepts the issuer URL as a valid audience. :issue:`730`
 - Fix ``InvalidTokenError`` extra attributes being wrapped instead of passed as
   individual key=value pairs in the ``WWW-Authenticate`` header. :pr:`872`
-- Add optional ``client_id`` parameter to ``AssertionClient`` (and its
-  ``AssertionSession`` / httpx wrappers) so it can be sent in the token
-  endpoint request body per :rfc:`7521` §4.1 and :rfc:`6749` §3.2.1. :pr:`476`
 
 Upgrade Guide: :ref:`joserfc_upgrade`.
 

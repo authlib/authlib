@@ -314,3 +314,14 @@ def test_deserialize_exceeds_length():
     # signature exceeds length
     with pytest.raises(ValueError):
         jws.deserialize("eyJhbGciOiJIUzI1NiJ9.YQ." + value, "")
+
+def test_deserialize_json_empty_signatures():
+    jws = JsonWebSignature()
+
+    data = {
+        "payload": "YQ",
+        "signatures": [],
+    }
+
+    with pytest.raises(errors.BadSignatureError):
+        jws.deserialize_json(data, "secret")

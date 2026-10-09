@@ -1,3 +1,6 @@
+from unittest import mock
+from urllib.parse import parse_qsl
+
 import pytest
 from httpx2 import ASGITransport
 
@@ -5,10 +8,25 @@ from authlib.integrations.httpx_client import SIGNATURE_TYPE_BODY
 from authlib.integrations.httpx_client import SIGNATURE_TYPE_QUERY
 from authlib.integrations.httpx_client import AsyncOAuth1Client
 from authlib.integrations.httpx_client import OAuthError
+from authlib.oauth1.rfc5849.signature import verify_hmac_sha1
+from authlib.oauth1.rfc5849.wrapper import OAuth1Request
 
 from ..asgi_helper import AsyncMockDispatch
 
 oauth_url = "https://provider.test/oauth"
+
+
+async def assert_valid_signature(request, client_secret="secret", token_secret=None):
+    body = await request.body()
+    oauth_request = OAuth1Request(
+        request.method,
+        str(request.url),
+        body=body.decode() or None,
+        headers=request.headers,
+    )
+    oauth_request.client = mock.Mock(get_client_secret=lambda: client_secret)
+    oauth_request.credential = mock.Mock(get_oauth_token_secret=lambda: token_secret)
+    assert verify_hmac_sha1(oauth_request)
 
 
 @pytest.mark.asyncio
@@ -19,6 +37,11 @@ async def test_fetch_request_token_via_header():
         auth_header = request.headers.get("authorization")
         assert 'oauth_consumer_key="id"' in auth_header
         assert "oauth_signature=" in auth_header
+
+        params = auth_header[len("OAuth ") :].split(", ")
+        keys = [param.split("=")[0] for param in params]
+        assert len(keys) == len(set(keys))
+        await assert_valid_signature(request)
 
     transport = ASGITransport(AsyncMockDispatch(request_token, assert_func=assert_func))
     async with AsyncOAuth1Client("id", "secret", transport=transport) as client:
@@ -38,6 +61,11 @@ async def test_fetch_request_token_via_body():
         content = await request.body()
         assert b"oauth_consumer_key=id" in content
         assert b"&oauth_signature=" in content
+        oauth_keys = [
+            key for key, _ in parse_qsl(content.decode()) if key.startswith("oauth_")
+        ]
+        assert len(oauth_keys) == len(set(oauth_keys))
+        await assert_valid_signature(request)
 
     transport = ASGITransport(AsyncMockDispatch(request_token, assert_func=assert_func))
 
@@ -63,6 +91,13 @@ async def test_fetch_request_token_via_query():
         url = str(request.url)
         assert "oauth_consumer_key=id" in url
         assert "&oauth_signature=" in url
+        oauth_keys = [
+            key
+            for key, _ in request.query_params.multi_items()
+            if key.startswith("oauth_")
+        ]
+        assert len(oauth_keys) == len(set(oauth_keys))
+        await assert_valid_signature(request)
 
     transport = ASGITransport(AsyncMockDispatch(request_token, assert_func=assert_func))
 

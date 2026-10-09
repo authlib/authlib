@@ -178,6 +178,15 @@ def test_validate_iat():
         claims.validate()
 
 
+def test_validate_numeric_date_rejects_bool():
+    for name in ("exp", "nbf", "iat"):
+        for value in (True, False):
+            id_token = jwt.encode({"alg": "HS256"}, {name: value}, "k")
+            claims = jwt.decode(id_token, "k")
+            with pytest.raises(errors.InvalidClaimError):
+                claims.validate()
+
+
 def test_validate_jti():
     id_token = jwt.encode({"alg": "HS256"}, {"jti": "bar"}, "k")
     claims_options = {"jti": {"validate": lambda c, o: o == "foo"}}
