@@ -1,4 +1,4 @@
-import httpx
+import httpx2 as httpx
 import pytest
 
 from authlib.integrations.base_client import MissingTokenError
