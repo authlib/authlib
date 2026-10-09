@@ -11,6 +11,18 @@ from .errors import MissingTokenError
 
 log = logging.getLogger(__name__)
 
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def _url_origin(url):
+    parsed = urlparse.urlparse(url)
+    scheme = parsed.scheme.lower()
+    try:
+        port = parsed.port
+    except ValueError:
+        port = None
+    return scheme, (parsed.hostname or "").lower(), port or _DEFAULT_PORTS.get(scheme)
+
 
 class BaseApp:
     client_cls = None
@@ -228,6 +240,19 @@ class OAuth2Base:
     def _on_update_token(self, token, refresh_token=None, access_token=None):
         raise NotImplementedError()
 
+    def _validate_metadata_origin(self, metadata):
+        # OIDC Discovery 4.3 / RFC8414 3.3: issuer must match where metadata was fetched
+        issuer = metadata.get("issuer")
+        if issuer is None:
+            return
+        if not isinstance(issuer, str) or _url_origin(issuer) != _url_origin(
+            self._server_metadata_url
+        ):
+            raise ValueError(
+                f'"issuer" {issuer!r} does not match the origin of '
+                f"server_metadata_url {self._server_metadata_url!r}"
+            )
+
     def _get_session(self):
         session = self.client_cls(**self.client_kwargs)
         session.headers["User-Agent"] = self._user_agent
@@ -332,6 +357,7 @@ class OAuth2Mixin(_RequestMixin, OAuth2Base):
                 resp.raise_for_status()
                 metadata = resp.json()
 
+            self._validate_metadata_origin(metadata)
             metadata["_loaded_at"] = time.time()
             self.server_metadata.update(metadata)
         return self.server_metadata
