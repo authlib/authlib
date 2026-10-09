@@ -848,3 +848,25 @@ async def test_logout_redirect_with_extra_params():
     assert "client_id=dev" in url
     assert "logout_hint=user%40example.com" in url
     assert "ui_locales=fr" in url
+
+
+@pytest.mark.asyncio
+async def test_oauth2_metadata_issuer_origin_mismatch():
+    transport = ASGITransport(
+        AsyncPathMapDispatch(
+            {
+                "/.well-known/openid-configuration": {
+                    "body": {"issuer": "https://attacker.test"}
+                }
+            }
+        )
+    )
+    client = OAuth().register(
+        "dev",
+        client_id="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+        client_kwargs={"transport": transport},
+    )
+    with pytest.raises(ValueError, match="issuer"):
+        await client.load_server_metadata()
+    assert "_loaded_at" not in client.server_metadata
