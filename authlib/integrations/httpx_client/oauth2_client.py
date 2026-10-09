@@ -5,7 +5,7 @@ import typing
 from contextlib import asynccontextmanager
 
 from ._compat import httpx2
-from anyio import Lock # Import after httpx so import errors refer to httpx
+from anyio import Lock  # Import after httpx so import errors refer to httpx
 
 from authlib.common.urls import url_decode
 from authlib.oauth2.auth import ClientAuth
@@ -269,7 +269,6 @@ class OAuth2Client(_OAuth2Client, httpx2.Client):
 
     #     return super().request(method, url, auth=auth, **kwargs)
 
-
     def request(
         self, method, url, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs
     ):
@@ -292,7 +291,6 @@ class OAuth2Client(_OAuth2Client, httpx2.Client):
             auth = self.token_auth
 
         return super().request(method, url, auth=auth, **kwargs)
-
 
     def stream(
         self, method, url, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs

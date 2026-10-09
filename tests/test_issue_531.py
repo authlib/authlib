@@ -1,7 +1,9 @@
-
 import httpx
+import pytest
 
 from authlib.integrations.httpx_client import OAuth2Client
+
+from authlib.integrations.base_client import MissingTokenError
 
 
 def test_automatic_initial_token_fetch():
@@ -25,9 +27,7 @@ def test_automatic_initial_token_fetch():
 
         # Simulate a protected API endpoint
         if request.url.path == "/api/data":
-            authorization = request.headers.get(
-                "Authorization"
-            )
+            authorization = request.headers.get("Authorization")
 
             if authorization == "Bearer test-access-token":
                 return httpx.Response(
@@ -52,10 +52,7 @@ def test_automatic_initial_token_fetch():
         grant_type="client_credentials",
         transport=transport,
     ) as client:
-
-        response = client.get(
-            "https://example.com/api/data"
-        )
+        response = client.get("https://example.com/api/data")
 
         assert response.status_code == 200
         assert response.json()["message"] == "Success"
@@ -65,3 +62,67 @@ def test_automatic_initial_token_fetch():
             "https://example.com/oauth/token",
             "https://example.com/api/data",
         ]
+
+
+def test_existing_valid_token_is_reused():
+    """An existing valid token should not be fetched again."""
+
+    requests_received = []
+
+    def mock_handler(request):
+        requests_received.append(str(request.url))
+
+        if request.url.path == "/api/data":
+            auth_header = request.headers.get("Authorization")
+
+            if auth_header == "Bearer existing-token":
+                return httpx.Response(
+                    200,
+                    json={"message": "Success"},
+                )
+
+            return httpx.Response(401)
+
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(mock_handler)
+
+    with OAuth2Client(
+        client_id="test-client",
+        client_secret="test-secret",
+        token_endpoint="https://example.com/oauth/token",
+        grant_type="client_credentials",
+        token={
+            "access_token": "existing-token",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+        },
+        transport=transport,
+    ) as client:
+        response = client.get("https://example.com/api/data")
+
+        assert response.status_code == 200
+        assert requests_received == ["https://example.com/api/data"]
+
+
+def test_missing_token_configuration():
+    """A client without token configuration should raise MissingTokenError."""
+
+    requests_received = []
+
+    def mock_handler(request):
+        requests_received.append(str(request.url))
+        return httpx.Response(200)
+
+    transport = httpx.MockTransport(mock_handler)
+
+    with OAuth2Client(
+        client_id="test-client",
+        client_secret="test-secret",
+        transport=transport,
+    ) as client:
+        with pytest.raises(MissingTokenError):
+            client.get("https://example.com/api/data")
+
+    # The request should never reach the API server.
+    assert requests_received == []
