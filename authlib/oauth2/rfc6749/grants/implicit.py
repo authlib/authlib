@@ -1,12 +1,11 @@
 import logging
 
-from authlib.common.urls import add_params_to_uri
-
 from ..errors import AccessDeniedError
 from ..errors import InvalidScopeError
 from ..errors import OAuth2Error
 from ..errors import UnauthorizedClientError
 from ..hooks import hooked
+from ..parameters import create_response_mode_response
 from .base import AuthorizationEndpointMixin
 from .base import BaseGrant
 
@@ -78,6 +77,9 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
     RESPONSE_TYPES = {"token"}
     GRANT_TYPE = "implicit"
     ERROR_RESPONSE_FRAGMENT = True
+
+    #: Default "response_mode" when the client does not request one
+    DEFAULT_RESPONSE_MODE = "fragment"
 
     @hooked
     def validate_authorization_request(self):
@@ -223,8 +225,14 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
             if state:
                 params.append(("state", state))
 
-            uri = add_params_to_uri(redirect_uri, params, fragment=True)
-            headers = [("Location", uri)]
-            return 302, "", headers
+            # https://openid.net/specs/oauth-v2-multiple-response-types-1_0.html#ResponseModes
+            response_mode = self.request.payload.data.get(
+                "response_mode", self.DEFAULT_RESPONSE_MODE
+            )
+            return create_response_mode_response(
+                redirect_uri=redirect_uri,
+                params=params,
+                response_mode=response_mode,
+            )
         else:
             raise AccessDeniedError(redirect_uri=redirect_uri, redirect_fragment=True)

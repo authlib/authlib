@@ -1,8 +1,10 @@
 from authlib.common.encoding import to_unicode
 from authlib.common.urls import add_params_to_qs
 from authlib.common.urls import add_params_to_uri
+from authlib.common.urls import quote_url
 from authlib.common.urls import urlparse
 
+from .errors import InvalidRequestError
 from .errors import MismatchingStateException
 from .errors import MissingCodeException
 from .errors import MissingTokenException
@@ -212,3 +214,46 @@ def parse_implicit_response(uri, state=None):
         raise MismatchingStateException()
 
     return params
+
+
+def create_response_mode_response(redirect_uri, params, response_mode):
+    """Encode the authorization response parameters using the requested
+    ``response_mode``, per the `OAuth 2.0 Multiple Response Type Encoding
+    Practices`_ and the `OAuth 2.0 Form Post Response Mode`_.
+
+    The ``query`` and ``fragment`` modes redirect the user-agent to the
+    client with the parameters attached to the query or fragment component.
+    The ``form_post`` mode returns an HTML document with an auto-submitting
+    form that POSTs the parameters to the redirect URI, which keeps them out
+    of the URL and referrer.
+
+    .. _`OAuth 2.0 Multiple Response Type Encoding Practices`:
+        https://openid.net/specs/oauth-v2-multiple-response-types-1_0.html
+    .. _`OAuth 2.0 Form Post Response Mode`:
+        https://openid.net/specs/oauth-v2-form-post-response-mode-1_0.html
+
+    :returns: (status_code, body, headers)
+    """
+    if response_mode == "form_post":
+        tpl = (
+            "<html><head><title>Redirecting</title></head>"
+            '<body onload="javascript:document.forms[0].submit()">'
+            '<form method="post" action="{}">{}</form></body></html>'
+        )
+        inputs = "".join(
+            [
+                f'<input type="hidden" name="{quote_url(k)}" value="{quote_url(v)}"/>'
+                for k, v in params
+            ]
+        )
+        body = tpl.format(quote_url(redirect_uri), inputs)
+        return 200, body, [("Content-Type", "text/html; charset=utf-8")]
+
+    if response_mode == "query":
+        uri = add_params_to_uri(redirect_uri, params, fragment=False)
+    elif response_mode == "fragment":
+        uri = add_params_to_uri(redirect_uri, params, fragment=True)
+    else:
+        raise InvalidRequestError("Invalid 'response_mode' value")
+
+    return 302, "", [("Location", uri)]
