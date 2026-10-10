@@ -232,3 +232,18 @@ def test_sign_with_additional_claims():
         "role": "bar",
     }
     assert {"alg": "HS256", "typ": "JWT"} == decoded.header
+
+
+def test_sign_with_custom_issued_at_and_expires_in():
+    fixed_iat = 123456789
+    jwt_signer = ClientSecretJWT(issued_at=fixed_iat, expires_in=123)
+
+    decoded, pre_sign_time, iat, exp, jti = sign_and_decode(
+        jwt_signer,
+        "client_id_1",
+        "client_secret_1",
+        "https://provider.test/oauth/access_token",
+    )
+
+    assert iat == fixed_iat
+    assert exp == fixed_iat + 123
