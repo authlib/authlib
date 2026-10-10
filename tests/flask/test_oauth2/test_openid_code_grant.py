@@ -226,6 +226,10 @@ def test_prompt(test_client, server):
     rv = test_client.get("/oauth/authorize?" + query)
     assert rv.data == b"login"
 
+    query = url_encode(params + [("user_id", "1"), ("prompt", "create")])
+    rv = test_client.get("/oauth/authorize?" + query)
+    assert rv.data == b"create"
+
 
 def test_prompt_none_not_logged(test_client, server):
     register_oidc_code_grant(
@@ -246,6 +250,39 @@ def test_prompt_none_not_logged(test_client, server):
     params = dict(url_decode(urlparse.urlparse(rv.location).query))
     assert params["error"] == "login_required"
     assert params["state"] == "bar"
+
+
+def test_prompt_create_is_retained(test_client, server):
+    register_oidc_code_grant(server)
+    params = [
+        ("response_type", "code"),
+        ("client_id", "client-id"),
+        ("state", "bar"),
+        ("nonce", "abc"),
+        ("scope", "openid profile"),
+        ("redirect_uri", "https://client.test"),
+        ("user_id", "1"),
+        ("prompt", "create"),
+    ]
+    query = url_encode(params)
+    rv = test_client.get("/oauth/authorize?" + query)
+    assert rv.data == b"create"
+
+
+def test_prompt_multiple_values_prefers_login_without_user(test_client, server):
+    register_oidc_code_grant(server)
+    params = [
+        ("response_type", "code"),
+        ("client_id", "client-id"),
+        ("state", "bar"),
+        ("nonce", "abc"),
+        ("scope", "openid profile"),
+        ("redirect_uri", "https://client.test"),
+        ("prompt", "login consent"),
+    ]
+    query = url_encode(params)
+    rv = test_client.get("/oauth/authorize?" + query)
+    assert rv.data == b"login"
 
 
 def test_client_metadata_custom_alg(test_client, server, client, db, app):
