@@ -13,7 +13,17 @@ class OAuth2Token(dict):
                     params["expires_at"] = int(time.time()) + int(params["expires_in"])
 
         elif params.get("expires_in"):
-            params["expires_at"] = int(time.time()) + int(params["expires_in"])
+            # Prefer server-provided issued_at over client clock to avoid clock skew.
+            base_time = None
+            try:
+                issued_at = params.get("issued_at")
+                if issued_at is not None and int(issued_at) >= 0:
+                    base_time = int(issued_at)
+            except (ValueError, TypeError):
+                pass
+            if base_time is None:
+                base_time = int(time.time())
+            params["expires_at"] = base_time + int(params["expires_in"])
 
         super().__init__(params)
 

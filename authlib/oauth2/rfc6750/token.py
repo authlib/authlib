@@ -1,3 +1,5 @@
+import time
+
 from ..rfc6749.errors import InvalidScopeError
 
 
@@ -39,6 +41,9 @@ class BearerTokenGenerator:
         self.access_token_generator = access_token_generator
         self.refresh_token_generator = refresh_token_generator
         self.expires_generator = expires_generator
+        self._issued_at = 0
+        self._expires_in = 0
+        self._expires_at = 0
 
     def _get_expires_in(self, client, grant_type):
         if self.expires_generator is None:
@@ -91,11 +96,19 @@ class BearerTokenGenerator:
         :return: Token dict
         """
         scope = self.get_allowed_scope(client, scope)
+
+        # Capture the issuance timestamp and resolve expires_in before calling
+        # access_token_generator so that subclasses (e.g. JWTBearerTokenGenerator)
+        # can reuse the exact same values for the JWT iat/exp claims.
+        self._issued_at = int(time.time())
+        if expires_in is None:
+            expires_in = self._get_expires_in(client, grant_type)
+        self._expires_in = expires_in
+        self._expires_at = self._issued_at + expires_in if expires_in else 0
+
         access_token = self.access_token_generator(
             client=client, grant_type=grant_type, user=user, scope=scope
         )
-        if expires_in is None:
-            expires_in = self._get_expires_in(client, grant_type)
 
         token = {
             "token_type": "Bearer",
@@ -103,6 +116,8 @@ class BearerTokenGenerator:
         }
         if expires_in:
             token["expires_in"] = expires_in
+            token["issued_at"] = self._issued_at
+            token["expires_at"] = self._expires_at
         if include_refresh_token and self.refresh_token_generator:
             token["refresh_token"] = self.refresh_token_generator(
                 client=client, grant_type=grant_type, user=user, scope=scope
