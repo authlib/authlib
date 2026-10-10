@@ -350,6 +350,7 @@ def test_oauth2_fetch_metadata():
             if req.url == "https://provider.test/.well-known/openid-configuration":
                 return mock_send_value(
                     {
+                        "issuer": "https://provider.test",
                         "authorization_endpoint": "https://provider.test/authorize",
                         "jwks_uri": "https://provider.test/.well-known/keys",
                     }
@@ -390,7 +391,10 @@ def test_oauth2_authorize_with_metadata():
     )
     with mock.patch("requests.sessions.Session.send") as send:
         send.return_value = mock_send_value(
-            {"authorization_endpoint": "https://provider.test/authorize"}
+            {
+                "issuer": "https://provider.test",
+                "authorization_endpoint": "https://provider.test/authorize",
+            }
         )
 
         with app.test_request_context():
@@ -914,3 +918,69 @@ def test_validate_logout_response_invalid_state():
     with app.test_request_context(path="/?state=invalid-state"):
         with pytest.raises(OAuthError, match='Invalid "state" parameter'):
             client.validate_logout_response()
+
+
+@pytest.mark.parametrize(
+    "issuer",
+    [
+        "https://provider.test",
+        "https://Provider.test:443/tenant/v2.0",
+        "https://provider.test:not-a-port",
+    ],
+)
+def test_oauth2_metadata_issuer_same_origin(issuer):
+    app = Flask(__name__)
+    client = OAuth(app).register(
+        "dev",
+        client_id="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+    with mock.patch("requests.sessions.Session.send") as send:
+        send.return_value = mock_send_value(
+            {
+                "issuer": issuer,
+                "token_endpoint": "https://other-host.test/token",
+            }
+        )
+        metadata = client.load_server_metadata()
+    assert metadata["issuer"] == issuer
+
+
+@pytest.mark.parametrize(
+    "issuer",
+    [
+        "https://attacker.test",
+        "http://provider.test",
+        "https://provider.test:8443",
+        "https://provider.test.attacker.test",
+        ["https://provider.test"],
+    ],
+)
+def test_oauth2_metadata_issuer_origin_mismatch(issuer):
+    app = Flask(__name__)
+    client = OAuth(app).register(
+        "dev",
+        client_id="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+    with mock.patch("requests.sessions.Session.send") as send:
+        send.return_value = mock_send_value({"issuer": issuer})
+        with pytest.raises(ValueError, match="issuer"):
+            client.load_server_metadata()
+    assert "_loaded_at" not in client.server_metadata
+
+
+def test_oauth2_metadata_missing_issuer():
+    app = Flask(__name__)
+    client = OAuth(app).register(
+        "dev",
+        client_id="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+    with mock.patch("requests.sessions.Session.send") as send:
+        send.return_value = mock_send_value(
+            {"authorization_endpoint": "https://provider.test/authorize"}
+        )
+        with pytest.raises(ValueError, match="issuer"):
+            client.load_server_metadata()
+    assert "_loaded_at" not in client.server_metadata
