@@ -1,4 +1,5 @@
 import json
+from unittest.mock import Mock
 
 import pytest
 from joserfc import jwk
@@ -88,6 +89,7 @@ def client(client, db):
             "grant_types": ["authorization_code"],
             "jwks": read_file_path("jwks_public.json"),
             "require_signed_request_object": False,
+            "request_uris": ["https://client.test/request_object"],
         }
     )
     db.session.add(client)
@@ -115,11 +117,14 @@ def register_request_object_extension(
         def get_client_require_signed_request_object(self, client):
             return client.client_metadata.get("require_signed_request_object", False)
 
-    server.register_extension(
-        JWTAuthenticationRequest(
-            support_request=support_request, support_request_uri=support_request_uri
-        )
+        def get_client_request_uris(self, client):
+            return client.client_metadata.get("request_uris", [])
+
+    extension = JWTAuthenticationRequest(
+        support_request=support_request, support_request_uri=support_request_uri
     )
+    server.register_extension(extension)
+    return extension
 
 
 def test_request_parameter_get(test_client, server):
@@ -493,3 +498,189 @@ def test_registration(test_client, server):
     rv = test_client.post("/create_client", json=body, headers=headers)
     resp = json.loads(rv.data)
     assert resp["error"] == "invalid_client_metadata"
+
+
+@pytest.mark.parametrize("require_signed", ["server", "client", None])
+@pytest.mark.parametrize("algorithm_source", ["metadata", "override", "only_none"])
+@pytest.mark.parametrize("parameter", ["request", "request_uri"])
+@pytest.mark.parametrize("algorithm", ["none", "RS256"])
+def test_signature_requirement_with_explicit_algorithms(
+    test_client,
+    server,
+    client,
+    db,
+    require_signed,
+    algorithm_source,
+    parameter,
+    algorithm,
+):
+    metadata = {"require_signed_request_object": require_signed == "server"}
+    if require_signed == "client":
+        client.set_client_metadata(
+            {**client.client_metadata, "require_signed_request_object": True}
+        )
+        db.session.commit()
+    request_object = jwt.encode(
+        {"alg": algorithm},
+        {"client_id": "client-id", "response_type": "code"},
+        jwk.import_key(read_file_path("jwk_private.json")),
+        algorithms=[algorithm],
+    )
+    if algorithm_source == "metadata":
+        metadata["request_object_signing_alg_values_supported"] = ["RS256", "none"]
+    elif algorithm_source == "only_none":
+        metadata["request_object_signing_alg_values_supported"] = ["none"]
+    extension = register_request_object_extension(
+        server, metadata=metadata, request_object=request_object
+    )
+    if algorithm_source == "override":
+        extension.get_request_object_signing_algorithms = lambda client: [
+            "RS256",
+            "none",
+        ]
+    value = (
+        request_object
+        if parameter == "request"
+        else "https://client.test/request_object"
+    )
+    response = test_client.get(
+        add_params_to_uri(authorize_url, {"client_id": "client-id", parameter: value})
+    )
+    if (require_signed and algorithm == "none") or (
+        algorithm_source == "only_none" and algorithm == "RS256"
+    ):
+        assert response.status_code == 400
+        assert response.json["error"] == "invalid_request"
+        assert response.json["error_description"] == (
+            "Authorization requests must be signed with supported algorithms."
+        )
+    else:
+        assert response.data == b"ok"
+
+
+@pytest.mark.parametrize("require_registration", [False, True])
+@pytest.mark.parametrize(
+    "request_uri",
+    [
+        "http://169.254.169.254/latest/meta-data/",
+        "https://127.0.0.1/admin",
+        "file:///etc/passwd",
+        "https://other.test/request_object",
+        "https://client.test/request_object/extra",
+        "https://client.test/request_object?target=internal",
+        "https://client.test@other.test/request_object",
+        "",
+    ],
+)
+def test_unregistered_request_uri_rejected_before_fetch(
+    test_client, server, require_registration, request_uri
+):
+    extension = register_request_object_extension(
+        server, metadata={"require_request_uri_registration": require_registration}
+    )
+    extension.get_request_object = Mock(return_value="unexpected fetch")
+    response = test_client.get(
+        add_params_to_uri(
+            authorize_url,
+            {"client_id": "client-id", "request_uri": request_uri, "state": "s"},
+        )
+    )
+    assert response.status_code == 400
+    assert response.json["error"] == "invalid_request_uri"
+    assert response.json["state"] == "s"
+    extension.get_request_object.assert_not_called()
+
+
+@pytest.mark.parametrize("require_registration", [False, True])
+@pytest.mark.parametrize("registered", [False, True])
+def test_custom_request_uri_validator_and_registration(
+    test_client, server, client, db, require_registration, registered
+):
+    request_uri = "urn:example:stored-request"
+    if registered:
+        client.set_client_metadata(
+            {**client.client_metadata, "request_uris": [request_uri]}
+        )
+        db.session.commit()
+    request_object = jwt.encode(
+        {"alg": "RS256"},
+        {"client_id": "client-id", "response_type": "code"},
+        jwk.import_key(read_file_path("jwk_private.json")),
+    )
+    extension = register_request_object_extension(
+        server, metadata={"require_request_uri_registration": require_registration}
+    )
+    extension.validate_request_uri = lambda uri, client: uri == request_uri
+    extension.get_request_object = Mock(return_value=request_object)
+    response = test_client.get(
+        add_params_to_uri(
+            authorize_url, {"client_id": "client-id", "request_uri": request_uri}
+        )
+    )
+    if require_registration and not registered:
+        assert response.status_code == 400
+        assert response.json["error"] == "invalid_request_uri"
+        extension.get_request_object.assert_not_called()
+    else:
+        assert response.data == b"ok"
+        extension.get_request_object.assert_called_once_with(request_uri)
+
+
+def test_request_uri_without_registered_uris(test_client, server):
+    extension = register_request_object_extension(server)
+    extension.get_client_request_uris = lambda client: []
+    extension.get_request_object = Mock(return_value="unexpected fetch")
+    response = test_client.get(
+        add_params_to_uri(
+            authorize_url,
+            {
+                "client_id": "client-id",
+                "request_uri": "https://client.test/request_object",
+            },
+        )
+    )
+    assert response.status_code == 400
+    assert response.json["error"] == "invalid_request_uri"
+    extension.get_request_object.assert_not_called()
+
+
+@pytest.mark.parametrize("parameter", ["request", "request_uri"])
+def test_invalid_request_object_signature(test_client, server, parameter):
+    request_object = jwt.encode(
+        {"alg": "RS256"},
+        {"client_id": "client-id", "response_type": "code"},
+        jwk.generate_key("RSA", 2048),
+    )
+    register_request_object_extension(
+        server,
+        metadata={"require_signed_request_object": True},
+        request_object=request_object,
+    )
+    value = (
+        request_object
+        if parameter == "request"
+        else "https://client.test/request_object"
+    )
+    response = test_client.get(
+        add_params_to_uri(authorize_url, {"client_id": "client-id", parameter: value})
+    )
+    assert response.status_code == 400
+    assert response.json["error"] == "invalid_request_object"
+
+
+def test_custom_request_uri_validator_rejects_registered_uri(test_client, server):
+    extension = register_request_object_extension(server)
+    extension.validate_request_uri = lambda uri, client: False
+    extension.get_request_object = Mock(return_value="unexpected fetch")
+    response = test_client.get(
+        add_params_to_uri(
+            authorize_url,
+            {
+                "client_id": "client-id",
+                "request_uri": "https://client.test/request_object",
+            },
+        )
+    )
+    assert response.status_code == 400
+    assert response.json["error"] == "invalid_request_uri"
+    extension.get_request_object.assert_not_called()

@@ -5,6 +5,7 @@ from httpx2 import ASGITransport
 from joserfc import jwk
 from joserfc import jwt
 from joserfc.errors import InvalidClaimError
+from joserfc.errors import MissingClaimError
 from joserfc.jwk import KeySet
 from starlette.requests import Request
 
@@ -87,6 +88,46 @@ async def test_parse_id_token():
     with pytest.raises(InvalidClaimError):
         claims_options = {"iss": {"value": "https://wrong-provider.test"}}
         await client.parse_id_token(token, nonce="n", claims_options=claims_options)
+
+
+@pytest.mark.parametrize("token_nonce", [None, "wrong", "n"])
+@pytest.mark.asyncio
+async def test_parse_id_token_nonce_supported(token_nonce):
+    token = get_bearer_token()
+    now = int(time.time())
+    claims = {
+        "sub": "123",
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "iat": now,
+        "auth_time": now,
+        "exp": now + 3600,
+        "nonce_supported": False,
+        "at_hash": create_half_hash(token["access_token"], "HS256").decode("utf-8"),
+    }
+    if token_nonce is not None:
+        claims["nonce"] = token_nonce
+    id_token = jwt.encode({"alg": "HS256"}, claims, secret_key)
+    token["id_token"] = id_token
+
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        fetch_token=get_bearer_token,
+        jwks={"keys": [secret_key.as_dict()]},
+        issuer="https://provider.test",
+        id_token_signing_alg_values_supported=["HS256", "RS256"],
+    )
+    if token_nonce == "n":
+        assert (await client.parse_id_token(token, nonce="n")).sub == "123"
+    else:
+        error = MissingClaimError if token_nonce is None else InvalidClaimError
+        with pytest.raises(error):
+            await client.parse_id_token(token, nonce="n")
+
+    assert (await client.parse_id_token(token, nonce=None)).sub == "123"
 
 
 @pytest.mark.asyncio
