@@ -4,6 +4,7 @@ from copy import deepcopy
 from unittest import mock
 
 import pytest
+from httpx2 import URL
 from httpx2 import ASGITransport
 from httpx2 import AsyncClient
 
@@ -79,6 +80,26 @@ async def test_add_token_to_streaming_request(assert_func, token_placement):
             await stream.aread()
             data = stream.json()
 
+    assert data["a"] == "a"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "assert_func, token_placement",
+    [
+        (assert_token_in_header, "header"),
+        (assert_token_in_body, "body"),
+        (assert_token_in_uri, "uri"),
+    ],
+)
+async def test_add_token_with_url_object(assert_func, token_placement):
+    transport = ASGITransport(AsyncMockDispatch({"a": "a"}, assert_func=assert_func))
+    async with AsyncOAuth2Client(
+        "foo", token=default_token, token_placement=token_placement, transport=transport
+    ) as client:
+        resp = await client.get(URL("https://provider.test"))
+
+    data = resp.json()
     assert data["a"] == "a"
 
 

@@ -18,6 +18,7 @@ from ..base_client import OAuthError
 from ..base_client import UnsupportedTokenTypeError
 from .utils import HTTPX_CLIENT_KWARGS
 from .utils import build_request
+from .utils import coerce_url
 
 USE_CLIENT_DEFAULT = httpx2.USE_CLIENT_DEFAULT
 Auth = httpx2.Auth
@@ -120,7 +121,7 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
 
             auth = self.token_auth
 
-        return await super().request(method, url, auth=auth, **kwargs)
+        return await super().request(method, coerce_url(url), auth=auth, **kwargs)
 
     @asynccontextmanager
     async def stream(
@@ -134,7 +135,7 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
 
             auth = self.token_auth
 
-        async with super().stream(method, url, auth=auth, **kwargs) as resp:
+        async with super().stream(method, coerce_url(url), auth=auth, **kwargs) as resp:
             yield resp
 
     async def ensure_active_token(self, token):
@@ -267,7 +268,7 @@ class OAuth2Client(_OAuth2Client, httpx2.Client):
 
             auth = self.token_auth
 
-        return super().request(method, url, auth=auth, **kwargs)
+        return super().request(method, coerce_url(url), auth=auth, **kwargs)
 
     def stream(
         self, method, url, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs
@@ -281,4 +282,4 @@ class OAuth2Client(_OAuth2Client, httpx2.Client):
 
             auth = self.token_auth
 
-        return super().stream(method, url, auth=auth, **kwargs)
+        return super().stream(method, coerce_url(url), auth=auth, **kwargs)

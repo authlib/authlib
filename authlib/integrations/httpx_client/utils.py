@@ -44,3 +44,9 @@ def build_request(url, headers, body, initial_request: Request) -> Request:
         updated_request.extensions = initial_request.extensions
 
     return updated_request
+
+
+def coerce_url(url):
+    if isinstance(url, str):
+        return url
+    return str(url)
