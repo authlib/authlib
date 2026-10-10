@@ -27,6 +27,9 @@ Version 1.x.x
   a draft extension to :rfc:`7523` for cross-application access using identity
   assertions issued by an external enterprise IdP.
   See :ref:`specs/rfc7523-id-jag` for details. :pr:`898`
+- The async OpenID Connect client returns ``None`` from ``parse_id_token()``
+  when the token has no ``id_token``, like the sync client. It used to raise
+  a ``KeyError``. :pr:`924`
 
 Version 1.8.0
 -------------
