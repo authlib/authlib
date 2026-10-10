@@ -130,7 +130,7 @@ def extract_params(raw):
             params.append((to_unicode(k), to_unicode(v)))
         return params
 
-    if not raw:
+    if not isinstance(raw, str):
         return None
 
     try:
