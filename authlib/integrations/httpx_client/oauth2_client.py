@@ -5,7 +5,7 @@ import typing
 from contextlib import asynccontextmanager
 
 from ._compat import httpx2
-from anyio import Lock # Import after httpx so import errors refer to httpx
+from anyio import Lock  # Import after httpx so import errors refer to httpx
 
 from authlib.common.urls import url_decode
 from authlib.oauth2.auth import ClientAuth

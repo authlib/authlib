@@ -1,5 +1,6 @@
 from authlib.common.encoding import to_native
 from authlib.oauth2.base import OAuth2Error
+from authlib.oauth2.client import _load_token_response
 
 
 class AssertionClient:
@@ -87,10 +88,7 @@ class AssertionClient:
         return self._refresh_token(data)
 
     def parse_response_token(self, resp):
-        if resp.status_code >= 500:
-            resp.raise_for_status()
-
-        token = resp.json()
+        token = _load_token_response(resp)
         if "error" in token:
             raise self.oauth_error_class(
                 error=token["error"], description=token.get("error_description")

@@ -55,14 +55,11 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
     def verify_claims(self, claims: jwt.Claims):
         options = dict(self.CLAIMS_OPTIONS)
         audiences = self.get_audiences()
-        if audiences:
-            options["aud"] = {"essential": True, "values": audiences}
-        else:
-            deprecate(
-                "'get_audiences' must return a non-empty list. "
-                "Audience validation will become mandatory.",
-                version="1.8",
+        if not audiences:
+            raise InvalidGrantError(
+                description="No audience identifiers configured for this authorization server."
             )
+        options["aud"] = {"essential": True, "values": audiences}
 
         claims_requests = jwt.JWTClaimsRegistry(leeway=self.LEEWAY, **options)
         try:
@@ -256,15 +253,15 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
             The authorization server MUST reject any JWT that does not
             contain its own identity as the intended audience.
 
-        Developers SHOULD implement this method to return the list of valid
+        Developers MUST implement this method to return a non-empty list of valid
         audience values, typically including the token endpoint URL and/or
         the issuer identifier. For example::
 
             def get_audiences(self):
                 return ["https://example.com/oauth/token", "https://example.com"]
 
-        If this method returns an empty list, audience value validation is
-        skipped (only presence is checked).
+        If this method returns an empty list, the assertion is rejected with
+        an ``invalid_grant`` error.
 
         :return: list of valid audience strings
         """

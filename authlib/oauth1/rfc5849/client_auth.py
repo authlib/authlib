@@ -150,9 +150,16 @@ class ClientAuth:
             oauth_body_hash = base64.b64encode(hashlib.sha1(body).digest())
             oauth_params.append(("oauth_body_hash", oauth_body_hash.decode("utf-8")))
 
-        uri, headers, body = self._render(uri, headers, body, oauth_params)
+        # The signature is calculated over a rendered request that
+        # includes the OAuth parameters. The final request is rendered
+        # from the original values so the parameters are not duplicated.
+        rendered_uri, rendered_headers, rendered_body = self._render(
+            uri, headers, body, oauth_params
+        )
 
-        sig = self.get_oauth_signature(method, uri, headers, body)
+        sig = self.get_oauth_signature(
+            method, rendered_uri, rendered_headers, rendered_body
+        )
         oauth_params.append(("oauth_signature", sig))
 
         uri, headers, body = self._render(uri, headers, body, oauth_params)

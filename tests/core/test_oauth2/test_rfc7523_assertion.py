@@ -10,7 +10,10 @@ def decode(token, key="secret"):
 
 def test_default_jti_is_generated():
     token = sign_jwt_bearer_assertion(
-        key="secret", issuer="client1", audience="https://auth.example/token", alg="HS256"
+        key="secret",
+        issuer="client1",
+        audience="https://auth.example/token",
+        alg="HS256",
     )
     claims = decode(token)
     assert "jti" in claims
@@ -32,7 +35,10 @@ def test_custom_jti_is_preserved():
 def test_each_call_generates_unique_jti():
     tokens = [
         sign_jwt_bearer_assertion(
-            key="secret", issuer="client1", audience="https://auth.example/token", alg="HS256"
+            key="secret",
+            issuer="client1",
+            audience="https://auth.example/token",
+            alg="HS256",
         )
         for _ in range(5)
     ]

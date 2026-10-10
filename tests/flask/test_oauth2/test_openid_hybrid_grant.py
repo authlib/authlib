@@ -11,6 +11,7 @@ from authlib.oidc.core import HybridIDToken
 from authlib.oidc.core.grants import OpenIDCode as _OpenIDCode
 from authlib.oidc.core.grants import OpenIDHybridGrant as _OpenIDHybridGrant
 
+from .models import AuthorizationCode
 from .models import CodeGrantMixin
 from .models import exists_nonce
 from .models import save_authorization_code
@@ -158,6 +159,66 @@ def test_invalid_scope(test_client):
         },
     )
     assert "error=invalid_scope" in rv.location
+
+
+@pytest.mark.parametrize(
+    "response_type", ["code id_token", "code token", "code id_token token"]
+)
+def test_reject_openid_scope_not_allowed_for_client(
+    test_client, client, db, response_type
+):
+    client.set_client_metadata({**client.client_metadata, "scope": "profile"})
+    db.session.commit()
+
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": response_type,
+            "client_id": "client-id",
+            "scope": "openid profile",
+            "nonce": "abc",
+            "redirect_uri": "https://client.test",
+            "user_id": "1",
+        },
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["error"] == "invalid_scope"
+    assert "code" not in params
+    assert "id_token" not in params
+    assert "access_token" not in params
+    assert AuthorizationCode.query.count() == 0
+
+
+@pytest.mark.parametrize(
+    "response_type", ["code id_token", "code token", "code id_token token"]
+)
+def test_custom_token_generator_receives_allowed_scope(
+    test_client, server, response_type
+):
+    def generate_token(client, grant_type, user, scope, **kwargs):
+        return {
+            "access_token": "custom-token",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "scope": scope,
+        }
+
+    server.register_token_generator("implicit", generate_token)
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": response_type,
+            "client_id": "client-id",
+            "scope": "openid profile email",
+            "nonce": "abc",
+            "redirect_uri": "https://client.test",
+            "user_id": "1",
+        },
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["scope"] == "openid profile"
+    code = AuthorizationCode.query.filter_by(code=params["code"]).one()
+    assert code.scope == "openid profile"
 
 
 def test_missing_openid_in_scope_does_not_redirect_to_unregistered_uri(test_client):

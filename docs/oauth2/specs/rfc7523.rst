@@ -65,6 +65,11 @@ methods in order to use it. Here is an example::
     # register grant to authorization server
     authorization_server.register_grant(JWTBearerGrant)
 
+``get_audiences()`` must return a non-empty list of audience identifiers for
+this authorization server. Assertions are rejected with ``invalid_grant``
+if the method is not overridden or returns an empty list, or if the JWT's
+``aud`` does not contain one of the configured identifiers.
+
 When creating a client, authorization server will generate several key pairs.
 The server itself can only keep the public keys, which will be used to decode
 assertion value.

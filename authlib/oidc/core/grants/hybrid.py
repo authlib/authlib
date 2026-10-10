@@ -40,7 +40,7 @@ class OpenIDHybridGrant(OpenIDImplicitGrant):
                     code=code,
                     client_id=client.client_id,
                     redirect_uri=request.payload.redirect_uri,
-                    scope=request.payload.scope,
+                    scope=request.scope,
                     nonce=request.payload.data.get("nonce"),
                     user_id=request.user.id,
                 )
@@ -56,7 +56,7 @@ class OpenIDHybridGrant(OpenIDImplicitGrant):
             ),
         )
         redirect_uri = validate_code_authorization_request(self)
-        if not is_openid_scope(self.request.payload.scope):
+        if not is_openid_scope(self.request.scope):
             raise InvalidScopeError(
                 "Missing 'openid' scope",
                 redirect_uri=redirect_uri,
@@ -73,7 +73,7 @@ class OpenIDHybridGrant(OpenIDImplicitGrant):
         token = self.generate_token(
             grant_type="implicit",
             user=grant_user,
-            scope=self.request.payload.scope,
+            scope=self.request.scope,
             include_refresh_token=False,
         )
 

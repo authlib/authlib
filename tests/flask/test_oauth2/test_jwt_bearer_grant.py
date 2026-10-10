@@ -16,6 +16,9 @@ from .models import db
 
 
 class JWTBearerGrant(_JWTBearerGrant):
+    def get_audiences(self):
+        return ["https://provider.test/token", "https://provider.test"]
+
     def resolve_issuer_client(self, issuer):
         return Client.query.filter_by(client_id=issuer).first()
 
@@ -208,29 +211,71 @@ def test_missing_assertion_claims(test_client):
     assert "Missing claim" in resp["error_description"]
 
 
-def test_invalid_audience(test_client, server):
+@pytest.mark.parametrize(
+    "audience",
+    ["https://evil.test/token", ["https://evil.test/token", "https://other.test"]],
+)
+def test_invalid_audience(test_client, audience):
     """RFC 7523 Section 3: The authorization server MUST reject any JWT that
     does not contain its own identity as the intended audience."""
 
-    class StrictAudienceGrant(JWTBearerGrant):
-        def get_audiences(self):
-            return ["https://provider.test/token"]
-
-    server._token_grants.clear()
-    server.register_grant(StrictAudienceGrant)
-    assertion = StrictAudienceGrant.sign(
+    assertion = JWTBearerGrant.sign(
         "foo",
         issuer="client-id",
-        audience="https://evil.test/token",
+        audience=audience,
         subject=None,
         header={"alg": "HS256", "kid": "1"},
     )
     rv = test_client.post(
         "/oauth/token",
-        data={"grant_type": StrictAudienceGrant.GRANT_TYPE, "assertion": assertion},
+        data={"grant_type": JWTBearerGrant.GRANT_TYPE, "assertion": assertion},
     )
     resp = json.loads(rv.data)
     assert resp["error"] == "invalid_grant"
+
+
+@pytest.mark.parametrize(
+    "audience",
+    ["https://provider.test", ["https://other.test", "https://provider.test/token"]],
+)
+def test_valid_audience(test_client, audience):
+    assertion = JWTBearerGrant.sign(
+        "foo",
+        issuer="client-id",
+        audience=audience,
+        header={"alg": "HS256", "kid": "1"},
+    )
+    rv = test_client.post(
+        "/oauth/token",
+        data={"grant_type": JWTBearerGrant.GRANT_TYPE, "assertion": assertion},
+    )
+    assert "access_token" in json.loads(rv.data)
+
+
+@pytest.mark.parametrize("audiences", [None, []])
+def test_missing_audience_configuration(test_client, monkeypatch, audiences):
+    if audiences is None:
+        monkeypatch.setattr(
+            JWTBearerGrant, "get_audiences", _JWTBearerGrant.get_audiences
+        )
+    else:
+        monkeypatch.setattr(JWTBearerGrant, "get_audiences", lambda self: audiences)
+
+    assertion = JWTBearerGrant.sign(
+        "foo",
+        issuer="client-id",
+        audience="https://provider.test/token",
+        header={"alg": "HS256", "kid": "1"},
+    )
+    rv = test_client.post(
+        "/oauth/token",
+        data={"grant_type": JWTBearerGrant.GRANT_TYPE, "assertion": assertion},
+    )
+    assert rv.status_code == 400
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_grant"
+    assert "audience" in resp["error_description"]
+    assert "access_token" not in resp
 
 
 def test_malformed_assertion(test_client):

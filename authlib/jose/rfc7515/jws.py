@@ -204,6 +204,11 @@ class JsonWebSignature:
 
         headers = []
         is_valid = True
+
+        # invalidates cases like obj["signatures"] = None or obj["signatures"] = []
+        if not obj["signatures"]:
+            is_valid = False
+
         for header_obj in obj["signatures"]:
             jws_header, valid = self._validate_json_jws(
                 payload_segment, payload, header_obj, key

@@ -11,8 +11,6 @@ try:
 except ImportError:
     import httpx as httpx2
 
-    deprecate(
-        "The httpx module is deprecated; please use httpx2 instead."
-    )
+    deprecate("The httpx module is deprecated; please use httpx2 instead.")
 
 __all__ = ["httpx2"]

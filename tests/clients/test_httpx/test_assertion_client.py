@@ -1,5 +1,6 @@
 import time
 
+import httpx2
 import pytest
 from httpx2 import WSGITransport
 
@@ -85,3 +86,19 @@ def test_without_alg():
     ) as client:
         with pytest.raises(ValueError):
             client.get("https://provider.test")
+
+
+def test_refresh_token_non_json_error_response():
+    with AssertionClient(
+        "https://provider.test/token",
+        issuer="foo",
+        subject="foo",
+        audience="foo",
+        alg="HS256",
+        key="secret",
+        transport=WSGITransport(
+            MockDispatch(body="429 Too Many Requests", status_code=429)
+        ),
+    ) as client:
+        with pytest.raises(httpx2.HTTPStatusError):
+            client.refresh_token()

@@ -3,6 +3,7 @@ import urllib.parse
 from unittest import mock
 
 import pytest
+import requests
 from joserfc import jwt
 from joserfc.jwk import OctKey
 
@@ -114,7 +115,11 @@ def test_assertion_jti_is_unique_per_refresh(token):
         if r.url == "https://provider.test/token":
             body = urllib.parse.parse_qs(r.body)
             assertions.append(body["assertion"][0])
-            resp.json = lambda: {**token, "expires_in": "1", "expires_at": int(time.time()) - 1}
+            resp.json = lambda: {
+                **token,
+                "expires_in": "1",
+                "expires_at": int(time.time()) - 1,
+            }
         return resp
 
     sess = AssertionSession(
@@ -167,3 +172,24 @@ def test_assertion_custom_jti_is_preserved(token):
     key = OctKey.import_key("secret")
     claims = jwt.decode(assertions[0], key).claims
     assert claims["jti"] == "my-custom-jti-value"
+
+
+def test_refresh_token_non_json_error_response():
+    def fake_send(r, **kwargs):
+        resp = requests.Response()
+        resp.status_code = 429
+        resp._content = b"429 Too Many Requests"
+        resp.url = r.url
+        return resp
+
+    sess = AssertionSession(
+        "https://provider.test/token",
+        issuer="foo",
+        subject="foo",
+        audience="foo",
+        alg="HS256",
+        key="secret",
+    )
+    sess.send = fake_send
+    with pytest.raises(requests.HTTPError):
+        sess.refresh_token()
