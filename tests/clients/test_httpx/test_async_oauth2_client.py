@@ -332,6 +332,17 @@ async def test_auto_refresh_token():
         "foo",
         token=old_token,
         token_endpoint="https://provider.test/token",
+        transport=transport,
+    ) as sess:
+        await sess.get("https://resource.test/user")
+        assert sess.metadata["grant_type"] == "client_credentials"
+        assert sess.token["access_token"] == default_token["access_token"]
+
+    async with AsyncOAuth2Client(
+        "foo",
+        token=old_token,
+        token_endpoint="https://provider.test/token",
+        grant_type="authorization_code",
         update_token=update_token,
         transport=transport,
     ) as sess:
