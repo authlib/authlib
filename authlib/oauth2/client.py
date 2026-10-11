@@ -17,6 +17,28 @@ DEFAULT_HEADERS = {
 }
 
 
+def _load_token_response(resp):
+    """Return the JSON object of a token endpoint response.
+
+    Raise the HTTP error of the response when its body is not a JSON object,
+    such as a rate-limit page from a gateway.
+    """
+    if resp.status_code >= 500:
+        resp.raise_for_status()
+
+    try:
+        token = resp.json()
+    except ValueError:
+        token = None
+
+    if not isinstance(token, dict):
+        resp.raise_for_status()
+        raise ValueError(
+            f"Token endpoint response is not a JSON object (HTTP {resp.status_code})."
+        )
+    return token
+
+
 class OAuth2Client:
     """Construct a new OAuth 2 protocol client.
 
@@ -412,10 +434,7 @@ class OAuth2Client:
         self.compliance_hook[hook_type].add(hook)
 
     def parse_response_token(self, resp):
-        if resp.status_code >= 500:
-            resp.raise_for_status()
-
-        token = resp.json()
+        token = _load_token_response(resp)
         if "error" in token:
             raise self.oauth_error_class(
                 error=token["error"], description=token.get("error_description")

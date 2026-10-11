@@ -69,7 +69,7 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
 
     def validate_authorization_request(self):
         redirect_uri = super().validate_authorization_request()
-        if not is_openid_scope(self.request.payload.scope):
+        if not is_openid_scope(self.request.scope):
             raise InvalidScopeError(
                 "Missing 'openid' scope",
                 redirect_uri=redirect_uri,
@@ -114,7 +114,7 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
         client = self.request.client
         token = self.generate_token(
             user=grant_user,
-            scope=self.request.payload.scope,
+            scope=self.request.scope,
             include_refresh_token=False,
         )
         if self.request.payload.response_type == "id_token":

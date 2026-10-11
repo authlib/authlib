@@ -4,8 +4,8 @@ import pytest
 from flask import json
 from joserfc.jwk import RSAKey
 
-from authlib.oauth2.rfc6749 import InvalidGrantError
 from authlib.oauth2.drafts import IDJAGGrant as _IDJAGGrant
+from authlib.oauth2.rfc6749 import InvalidGrantError
 from tests.util import read_file_path
 
 from .models import Client
@@ -95,9 +95,7 @@ def _sign(**overrides):
 
 
 def test_missing_assertion(test_client):
-    rv = test_client.post(
-        "/oauth/token", data={"grant_type": IDJAGGrant.GRANT_TYPE}
-    )
+    rv = test_client.post("/oauth/token", data={"grant_type": IDJAGGrant.GRANT_TYPE})
     resp = json.loads(rv.data)
     assert resp["error"] == "invalid_request"
     assert "assertion" in resp["error_description"]
@@ -261,4 +259,3 @@ def test_policy_denial(test_client, server):
     resp = json.loads(rv.data)
     assert resp["error"] == "invalid_grant"
     assert "ermission" in resp["error_description"]
-

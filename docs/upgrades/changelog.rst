@@ -11,10 +11,25 @@ Version 1.x.x
 
 **Unreleased**
 
+- Reject PEM and SSH key material used as symmetric JOSE keys, including
+  PEM keys with leading whitespace, comments, or a byte-order mark and
+  keys supplied through an oct JWK or an ``OctKey`` instance.
+- Use the client's allowed scope when validating and issuing OIDC implicit
+  and hybrid responses. Clients without the ``openid`` scope can no longer
+  obtain an ID Token by including it in the raw request, and custom token
+  generators receive only the allowed scope.
+- **Breaking change**: ``JWTBearerGrant.get_audiences()`` must return a
+  non-empty list of audience identifiers for the authorization server.
+  Assertions are rejected with ``invalid_grant`` when audiences are not
+  configured, instead of issuing a deprecation warning and skipping
+  audience value validation.
 - Add support for the Identity Assertion JWT Authorization Grant (ID-JAG),
   a draft extension to :rfc:`7523` for cross-application access using identity
   assertions issued by an external enterprise IdP.
   See :ref:`specs/rfc7523-id-jag` for details. :pr:`898`
+- The async OpenID Connect client returns ``None`` from ``parse_id_token()``
+  when the token has no ``id_token``, like the sync client. It used to raise
+  a ``KeyError``. :pr:`924`
 
 Version 1.8.0
 -------------
@@ -80,6 +95,11 @@ Version 1.8.0
   :issue:`798` :pr:`908`
 - Fix the OAuth 1.0a ``InsecureTransportError`` description telling users that
   OAuth 2 must use HTTPS. :pr:`919`
+- OAuth 2 and assertion clients raise the HTTP error of the token endpoint
+  response when its body is not a JSON object, such as a plain-text 429 page
+  from a gateway. They used to raise a ``JSONDecodeError`` or a ``TypeError``.
+  A success response with such a body raises a ``ValueError``.
+  :issue:`928` :pr:`929`
 
 Version 1.7.2
 -------------
