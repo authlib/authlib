@@ -137,7 +137,6 @@ class OAuth2Session(OAuth2Client, Session):
             if not self.token:
                 token_endpoint = self.metadata.get("token_endpoint")
                 grant_type = self.metadata.get("grant_type")
-
                 if grant_type == "client_credentials" and token_endpoint:
                     self.fetch_token(
                         token_endpoint,
@@ -145,6 +144,5 @@ class OAuth2Session(OAuth2Client, Session):
                     )
                 else:
                     raise MissingTokenError()
-
             auth = self.token_auth
         return super().request(method, url, auth=auth, **kwargs)
