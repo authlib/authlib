@@ -11,18 +11,6 @@ from .errors import MissingTokenError
 
 log = logging.getLogger(__name__)
 
-_DEFAULT_PORTS = {"http": 80, "https": 443}
-
-
-def _url_origin(url):
-    parsed = urlparse.urlparse(url)
-    scheme = parsed.scheme.lower()
-    try:
-        port = parsed.port
-    except ValueError:
-        port = None
-    return scheme, (parsed.hostname or "").lower(), port or _DEFAULT_PORTS.get(scheme)
-
 
 class BaseApp:
     client_cls = None
@@ -242,10 +230,17 @@ class OAuth2Base:
 
     def _validate_metadata_origin(self, metadata):
         # OIDC Discovery 4.3 / RFC8414 3.3: issuer is required and must match
-        # the origin the metadata was fetched from
+        # the origin the metadata was fetched from. scheme and netloc are
+        # compared verbatim, without case folding, default ports or other
+        # normalization that a different URL parser could disagree with.
+        # urlparse silently drops tabs and newlines, so reject them up front
         issuer = metadata.get("issuer")
-        if not isinstance(issuer, str) or _url_origin(issuer) != _url_origin(
-            self._server_metadata_url
+        if (
+            not isinstance(issuer, str)
+            or not issuer.isprintable()
+            or any(ch.isspace() for ch in issuer)
+            or urlparse.urlparse(issuer)[:2]
+            != urlparse.urlparse(self._server_metadata_url)[:2]
         ):
             raise ValueError(
                 f'"issuer" {issuer!r} does not match the origin of '

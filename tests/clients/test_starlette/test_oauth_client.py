@@ -853,14 +853,21 @@ async def test_logout_redirect_with_extra_params():
 
 
 @pytest.mark.asyncio
-async def test_oauth2_metadata_issuer_origin_mismatch():
+@pytest.mark.parametrize(
+    "issuer",
+    [
+        "https://attacker.test",
+        "https://Provider.test",
+        "https://provider.test:443",
+        "https://attacker.test\\@provider.test",
+        " https://provider.test",
+        None,
+    ],
+)
+async def test_oauth2_metadata_issuer_origin_mismatch(issuer):
     transport = ASGITransport(
         AsyncPathMapDispatch(
-            {
-                "/.well-known/openid-configuration": {
-                    "body": {"issuer": "https://attacker.test"}
-                }
-            }
+            {"/.well-known/openid-configuration": {"body": {"issuer": issuer}}}
         )
     )
     client = OAuth().register(

@@ -924,8 +924,8 @@ def test_validate_logout_response_invalid_state():
     "issuer",
     [
         "https://provider.test",
-        "https://Provider.test:443/tenant/v2.0",
-        "https://provider.test:not-a-port",
+        "https://provider.test/",
+        "https://provider.test/tenant/v2.0",
     ],
 )
 def test_oauth2_metadata_issuer_same_origin(issuer):
@@ -953,6 +953,33 @@ def test_oauth2_metadata_issuer_same_origin(issuer):
         "http://provider.test",
         "https://provider.test:8443",
         "https://provider.test.attacker.test",
+        "https://provider.test.",
+        # no normalization: must be identical to server_metadata_url
+        "https://Provider.test",
+        "https://provider.test:443",
+        "https://provider.test:not-a-port",
+        "https://provider.test:99999",
+        # userinfo tricks and parser differentials
+        "https://provider.test@attacker.test",
+        "https://user@provider.test",
+        "https://attacker.test\\@provider.test",
+        "https://attacker.test#@provider.test",
+        "https://attacker.test?@provider.test",
+        "https://attacker.test%2F@provider.test",
+        # whitespace and control characters
+        " https://provider.test",
+        "https://provider.test ",
+        "https://provider.test\t",
+        "https://provider.test\n",
+        "https://provider\t.test",
+        # homoglyphs and punycode
+        "https://prоvider.test",  # Cyrillic "о"
+        "https://xn--prvider-bjg.test",  # punycode of the above
+        "https://provider．test",  # fullwidth full stop
+        "//provider.test",
+        "provider.test",
+        "",
+        None,
         ["https://provider.test"],
     ],
 )
