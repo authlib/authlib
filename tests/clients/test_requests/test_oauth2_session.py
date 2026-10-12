@@ -10,6 +10,7 @@ from joserfc.jwk import RSAKey
 from authlib.common.security import generate_token
 from authlib.common.urls import add_params_to_uri
 from authlib.common.urls import url_encode
+from authlib.integrations.base_client import MissingTokenError
 from authlib.integrations.requests_client import OAuth2Session
 from authlib.integrations.requests_client import OAuthError
 from authlib.oauth2.rfc6749 import MismatchingStateException
@@ -662,3 +663,56 @@ def test_override_default_request_timeout(token):
     client.request(
         "GET", "https://provider.test", withhold_token=False, timeout=expected_timeout
     )
+
+
+def test_initial_client_credentials_auto_fetch(token):
+    """Fetch a token before the first protected request."""
+    requests_sent = []
+    token_url = "https://provider.test/token"
+    resource_url = "https://resource.test/user"
+
+    def fake_send(request, **kwargs):
+        requests_sent.append(request.url)
+
+        response = mock.MagicMock()
+        response.status_code = 200
+
+        if request.url == token_url:
+            assert request.method == "POST"
+            assert "grant_type=client_credentials" in request.body
+            response.json.return_value = token
+
+        elif request.url == resource_url:
+            assert request.headers.get("Authorization") == "Bearer a"
+
+        else:
+            raise AssertionError(f"Unexpected request: {request.url}")
+
+        return response
+
+    with OAuth2Session(
+        client_id="foo",
+        client_secret="bar",
+        token_endpoint=token_url,
+        grant_type="client_credentials",
+    ) as client:
+        client.send = fake_send
+        response = client.get(resource_url)
+        assert response.status_code == 200
+
+    assert requests_sent == [token_url, resource_url]
+
+
+def test_initial_client_credentials_missing_endpoint():
+    """Missing endpoint must raise before any HTTP request."""
+    with OAuth2Session(
+        client_id="foo",
+        client_secret="bar",
+        grant_type="client_credentials",
+    ) as client:
+        client.send = mock.Mock()
+
+        with pytest.raises(MissingTokenError):
+            client.get("https://resource.test/user")
+
+        client.send.assert_not_called()

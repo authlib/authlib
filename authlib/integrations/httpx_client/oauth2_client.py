@@ -1,43 +1,24 @@
 # ruff: noqa: I001
-
 # The import order below is intentional: httpx compatibility must be loaded
-
 # before anyio so import errors refer to httpx.
-
 import typing
-
 from contextlib import asynccontextmanager
-
 from ._compat import httpx2
-
 from anyio import Lock  # Import after httpx so import errors refer to httpx
-
 from authlib.common.urls import url_decode
-
 from authlib.oauth2.auth import ClientAuth
-
 from authlib.oauth2.auth import TokenAuth
-
 from authlib.oauth2.client import OAuth2Client as _OAuth2Client
-
 from ..base_client import InvalidTokenError
-
 from ..base_client import MissingTokenError
-
 from ..base_client import OAuthError
-
 from ..base_client import UnsupportedTokenTypeError
-
 from .utils import HTTPX_CLIENT_KWARGS
-
 from .utils import build_request
 
 USE_CLIENT_DEFAULT = httpx2.USE_CLIENT_DEFAULT
-
 Auth = httpx2.Auth
-
 Request = httpx2.Request
-
 Response = httpx2.Response
 
 __all__ = [
@@ -54,21 +35,16 @@ class OAuth2Auth(Auth, TokenAuth):
     requires_request_body = True
 
     def auth_flow(self, request: Request) -> typing.Generator[Request, Response, None]:
-
         try:
             url, headers, body = self.prepare(
                 str(request.url), request.headers, request.content
             )
-
             headers["Content-Length"] = str(len(body))
-
             yield build_request(
                 url=url, headers=headers, body=body, initial_request=request
             )
-
         except KeyError as error:
             description = f"Unsupported token_type: {str(error)}"
-
             raise UnsupportedTokenTypeError(description=description) from error
 
 
@@ -76,13 +52,10 @@ class OAuth2ClientAuth(Auth, ClientAuth):
     requires_request_body = True
 
     def auth_flow(self, request: Request) -> typing.Generator[Request, Response, None]:
-
         url, headers, body = self.prepare(
             request.method, str(request.url), request.headers, request.content
         )
-
         headers["Content-Length"] = str(len(body))
-
         yield build_request(
             url=url, headers=headers, body=body, initial_request=request
         )
@@ -92,9 +65,7 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
     SESSION_REQUEST_PARAMS = HTTPX_CLIENT_KWARGS
 
     client_auth_class = OAuth2ClientAuth
-
     token_auth_class = OAuth2Auth
-
     oauth_error_class = OAuthError
 
     def __init__(
@@ -111,17 +82,12 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
         leeway=60,
         **kwargs,
     ):
-
         # extract httpx2.Client kwargs
-
         client_kwargs = self._extract_session_request_params(kwargs)
-
         httpx2.AsyncClient.__init__(self, **client_kwargs)
 
         # We use a Lock to synchronize coroutines to prevent
-
         # multiple concurrent attempts to refresh the same token
-
         self._token_refresh_lock = Lock()
 
         _OAuth2Client.__init__(
@@ -144,14 +110,12 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
         """Fetch a missing client-credentials token, once per client."""
         if self.token:
             return
-
         token_endpoint = self.metadata.get("token_endpoint")
         if (
             self.metadata.get("grant_type") != "client_credentials"
             or not token_endpoint
         ):
             raise MissingTokenError()
-
         async with self._token_refresh_lock:
             if not self.token:
                 await self.fetch_token(token_endpoint, grant_type="client_credentials")
@@ -179,26 +143,19 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
             yield resp
 
     async def ensure_active_token(self, token):
-
         async with self._token_refresh_lock:
             if self.token.is_expired(leeway=self.leeway):
                 refresh_token = token.get("refresh_token")
-
                 url = self.metadata.get("token_endpoint")
-
                 if refresh_token and url:
                     await self.refresh_token(url, refresh_token=refresh_token)
-
                 elif self.metadata.get("grant_type") == "client_credentials":
                     access_token = token["access_token"]
-
                     new_token = await self.fetch_token(
                         url, grant_type="client_credentials"
                     )
-
                     if self.update_token:
                         await self.update_token(new_token, access_token=access_token)
-
                 else:
                     raise InvalidTokenError()
 
@@ -211,19 +168,15 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
         method="POST",
         **kwargs,
     ):
-
         if method.upper() == "POST":
             resp = await self.post(
                 url, data=dict(url_decode(body)), headers=headers, auth=auth, **kwargs
             )
-
         else:
             if "?" in url:
                 url = "&".join([url, body])
-
             else:
                 url = "?".join([url, body])
-
             resp = await self.get(url, headers=headers, auth=auth, **kwargs)
 
         for hook in self.compliance_hook["access_token_response"]:
@@ -240,7 +193,6 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
         auth=USE_CLIENT_DEFAULT,
         **kwargs,
     ):
-
         resp = await self.post(
             url, data=dict(url_decode(body)), headers=headers, auth=auth, **kwargs
         )
@@ -249,7 +201,6 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
             resp = hook(resp)
 
         token = self.parse_response_token(resp)
-
         if "refresh_token" not in token:
             self.token["refresh_token"] = refresh_token
 
@@ -261,7 +212,6 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
     def _http_post(
         self, url, body=None, auth=USE_CLIENT_DEFAULT, headers=None, **kwargs
     ):
-
         return self.post(
             url, data=dict(url_decode(body)), headers=headers, auth=auth, **kwargs
         )
@@ -271,9 +221,7 @@ class OAuth2Client(_OAuth2Client, httpx2.Client):
     SESSION_REQUEST_PARAMS = HTTPX_CLIENT_KWARGS
 
     client_auth_class = OAuth2ClientAuth
-
     token_auth_class = OAuth2Auth
-
     oauth_error_class = OAuthError
 
     def __init__(
@@ -289,11 +237,8 @@ class OAuth2Client(_OAuth2Client, httpx2.Client):
         update_token=None,
         **kwargs,
     ):
-
         # extract httpx2.Client kwargs
-
         client_kwargs = self._extract_session_request_params(kwargs)
-
         httpx2.Client.__init__(self, **client_kwargs)
 
         _OAuth2Client.__init__(
@@ -313,21 +258,18 @@ class OAuth2Client(_OAuth2Client, httpx2.Client):
 
     @staticmethod
     def handle_error(error_type, error_description):
-
         raise OAuthError(error_type, error_description)
 
     def _ensure_initial_token(self):
         """Fetch a missing token for a configured client-credentials grant."""
         if self.token:
             return
-
         token_endpoint = self.metadata.get("token_endpoint")
         if (
             self.metadata.get("grant_type") != "client_credentials"
             or not token_endpoint
         ):
             raise MissingTokenError()
-
         self.fetch_token(token_endpoint, grant_type="client_credentials")
 
     def request(
