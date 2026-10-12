@@ -415,9 +415,9 @@ def test_client_credentials_without_token_endpoint():
 
     def mock_handler(request):
         requests_received.append(str(request.url))
-        return httpx.Response(200)
+        return httpx2.Response(200)
 
-    transport = httpx.MockTransport(mock_handler)
+    transport = httpx2.MockTransport(mock_handler)
 
     with OAuth2Client(
         client_id="test-client",
@@ -441,7 +441,7 @@ def test_automatic_initial_token_fetch():
 
         # Simulate OAuth server issuing an access token
         if request.url.path == "/oauth/token":
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={
                     "access_token": "test-access-token",
@@ -455,20 +455,20 @@ def test_automatic_initial_token_fetch():
             authorization = request.headers.get("Authorization")
 
             if authorization == "Bearer test-access-token":
-                return httpx.Response(
+                return httpx2.Response(
                     200,
                     json={"message": "Success"},
                 )
 
-            return httpx.Response(
+            return httpx2.Response(
                 401,
                 json={"error": "Unauthorized"},
             )
 
-        return httpx.Response(404)
+        return httpx2.Response(404)
 
     # Mock HTTP requests without using the internet
-    transport = httpx.MockTransport(mock_handler)
+    transport = httpx2.MockTransport(mock_handler)
 
     with OAuth2Client(
         client_id="test-client",
@@ -501,16 +501,16 @@ def test_existing_valid_token_is_reused():
             auth_header = request.headers.get("Authorization")
 
             if auth_header == "Bearer existing-token":
-                return httpx.Response(
+                return httpx2.Response(
                     200,
                     json={"message": "Success"},
                 )
 
-            return httpx.Response(401)
+            return httpx2.Response(401)
 
-        return httpx.Response(404)
+        return httpx2.Response(404)
 
-    transport = httpx.MockTransport(mock_handler)
+    transport = httpx2.MockTransport(mock_handler)
 
     with OAuth2Client(
         client_id="test-client",
@@ -537,9 +537,9 @@ def test_missing_token_configuration():
 
     def mock_handler(request):
         requests_received.append(str(request.url))
-        return httpx.Response(200)
+        return httpx2.Response(200)
 
-    transport = httpx.MockTransport(mock_handler)
+    transport = httpx2.MockTransport(mock_handler)
 
     with OAuth2Client(
         client_id="test-client",
@@ -562,7 +562,7 @@ def test_stream_automatically_fetches_initial_token():
         requests_received.append(str(request.url))
 
         if request.url.path == "/oauth/token":
-            return httpx.Response(
+            return httpx2.Response(
                 200,
                 json={
                     "access_token": "stream-token",
@@ -573,16 +573,16 @@ def test_stream_automatically_fetches_initial_token():
 
         if request.url.path == "/api/data":
             if request.headers.get("Authorization") == "Bearer stream-token":
-                return httpx.Response(
+                return httpx2.Response(
                     200,
                     json={"message": "Stream success"},
                 )
 
-            return httpx.Response(401)
+            return httpx2.Response(401)
 
-        return httpx.Response(404)
+        return httpx2.Response(404)
 
-    transport = httpx.MockTransport(mock_handler)
+    transport = httpx2.MockTransport(mock_handler)
 
     with OAuth2Client(
         client_id="test-client",
