@@ -128,8 +128,15 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
         claims["jti"] = jti
 
         return sign_jwt_bearer_assertion(
-            key, issuer, audience, subject, issued_at, expires_at, claims,
-            header=header, **kwargs,
+            key,
+            issuer,
+            audience,
+            subject,
+            issued_at,
+            expires_at,
+            claims,
+            header=header,
+            **kwargs,
         )
 
     # ------------------------------------------------------------------
@@ -152,9 +159,7 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
         client_id_claim = claims["client_id"]
         client = self.resolve_client_by_id(client_id_claim)
         if not client:
-            raise InvalidClientError(
-                description=f"Unknown client: {client_id_claim}"
-            )
+            raise InvalidClientError(description=f"Unknown client: {client_id_claim}")
 
         # If client authentication is also present, it must match.
         if self.request.client and self.request.client.client_id != client_id_claim:
@@ -164,8 +169,7 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
 
         if not client.check_grant_type(self.GRANT_TYPE):
             raise UnauthorizedClientError(
-                f"The client is not authorized to use "
-                f"'grant_type={self.GRANT_TYPE}'"
+                f"The client is not authorized to use 'grant_type={self.GRANT_TYPE}'"
             )
 
         self.request.client = client
@@ -175,9 +179,7 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
         # Authenticate user from sub claim (required by ID-JAG).
         user = self.authenticate_user(claims["sub"])
         if not user:
-            raise InvalidGrantError(
-                description="Invalid 'sub' value in assertion"
-            )
+            raise InvalidGrantError(description="Invalid 'sub' value in assertion")
 
         # Application policy check.
         scopes = scope_to_list(self.request.payload.scope) or []
@@ -243,9 +245,7 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
             obj = jws.extract_compact(to_bytes(assertion))
         except (JoseError, ValueError) as e:
             log.debug("Assertion Error: %r", e)
-            raise InvalidGrantError(
-                description="Invalid JWT assertion"
-            ) from e
+            raise InvalidGrantError(description="Invalid JWT assertion") from e
         try:
             claims = json_loads(obj.payload)
         except ValueError:
@@ -257,8 +257,7 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
         if typ != self.REQUIRED_TYP:
             raise InvalidGrantError(
                 description=(
-                    f"Invalid 'typ' header: expected '{self.REQUIRED_TYP}', "
-                    f"got '{typ}'"
+                    f"Invalid 'typ' header: expected '{self.REQUIRED_TYP}', got '{typ}'"
                 )
             ) from None
 

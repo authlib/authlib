@@ -1,15 +1,16 @@
 """Tests for IDJAGGrant (Identity Assertion JWT Authorization Grant)."""
+
 import time
 
 import pytest
 from joserfc import jwt
 from joserfc.jwk import RSAKey
 
+from authlib.oauth2.drafts import IDJAGGrant
 from authlib.oauth2.rfc6749 import InvalidClientError
 from authlib.oauth2.rfc6749 import InvalidGrantError
 from authlib.oauth2.rfc6749 import InvalidRequestError
 from authlib.oauth2.rfc6749 import UnauthorizedClientError
-from authlib.oauth2.drafts import IDJAGGrant
 from authlib.oauth2.rfc7523 import JWTBearerGrant
 from tests.util import read_file_path
 
@@ -142,16 +143,23 @@ def test_sign_produces_valid_jwt(rsa_private, rsa_public):
 def test_sign_requires_subject(rsa_private):
     with pytest.raises(ValueError, match="subject"):
         IDJAGGrant.sign(
-            rsa_private, issuer="i", audience="a",
-            subject=None, client_id="c", alg="RS256",
+            rsa_private,
+            issuer="i",
+            audience="a",
+            subject=None,
+            client_id="c",
+            alg="RS256",
         )
 
 
 def test_sign_requires_alg(rsa_private):
     with pytest.raises(ValueError, match="alg"):
         IDJAGGrant.sign(
-            rsa_private, issuer="i", audience="a",
-            subject="s", client_id="c",
+            rsa_private,
+            issuer="i",
+            audience="a",
+            subject="s",
+            client_id="c",
         )
 
 
@@ -185,7 +193,9 @@ def test_malformed_assertion_value_error(rsa_private):
     assertion = _sign(rsa_private)
     g = _grant({"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": assertion})
 
-    with patch("authlib.oauth2.drafts.id_jag.jwt.decode", side_effect=ValueError("bad key")):
+    with patch(
+        "authlib.oauth2.drafts.id_jag.jwt.decode", side_effect=ValueError("bad key")
+    ):
         with pytest.raises(InvalidGrantError):
             g.validate_token_request()
 
@@ -266,7 +276,9 @@ def _sign_missing_claim(rsa_private, claim_to_remove):
     )
     claims.pop(claim_to_remove)
     return jwt.encode(
-        {"alg": "RS256", "typ": "oauth-id-jag+jwt"}, claims, rsa_private,
+        {"alg": "RS256", "typ": "oauth-id-jag+jwt"},
+        claims,
+        rsa_private,
     )
 
 
@@ -346,7 +358,8 @@ def test_client_id_mismatch(rsa_private):
 
 def test_unauthorized_grant_type(rsa_private):
     _TestIDJAGGrant._clients["app-456"] = _FakeClient(
-        "app-456", allowed_grant_types=["authorization_code"],
+        "app-456",
+        allowed_grant_types=["authorization_code"],
     )
     assertion = _sign(rsa_private)
     g = _grant({"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": assertion})
@@ -467,9 +480,7 @@ def test_does_not_expose_rfc7523_hooks():
         "resolve_client_public_key",
         "has_granted_permission",
     ):
-        assert not hasattr(IDJAGGrant, name), (
-            f"IDJAGGrant should not expose {name!r}"
-        )
+        assert not hasattr(IDJAGGrant, name), f"IDJAGGrant should not expose {name!r}"
 
 
 # === Registration ===
@@ -521,4 +532,3 @@ def test_extract_assertion_rejects_malformed_compact():
     g = _grant({"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": "not.a.jwt"})
     with pytest.raises(InvalidGrantError, match="Invalid JWT assertion"):
         g.validate_token_request()
-

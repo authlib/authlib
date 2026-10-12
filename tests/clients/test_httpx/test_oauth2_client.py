@@ -2,6 +2,7 @@ import time
 from copy import deepcopy
 from unittest import mock
 
+import httpx2
 import pytest
 from httpx2 import WSGITransport
 
@@ -136,6 +137,42 @@ def test_fetch_token_post():
     transport = WSGITransport(MockDispatch({"error": "invalid_request"}))
     with OAuth2Client("foo", transport=transport) as client:
         with pytest.raises(OAuthError):
+            client.fetch_token(url)
+
+
+@pytest.mark.parametrize("body", ["429 Too Many Requests", "429", "null"])
+def test_fetch_token_non_json_object_error_response(body):
+    url = "https://provider.test/token"
+    transport = WSGITransport(MockDispatch(body=body, status_code=429))
+    with OAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(httpx2.HTTPStatusError):
+            client.fetch_token(url)
+
+
+@pytest.mark.parametrize("body", ["not json", "[]"])
+def test_fetch_token_non_json_object_success_response(body):
+    url = "https://provider.test/token"
+    transport = WSGITransport(MockDispatch(body=body, status_code=200))
+    with OAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(ValueError, match="not a JSON object"):
+            client.fetch_token(url)
+
+
+def test_fetch_token_json_error_response():
+    url = "https://provider.test/token"
+    transport = WSGITransport(MockDispatch({"error": "invalid_grant"}, status_code=400))
+    with OAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(OAuthError, match="invalid_grant"):
+            client.fetch_token(url)
+
+
+def test_fetch_token_server_error_json_response():
+    url = "https://provider.test/token"
+    transport = WSGITransport(
+        MockDispatch({"message": "upstream timeout"}, status_code=500)
+    )
+    with OAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(httpx2.HTTPStatusError):
             client.fetch_token(url)
 
 

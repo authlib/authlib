@@ -315,6 +315,7 @@ def test_deserialize_exceeds_length():
     with pytest.raises(ValueError):
         jws.deserialize("eyJhbGciOiJIUzI1NiJ9.YQ." + value, "")
 
+
 def test_deserialize_json_empty_signatures():
     jws = JsonWebSignature()
 

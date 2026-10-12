@@ -107,6 +107,59 @@ def test_missing_openid_in_scope(test_client):
     assert "error=invalid_scope" in rv.location
 
 
+@pytest.mark.parametrize("response_type", ["id_token", "id_token token"])
+def test_reject_openid_scope_not_allowed_for_client(
+    test_client, client, db, response_type
+):
+    client.set_client_metadata({**client.client_metadata, "scope": "profile"})
+    db.session.commit()
+
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": response_type,
+            "client_id": "client-id",
+            "scope": "openid profile",
+            "nonce": "abc",
+            "redirect_uri": "https://client.test/callback",
+            "user_id": "1",
+        },
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["error"] == "invalid_scope"
+    assert "id_token" not in params
+    assert "access_token" not in params
+
+
+@pytest.mark.parametrize("response_type", ["id_token", "id_token token"])
+def test_custom_token_generator_receives_allowed_scope(
+    test_client, server, response_type
+):
+    def generate_token(client, grant_type, user, scope, **kwargs):
+        return {
+            "access_token": "custom-token",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "scope": scope,
+        }
+
+    server.register_token_generator("implicit", generate_token)
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": response_type,
+            "client_id": "client-id",
+            "scope": "openid profile email",
+            "nonce": "abc",
+            "redirect_uri": "https://client.test/callback",
+            "user_id": "1",
+        },
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["scope"] == "openid profile"
+    assert "id_token" in params
+
+
 def test_missing_openid_in_scope_does_not_redirect_to_unregistered_uri(test_client):
     """An unregistered redirect_uri must not be followed even when openid scope is missing."""
     rv = test_client.post(

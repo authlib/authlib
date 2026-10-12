@@ -9,4 +9,3 @@ the corresponding RFC is published.
 from .id_jag import IDJAGGrant
 
 __all__ = ["IDJAGGrant"]
-
