@@ -3,15 +3,13 @@
 # before anyio so import errors refer to httpx.
 import typing
 from contextlib import asynccontextmanager
-
 from ._compat import httpx2
-
 from anyio import Lock  # Import after httpx so import errors refer to httpx
-
 from authlib.common.urls import url_decode
 from authlib.oauth2.auth import ClientAuth
 from authlib.oauth2.auth import TokenAuth
 from authlib.oauth2.client import OAuth2Client as _OAuth2Client
+
 from ..base_client import InvalidTokenError
 from ..base_client import MissingTokenError
 from ..base_client import OAuthError
