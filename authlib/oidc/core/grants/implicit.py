@@ -10,10 +10,10 @@ from authlib.oauth2.rfc6749 import InvalidScopeError
 from authlib.oauth2.rfc6749 import OAuth2Error
 from authlib.oauth2.rfc6749.errors import InvalidRequestError
 from authlib.oauth2.rfc6749.hooks import hooked
+from authlib.oauth2.rfc6749.parameters import create_response_mode_response
 
 from ._legacy import LegacyMixin
 from .util import create_half_hash
-from .util import create_response_mode_response
 from .util import is_openid_scope
 from .util import validate_nonce
 from .util import validate_request_prompt

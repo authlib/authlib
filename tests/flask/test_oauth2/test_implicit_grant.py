@@ -142,3 +142,15 @@ def test_missing_scope_rejected(test_client, client, monkeypatch):
 
     rv = test_client.post(authorize_url, data={"user_id": "1"})
     assert "#error=invalid_scope" in rv.location
+
+
+def test_authorize_token_form_post(test_client):
+    rv = test_client.post(
+        authorize_url + "&response_mode=form_post",
+        data={"user_id": "1"},
+    )
+    assert rv.status_code == 200
+    assert rv.headers["Content-Type"].startswith("text/html")
+    assert b'method="post"' in rv.data
+    assert b"https://client.test/authorized" in rv.data
+    assert b'name="access_token"' in rv.data
