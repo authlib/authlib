@@ -12,8 +12,7 @@ server. Here is the way to protect your users' resources in Django::
     from authlib.integrations.django_oauth2 import ResourceProtector, BearerTokenValidator
     from django.http import JsonResponse
 
-    require_oauth = ResourceProtector()
-    require_oauth.register_token_validator(BearerTokenValidator(OAuth2Token))
+    require_oauth = ResourceProtector(token_validator=BearerTokenValidator(OAuth2Token))
 
     @require_oauth('profile')
     def user_profile(request):
