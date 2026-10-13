@@ -22,3 +22,4 @@ venv/
 uv.lock
 .env
 coverage.xml
+authlib.iml
