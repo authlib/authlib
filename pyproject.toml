@@ -52,6 +52,7 @@ dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.21",
     "pytest-env>=1.0",
+    "scriv[toml]>=1.8.0",
     "tox-uv >= 1.16.0",
 ]
 
@@ -93,6 +94,15 @@ version = {attr = "authlib.__version__"}
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["authlib", "authlib.*"]
+
+[tool.scriv]
+format = "rst"
+changelog = "docs/upgrades/changelog.rst"
+version = "literal: authlib/consts.py: version"
+categories = ["Breaking changes", "Added", "Changed", "Deprecated", "Fixed", "Security"]
+rst_header_chars = "-~"
+compact_fragments = true
+entry_title_template = "Version {{ version }} — {{ date.strftime('%Y-%m-%d') }}"
 
 [tool.ruff.lint]
 select = [

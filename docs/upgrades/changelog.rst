@@ -6,6 +6,8 @@ Changelog
 
 Here you can see the full list of changes between each Authlib release.
 
+.. scriv-insert-here
+
 Version 1.9.0
 -------------
 
@@ -472,6 +474,8 @@ Added ``ES256K`` algorithm for JWS and JWT.
 
 **Breaking Changes**: find how to solve the deprecate issues via https://git.io/JkY4f
 
+
+.. scriv-end-here
 
 Old Versions
 ------------

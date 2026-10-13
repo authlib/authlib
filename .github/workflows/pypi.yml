@@ -63,6 +63,13 @@ jobs:
       contents: write
 
     steps:
+    - name: build changelog link
+      id: changelog
+      run: |
+        version="${GITHUB_REF_NAME#v}"
+        echo "url=https://docs.authlib.org/en/stable/upgrades/changelog.html#changelog-${version//./-}" >> "$GITHUB_OUTPUT"
+
     - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
       with:
+        body: "Changelog: ${{ steps.changelog.outputs.url }}"
         generate_release_notes: true

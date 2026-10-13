@@ -44,6 +44,32 @@ accepted:
 * You can use ruff to check your code style.
 * Tests for the code changes are required.
 * Please add documentation for it, if it requires.
+* Add a changelog fragment if the change is visible to users.
+
+Add a Changelog Fragment
+------------------------
+
+Authlib uses `scriv <https://scriv.readthedocs.io>`_ to build the changelog.
+Each pull request adds a fragment file in the ``changelog.d`` directory. The
+fragments are collected into :doc:`../upgrades/changelog` at release time.
+
+1. Create a fragment::
+
+       uv run scriv create
+
+2. Open the new file in ``changelog.d``. Uncomment the category that fits the
+   change: ``Breaking changes``, ``Added``, ``Changed``, ``Deprecated``,
+   ``Fixed`` or ``Security``.
+3. Replace the example bullet with a short description of what users get.
+   Add the issue and pull request references::
+
+       Fixed
+       ~~~~~
+
+       - The token endpoint returns ``invalid_grant`` for expired assertions.
+         :issue:`123` :pr:`456`
+
+4. Commit the fragment with the rest of the pull request.
 
 .. note::
     By making a pull request, you consent that the copyright of your pull
