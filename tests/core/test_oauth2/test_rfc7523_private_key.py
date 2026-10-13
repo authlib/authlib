@@ -260,3 +260,17 @@ def test_sign_with_non_recommended_alg():
     decoded = jwt.decode(data, RSAKey.import_key(public_key), algorithms=["RS384"])
 
     assert decoded.header["alg"] == "RS384"
+
+
+def test_sign_with_custom_issued_at_and_expires_in():
+    fixed_iat = 123456789
+    jwt_signer = PrivateKeyJWT(issued_at=fixed_iat, expires_in=123)
+
+    decoded, pre_sign_time, iat, exp, jti = sign_and_decode(
+        jwt_signer,
+        "client_id_1",
+        "https://provider.test/oauth/access_token",
+    )
+
+    assert iat == fixed_iat
+    assert exp == fixed_iat + 123
