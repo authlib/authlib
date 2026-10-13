@@ -4,6 +4,7 @@ from authlib.oauth2.rfc7523 import JWTBearerGrant
 from ..base_client import OAuthError
 from ._compat import httpx2
 from .oauth2_client import OAuth2Auth
+from .utils import coerce_url
 from .utils import extract_client_kwargs
 
 USE_CLIENT_DEFAULT = httpx2.USE_CLIENT_DEFAULT
@@ -61,7 +62,7 @@ class AsyncAssertionClient(_AssertionClient, httpx2.AsyncClient):
                 await self.refresh_token()
 
             auth = self.token_auth
-        return await super().request(method, url, auth=auth, **kwargs)
+        return await super().request(method, coerce_url(url), auth=auth, **kwargs)
 
     async def _refresh_token(self, data):
         resp = await self.request(
@@ -120,4 +121,4 @@ class AssertionClient(_AssertionClient, httpx2.Client):
                 self.refresh_token()
 
             auth = self.token_auth
-        return super().request(method, url, auth=auth, **kwargs)
+        return super().request(method, coerce_url(url), auth=auth, **kwargs)
