@@ -47,13 +47,15 @@ def test_invalid_token(factory):
     resp = get_user_profile(request)
     assert resp.status_code == 401
     data = json.loads(resp.content)
-    assert data["error"] == "missing_authorization"
+    assert "error" not in data
+    assert resp["WWW-Authenticate"] == "Bearer"
 
     request = factory.get("/user", HTTP_AUTHORIZATION="invalid token")
     resp = get_user_profile(request)
     assert resp.status_code == 401
     data = json.loads(resp.content)
-    assert data["error"] == "unsupported_token_type"
+    assert "error" not in data
+    assert resp["WWW-Authenticate"] == "Bearer"
 
     request = factory.get("/user", HTTP_AUTHORIZATION="bearer token")
     resp = get_user_profile(request)
