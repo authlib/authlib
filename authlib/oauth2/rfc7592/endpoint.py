@@ -2,10 +2,10 @@ from joserfc.errors import JoseError
 
 from authlib.consts import default_json_headers
 
-from ..rfc6749 import AccessDeniedError
-from ..rfc6749 import InvalidClientError
 from ..rfc6749 import InvalidRequestError
+from ..rfc6749 import MissingAuthorizationError
 from ..rfc6749 import UnauthorizedClientError
+from ..rfc6750 import InvalidTokenError
 from ..rfc7591 import InvalidClientMetadataError
 from ..rfc7591.claims import ClientMetadataClaims
 
@@ -21,11 +21,16 @@ class ClientConfigurationEndpoint:
         return self.create_configuration_response(request)
 
     def create_configuration_response(self, request):
+        # Per RFC 6750 §3.1, a request without authentication information gets
+        # no error code.
+        if not request.headers.get("Authorization"):
+            raise MissingAuthorizationError()
+
         # This request is authenticated by the registration access token issued
         # to the client.
         token = self.authenticate_token(request)
         if not token:
-            raise AccessDeniedError()
+            raise InvalidTokenError()
 
         request.credential = token
 
@@ -35,14 +40,12 @@ class ClientConfigurationEndpoint:
             # with HTTP 401 Unauthorized and the registration access token used to
             # make this request SHOULD be immediately revoked.
             self.revoke_access_token(request, token)
-            raise InvalidClientError(
-                status_code=401, description="The client does not exist on this server."
-            )
+            raise InvalidTokenError()
 
         # The registration access token is only valid for the client it was
         # issued to.
         if not token.check_client(client):
-            raise AccessDeniedError()
+            raise InvalidTokenError()
 
         if not self.check_permission(client, request):
             # If the client does not have permission to read its record, the server
@@ -123,7 +126,6 @@ class ClientConfigurationEndpoint:
             try:
                 claims.validate()
             except JoseError as error:
-                print(error)
                 raise InvalidClientMetadataError(error.description) from error
 
             client_metadata.update(**claims.get_registered_claims())
@@ -158,11 +160,13 @@ class ClientConfigurationEndpoint:
                 auth = request.headers.get("Authorization")
                 return get_token_by_auth(auth)
 
-        The token MUST implement
-        :meth:`~authlib.oauth2.rfc6749.TokenMixin.check_client`. Requests
-        are denied when the token was not issued to the requested client.
+        The token only needs a ``check_client(client)`` method, as in
+        :meth:`~authlib.oauth2.rfc6749.TokenMixin.check_client`. The other
+        methods of :class:`~authlib.oauth2.rfc6749.TokenMixin` are not used.
+        Requests are denied with ``invalid_token`` when the token was not
+        issued to the requested client.
 
-        :return: token instance
+        :return: token instance, or ``None`` if the token is not valid
         """
         raise NotImplementedError()
 
@@ -185,13 +189,18 @@ class ClientConfigurationEndpoint:
         raise NotImplementedError()
 
     def revoke_access_token(self, token, request):
-        """Revoke a token access in case an invalid client has been requested.
-        Developers MUST implement this method in subclass::
+        """Revoke the registration access token when the requested client
+        does not exist. Developers MUST implement this method in subclass::
 
             def revoke_access_token(self, token, request):
-                token.revoked = True
-                token.save()
+                if Client.get(client_id=token.client_id) is None:
+                    token.revoked = True
+                    token.save()
 
+        Per :rfc:`7592#section-2.1`, the token SHOULD be revoked. This example
+        only revokes it when its own client no longer exists, as described in
+        :rfc:`7592#section-5`. A valid token sent to the URL of another client
+        stays valid.
         """
         raise NotImplementedError()
 
@@ -201,6 +210,11 @@ class ClientConfigurationEndpoint:
 
             def check_permission(self, client, request):
                 return client.editable
+
+        This method only checks the permissions of the application. The
+        endpoint already checks that the registration access token belongs to
+        the client, with ``token.check_client``, before calling it.
+        If it returns ``False``, the endpoint responds with HTTP 403.
 
         :return: boolean
         """

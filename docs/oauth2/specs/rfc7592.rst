@@ -21,8 +21,18 @@ Client Configuration Endpoint
 The endpoint URL identifies the client, for instance
 ``/oauth/register/<client_id>``. The registration access token returned by the
 :ref:`specs/rfc7591` registration endpoint is only valid for this client. The
-endpoint calls :meth:`~authlib.oauth2.rfc6749.TokenMixin.check_client` on the
-token, and denies the request when the token was issued to another client.
+endpoint calls ``check_client`` on the token, as in
+:meth:`~authlib.oauth2.rfc6749.TokenMixin.check_client`. This is the only
+method the token needs.
+
+Errors follow :rfc:`7592#section-2.1` and :rfc:`6750#section-3`:
+
+- a request without ``Authorization`` header gets an HTTP 401 response with a
+  ``WWW-Authenticate: Bearer`` header and no error code;
+- an unknown token, a token issued to another client, or a client that does
+  not exist gets an HTTP 401 ``invalid_token`` error;
+- a client without permission, as decided by ``check_permission``, gets an
+  HTTP 403 ``unauthorized_client`` error.
 
 Before register the endpoint, developers MUST implement the missing methods::
 
@@ -49,8 +59,10 @@ Before register the endpoint, developers MUST implement the missing methods::
             return Client.get(client_id=client_id)
 
         def revoke_access_token(self, token, request):
-            token.revoked = True
-            token.save()
+            # only revoke the token if its own client no longer exists
+            if Client.get(client_id=token.client_id) is None:
+                token.revoked = True
+                token.save()
 
         def check_permission(self, client, request):
             return client.editable

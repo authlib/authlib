@@ -1,0 +1,9 @@
+Breaking changes
+~~~~~~~~~~~~~~~~
+
+- The RFC 7592 client configuration endpoint responds with HTTP 401 for token
+  errors, per :rfc:`7592#section-2.1` and :rfc:`6750#section-3`. A request
+  without ``Authorization`` header gets no error code. An unknown token, a
+  token issued to another client, or a client that does not exist gets an
+  ``invalid_token`` error. It used to respond with HTTP 400 ``access_denied``,
+  or HTTP 401 ``invalid_client`` when the client did not exist.
