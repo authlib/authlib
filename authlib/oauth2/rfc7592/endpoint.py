@@ -39,7 +39,7 @@ class ClientConfigurationEndpoint:
             # If the client does not exist on this server, the server MUST respond
             # with HTTP 401 Unauthorized and the registration access token used to
             # make this request SHOULD be immediately revoked.
-            self.revoke_access_token(request, token)
+            self.revoke_access_token(token=token, request=request)
             raise InvalidTokenError()
 
         # The registration access token is only valid for the client it was

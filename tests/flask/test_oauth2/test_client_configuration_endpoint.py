@@ -29,7 +29,7 @@ class ClientConfigurationEndpoint(_ClientConfigurationEndpoint):
         client_id = request.uri.split("/")[-1]
         return Client.query.filter_by(client_id=client_id).first()
 
-    def revoke_access_token(self, request, token):
+    def revoke_access_token(self, token, request):
         token.revoked = True
         db.session.add(token)
         db.session.commit()
@@ -132,6 +132,7 @@ def test_read_invalid_client(test_client, token):
     resp = json.loads(rv.data)
     assert rv.status_code == 401
     assert resp["error"] == "invalid_token"
+    assert token.revoked
 
 
 def test_read_unauthorized_client(test_client, token):
@@ -546,3 +547,27 @@ def test_delete_token_of_another_client(test_client, other_client, token):
     assert rv.status_code == 401
     assert resp["error"] == "invalid_token"
     assert Client.query.filter_by(client_id="other-client-id").first()
+
+
+def test_revoke_access_token_legacy_signature(test_client, app, server, token):
+    """Subclasses using the (request, token) argument order still work."""
+
+    class LegacyClientConfigurationEndpoint(ClientConfigurationEndpoint):
+        ENDPOINT_NAME = "legacy_client_configuration"
+
+        def revoke_access_token(self, request, token):
+            token.revoked = True
+
+        def get_server_metadata(self):
+            return {}
+
+    server.register_endpoint(LegacyClientConfigurationEndpoint)
+
+    @app.route("/legacy_configure_client/<client_id>", methods=["GET"])
+    def legacy_configure_client(client_id):
+        return server.create_endpoint_response("legacy_client_configuration")
+
+    headers = {"Authorization": f"bearer {token.access_token}"}
+    rv = test_client.get("/legacy_configure_client/invalid_client_id", headers=headers)
+    assert rv.status_code == 401
+    assert token.revoked
