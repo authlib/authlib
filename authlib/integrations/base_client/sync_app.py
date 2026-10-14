@@ -228,6 +228,25 @@ class OAuth2Base:
     def _on_update_token(self, token, refresh_token=None, access_token=None):
         raise NotImplementedError()
 
+    def _validate_metadata_origin(self, metadata):
+        # OIDC Discovery 4.3 / RFC8414 3.3: issuer is required and must match
+        # the origin the metadata was fetched from. scheme and netloc are
+        # compared verbatim, without case folding, default ports or other
+        # normalization that a different URL parser could disagree with.
+        # urlparse silently drops tabs and newlines, so reject them up front
+        issuer = metadata.get("issuer")
+        if (
+            not isinstance(issuer, str)
+            or not issuer.isprintable()
+            or any(ch.isspace() for ch in issuer)
+            or urlparse.urlparse(issuer)[:2]
+            != urlparse.urlparse(self._server_metadata_url)[:2]
+        ):
+            raise ValueError(
+                f'"issuer" {issuer!r} does not match the origin of '
+                f"server_metadata_url {self._server_metadata_url!r}"
+            )
+
     def _get_session(self):
         session = self.client_cls(**self.client_kwargs)
         session.headers["User-Agent"] = self._user_agent
@@ -332,6 +351,7 @@ class OAuth2Mixin(_RequestMixin, OAuth2Base):
                 resp.raise_for_status()
                 metadata = resp.json()
 
+            self._validate_metadata_origin(metadata)
             metadata["_loaded_at"] = time.time()
             self.server_metadata.update(metadata)
         return self.server_metadata

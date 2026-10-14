@@ -81,7 +81,8 @@ class AsyncOAuth2Mixin(OAuth2Base):
                 )
                 resp.raise_for_status()
                 metadata = resp.json()
-                metadata["_loaded_at"] = time.time()
+            self._validate_metadata_origin(metadata)
+            metadata["_loaded_at"] = time.time()
             self.server_metadata.update(metadata)
         return self.server_metadata
 
