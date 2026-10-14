@@ -1,0 +1,8 @@
+
+Added
+~~~~~
+
+- Automatically fetch initial OAuth2 access tokens for the
+  ``client_credentials`` grant in Requests and synchronous
+  and asynchronous HTTPX clients when a token endpoint is
+  configured (issue #531, PR #946).
