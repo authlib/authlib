@@ -38,6 +38,9 @@ class IntrospectionEndpoint(TokenEndpoint):
             hint = None
 
         token = self.query_token(request.form["token"], hint)
+        if not token and hint is not None:
+            token = self.query_token(request.form["token"], None)
+
         if token and self.check_permission(token, client, request):
             return token
 
@@ -102,6 +105,10 @@ class IntrospectionEndpoint(TokenEndpoint):
                     if not tok:
                         tok = Token.query_by_refresh_token(token_string)
                 return tok
+
+        ``token_type_hint`` is ``None`` when the request has no hint or an
+        unknown one. If no token is found with the hint, the endpoint calls
+        this method again with ``None``.
         """
         raise NotImplementedError()
 

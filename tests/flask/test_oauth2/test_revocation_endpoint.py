@@ -114,6 +114,22 @@ def test_revoke_token_without_hint(test_client, token):
         headers=headers,
     )
     assert rv.status_code == 200
+    assert token.is_revoked()
+    assert token.is_refresh_token_active()
+
+
+def test_revoke_refresh_token_without_hint(test_client, token):
+    """Per RFC 7009 §2.1, revoking a refresh token also revokes the access
+    token."""
+    headers = create_basic_header("client-id", "client-secret")
+    rv = test_client.post(
+        "/oauth/revoke",
+        data={"token": token.refresh_token},
+        headers=headers,
+    )
+    assert rv.status_code == 200
+    assert token.is_revoked()
+    assert not token.is_refresh_token_active()
 
 
 def test_revoke_token_bound_to_client(test_client, token):
@@ -162,3 +178,15 @@ def test_revoke_with_unknown_hint(test_client, client, token):
     )
     assert rv.status_code == 200
     assert token.is_revoked()
+
+
+def test_revoke_with_wrong_hint(test_client, token):
+    """Per RFC 7009 §2.1, the search is extended when the hint does not match."""
+    headers = create_basic_header("client-id", "client-secret")
+    rv = test_client.post(
+        "/oauth/revoke",
+        data={"token": token.refresh_token, "token_type_hint": "access_token"},
+        headers=headers,
+    )
+    assert rv.status_code == 200
+    assert not token.is_refresh_token_active()

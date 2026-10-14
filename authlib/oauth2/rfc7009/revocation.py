@@ -31,6 +31,11 @@ class RevocationEndpoint(TokenEndpoint):
             hint = None
 
         token = self.query_token(request.form["token"], hint)
+        # Per RFC 7009 §2.1, the search is extended to all supported token
+        # types when the token is not found with the hint.
+        if not token and hint is not None:
+            token = self.query_token(request.form["token"], None)
+
         if token and not token.check_client(client):
             raise InvalidGrantError()
         return token
@@ -81,6 +86,10 @@ class RevocationEndpoint(TokenEndpoint):
                     return Token.query_by_refresh_token(token_string)
                 return Token.query_by_access_token(token_string) or \
                     Token.query_by_refresh_token(token_string)
+
+        ``token_type_hint`` is ``None`` when the request has no hint or an
+        unknown one. If no token is found with the hint, the endpoint calls
+        this method again with ``None``.
         """
         raise NotImplementedError()
 
@@ -96,12 +105,13 @@ class RevocationEndpoint(TokenEndpoint):
         It would be secure to mark a token as revoked::
 
             def revoke_token(self, token, request):
-                hint = request.form.get("token_type_hint")
-                if hint == "access_token":
-                    token.access_token_revoked = True
-                else:
-                    token.access_token_revoked = True
+                token.access_token_revoked = True
+                if request.form["token"] != token.access_token:
                     token.refresh_token_revoked = True
                 token.save()
+
+        Per :rfc:`7009#section-2.1`, revoking a refresh token should also
+        invalidate the access token. The hint may not match the presented
+        token, so check the presented token instead of the hint.
         """
         raise NotImplementedError()
