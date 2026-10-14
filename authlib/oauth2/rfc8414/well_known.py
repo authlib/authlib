@@ -2,9 +2,7 @@ from authlib.common.urls import urlparse
 
 
 def get_well_known_url(issuer, external=False, suffix="oauth-authorization-server"):
-    """Get well-known URI with issuer via `Section 3.1`_.
-
-    .. _`Section 3.1`: https://tools.ietf.org/html/rfc8414#section-3.1
+    """Get well-known URI with issuer via :rfc:`8414#section-3.1`.
 
     :param issuer: URL of the issuer
     :param external: return full external url or not

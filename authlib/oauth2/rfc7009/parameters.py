@@ -10,7 +10,7 @@ def prepare_revoke_token_request(token, token_type_hint=None, body=None, headers
     :param headers: current request headers.
     :return: tuple of (body, headers)
 
-    https://tools.ietf.org/html/rfc7009#section-2.1
+    :rfc:`7009#section-2.1`
     """
     params = [("token", token)]
     if token_type_hint:

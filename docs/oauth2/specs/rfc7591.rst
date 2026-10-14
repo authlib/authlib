@@ -9,14 +9,12 @@ RFC7591: OAuth 2.0 Dynamic Client Registration Protocol
 
 .. module:: authlib.oauth2.rfc7591
 
-This section contains the generic implementation of RFC7591_. OAuth 2.0 Dynamic
+This section contains the generic implementation of :rfc:`7591`. OAuth 2.0 Dynamic
 Client Registration Protocol allows developers creating OAuth client via API
 through Authorization Server.
 
 To integrate with Authlib :ref:`flask_oauth2_server` or :ref:`django_oauth2_server`,
 developers MUST implement the missing methods of :class:`ClientRegistrationEndpoint`.
-
-.. _RFC7591: https://tools.ietf.org/html/rfc7591
 
 Client Registration Endpoint
 ----------------------------

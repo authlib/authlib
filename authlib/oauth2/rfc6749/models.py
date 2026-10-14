@@ -6,15 +6,13 @@ This module defines how to construct Client, AuthorizationCode and Token.
 
 
 class ClientMixin:
-    """Implementation of OAuth 2 Client described in `Section 2`_ with
+    """Implementation of OAuth 2 Client described in :rfc:`6749#section-2` with
     some methods to help validation. A client has at least these information:
 
     * client_id: A string represents client identifier.
     * client_secret: A string represents client password.
     * token_endpoint_auth_method: A way to authenticate client at token
                                   endpoint.
-
-    .. _`Section 2`: https://tools.ietf.org/html/rfc6749#section-2
     """
 
     def get_client_id(self):
@@ -84,7 +82,7 @@ class ClientMixin:
 
     def check_endpoint_auth_method(self, method, endpoint):
         """Check if client support the given method for the given endpoint.
-        There is a ``token_endpoint_auth_method`` defined via `RFC7591`_.
+        There is a ``token_endpoint_auth_method`` defined via :rfc:`7591`.
         Developers MAY re-implement this method with::
 
             def check_endpoint_auth_method(self, method, endpoint):
@@ -103,8 +101,6 @@ class ClientMixin:
 
         *  "client_secret_basic": The client uses HTTP Basic as defined in
             OAuth 2.0
-
-        .. _`RFC7591`: https://tools.ietf.org/html/rfc7591
         """
         raise NotImplementedError()
 

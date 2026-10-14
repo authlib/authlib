@@ -5,7 +5,7 @@ from authlib.common.urls import urlparse
 
 
 class AuthorizationServerMetadata(dict):
-    """Define Authorization Server Metadata via `Section 2`_ in RFC8414_.
+    """Define Authorization Server Metadata per :rfc:`8414#section-2`.
 
     The :meth:`validate` method can compose extension classes via the
     ``metadata_classes`` parameter::
@@ -14,9 +14,6 @@ class AuthorizationServerMetadata(dict):
 
         metadata = rfc8414.AuthorizationServerMetadata(data)
         metadata.validate(metadata_classes=[rfc9101.AuthorizationServerMetadata])
-
-    .. _RFC8414: https://tools.ietf.org/html/rfc8414
-    .. _`Section 2`: https://tools.ietf.org/html/rfc8414#section-2
     """
 
     REGISTRY_KEYS = [

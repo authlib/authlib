@@ -1,13 +1,13 @@
 """Tests for IDJAGGrant (Identity Assertion JWT Authorization Grant)."""
 
 import time
+from unittest.mock import Mock
 
 import pytest
 from joserfc import jwt
 from joserfc.jwk import RSAKey
 
 from authlib.oauth2.drafts import IDJAGGrant
-from authlib.oauth2.rfc6749 import InvalidClientError
 from authlib.oauth2.rfc6749 import InvalidGrantError
 from authlib.oauth2.rfc6749 import InvalidRequestError
 from authlib.oauth2.rfc6749 import UnauthorizedClientError
@@ -32,6 +32,9 @@ class _FakeClient:
     def __init__(self, client_id, allowed_grant_types=None):
         self.client_id = client_id
         self._grant_types = allowed_grant_types or [IDJAGGrant.GRANT_TYPE]
+
+    def get_client_id(self):
+        return self.client_id
 
     def check_grant_type(self, grant_type):
         return grant_type in self._grant_types
@@ -72,9 +75,6 @@ class _TestIDJAGGrant(IDJAGGrant):
             raise InvalidGrantError(description="Untrusted issuer")
         return self._issuer_key
 
-    def resolve_client_by_id(self, client_id):
-        return self._clients.get(client_id)
-
     def authenticate_user(self, subject):
         return self._users.get(subject)
 
@@ -110,7 +110,8 @@ def _grant(form, scope=None):
     req = _FakeRequest(form, scope=scope)
     g = _TestIDJAGGrant.__new__(_TestIDJAGGrant)
     g.request = req
-    g.server = None
+    g.server = Mock()
+    g.server.authenticate_client.return_value = _TestIDJAGGrant._clients["app-456"]
     return g
 
 
@@ -341,17 +342,17 @@ def test_untrusted_issuer(rsa_private):
 # === Client ===
 
 
-def test_unknown_client(rsa_private):
+def test_unknown_client_claim(rsa_private):
     assertion = _sign(rsa_private, client_id="unknown")
     g = _grant({"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": assertion})
-    with pytest.raises(InvalidClientError):
+    with pytest.raises(InvalidGrantError, match="client_id"):
         g.validate_token_request()
 
 
 def test_client_id_mismatch(rsa_private):
     assertion = _sign(rsa_private)
     g = _grant({"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": assertion})
-    g.request.client = _FakeClient("other-client")
+    g.server.authenticate_client.return_value = _FakeClient("other-client")
     with pytest.raises(InvalidGrantError, match="does not match"):
         g.validate_token_request()
 
@@ -532,3 +533,15 @@ def test_extract_assertion_rejects_malformed_compact():
     g = _grant({"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": "not.a.jwt"})
     with pytest.raises(InvalidGrantError, match="Invalid JWT assertion"):
         g.validate_token_request()
+
+
+def test_authenticated_client_controls_token_permissions(rsa_private):
+    assertion = _sign(rsa_private)
+    grant = _grant({"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": assertion})
+    # Grant permissions come from the client verified by authentication.
+    grant.server.authenticate_client.return_value = _FakeClient(
+        "app-456",
+        allowed_grant_types=["password"],
+    )
+    with pytest.raises(UnauthorizedClientError):
+        grant.validate_token_request()

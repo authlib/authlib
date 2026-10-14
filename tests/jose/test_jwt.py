@@ -51,6 +51,33 @@ def test_reject_pem_key_as_hmac_secret(prefix, key_format):
         jwt.decode(forged, key)
 
 
+@pytest.mark.parametrize("alg", ["HS256", "HS384", "HS512"])
+@pytest.mark.parametrize(
+    "key",
+    [
+        b"",
+        "",
+        {"kty": "oct", "k": ""},
+        OctKey.import_key({"kty": "oct", "k": ""}),
+        lambda header, payload: "",
+    ],
+    ids=["bytes", "str", "jwk", "key", "callable"],
+)
+def test_reject_empty_hmac_key(alg, key):
+    hash_alg = getattr(hashlib, f"sha{alg[2:]}")
+    signing_input = (
+        json_b64encode({"alg": alg}) + b"." + json_b64encode({"sub": "attacker"})
+    )
+    signature = hmac.new(b"", signing_input, hash_alg).digest()
+    forged = signing_input + b"." + urlsafe_b64encode(signature)
+
+    with pytest.raises(ValueError, match="must not be empty"):
+        jwt.decode(forged, key)
+
+    with pytest.raises(ValueError, match="must not be empty"):
+        jwt.encode({"alg": alg}, {"sub": "alice"}, key)
+
+
 def test_encode_sensitive_data():
     # check=False won't raise error
     jwt.encode({"alg": "HS256"}, {"password": ""}, "k", check=False)

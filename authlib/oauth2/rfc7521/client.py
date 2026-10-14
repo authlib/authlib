@@ -5,9 +5,7 @@ from authlib.oauth2.client import _load_token_response
 
 class AssertionClient:
     """Constructs a new Assertion Framework for OAuth 2.0 Authorization Grants
-    per RFC7521_.
-
-    .. _RFC7521: https://tools.ietf.org/html/rfc7521
+    per :rfc:`7521`.
     """
 
     DEFAULT_GRANT_TYPE = None
@@ -64,9 +62,7 @@ class AssertionClient:
 
     def refresh_token(self):
         """Using Assertions as Authorization Grants to refresh token as
-        described in `Section 4.1`_.
-
-        .. _`Section 4.1`: https://tools.ietf.org/html/rfc7521#section-4.1
+        described in :rfc:`7521#section-4.1`.
         """
         generate_assertion = self.ASSERTION_METHODS[self.grant_type]
         assertion = generate_assertion(

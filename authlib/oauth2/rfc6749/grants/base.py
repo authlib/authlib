@@ -133,9 +133,7 @@ class AuthorizationEndpointMixin:
     @staticmethod
     def validate_no_multiple_request_parameter(request: OAuth2Request):
         """For the Authorization Endpoint, request and response parameters MUST NOT be included
-        more than once. Per `Section 3.1`_.
-
-        .. _`Section 3.1`: https://tools.ietf.org/html/rfc6749#section-3.1
+        more than once. Per :rfc:`6749#section-3.1`.
         """
         datalist = request.payload.datalist
         parameters = ["response_type", "client_id", "redirect_uri", "scope", "state"]

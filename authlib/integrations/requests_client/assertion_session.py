@@ -17,9 +17,7 @@ class AssertionAuth(OAuth2Auth):
 
 class AssertionSession(AssertionClient, Session):
     """Constructs a new Assertion Framework for OAuth 2.0 Authorization Grants
-    per RFC7521_.
-
-    .. _RFC7521: https://tools.ietf.org/html/rfc7521
+    per :rfc:`7521`.
     """
 
     token_auth_class = AssertionAuth

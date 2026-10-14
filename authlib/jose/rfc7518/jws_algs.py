@@ -1,9 +1,7 @@
 """authlib.jose.rfc7518.
 ~~~~~~~~~~~~~~~~~~~~
 
-"alg" (Algorithm) Header Parameter Values for JWS per `Section 3`_.
-
-.. _`Section 3`: https://tools.ietf.org/html/rfc7518#section-3
+"alg" (Algorithm) Header Parameter Values for JWS per :rfc:`7518#section-3`.
 """
 
 import hashlib

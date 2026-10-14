@@ -108,6 +108,54 @@ Here is the example for GitHub login::
         # do something with the token and profile
         return '...'
 
+The two routes take part in this flow:
+
+.. mermaid::
+
+    sequenceDiagram
+        autonumber
+        participant User as User's browser<br/>(User Agent)
+        participant App as Your website<br/>(Client)
+        participant AS as GitHub<br/>(Authorization Server)
+        participant API as GitHub API<br/>(Resource Server)
+
+        User->>App: GET /login
+        Note over App: authorize_redirect()
+        App-->>User: 302 Found → /login/oauth/authorize
+        User->>AS: GET /login/oauth/authorize?state=…
+        Note over User,AS: The user logs in and approves
+        AS-->>User: 302 Found → /authorize?code=…&state=…
+        User->>App: GET /authorize?code=…&state=…
+        Note over App: authorize_access_token()
+        App->>AS: POST /login/oauth/access_token (code)
+        AS-->>App: 200 OK + access token
+        Note over App: oauth.github.get('user')
+        App->>API: GET /user (bearer token)
+        API-->>App: 200 OK + profile
+        App-->>User: 200 OK
+
+1. The user clicks a login button. The browser calls the ``login`` route.
+2. ``authorize_redirect()`` generates a ``state`` and saves it in the session,
+   with the ``redirect_uri``. It then redirects the browser to
+   ``authorize_url``. With PKCE, it also saves a ``code_verifier``. With the
+   ``openid`` scope, it also saves a ``nonce``.
+3. The browser opens the GitHub authorization page. The user logs in and
+   approves the access.
+4. GitHub redirects the browser to ``redirect_uri``, with a ``code`` and the
+   ``state``.
+5. The browser calls the ``authorize`` route.
+6. ``authorize_access_token()`` checks the ``state`` against the session. It
+   raises ``MismatchingStateError`` if they do not match. It then sends the
+   ``code`` to ``access_token_url``, with the client credentials.
+7. GitHub returns the access token. With the ``openid`` scope,
+   ``authorize_access_token()`` also validates the ID Token.
+8. ``oauth.github.get('user', token=token)`` calls the API. The ``user`` path
+   is relative to ``api_base_url``.
+9. The GitHub API returns the user profile.
+10. The ``authorize`` route returns its response to the browser.
+
+The ``/login`` path is an example.
+
 After user confirmed on GitHub authorization page, it will redirect
 back to your website ``authorize``. In this route, you can get your
 user's GitHub profile information, you can store the user information

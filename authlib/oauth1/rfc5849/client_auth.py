@@ -78,12 +78,10 @@ class ClientAuth:
     def get_oauth_signature(self, method, uri, headers, body):
         """Get an OAuth signature to be used in signing a request.
 
-        To satisfy `section 3.4.1.2`_ item 2, if the request argument's
+        To satisfy :rfc:`5849#section-3.4.1.2` item 2, if the request argument's
         headers dict attribute contains a Host item, its value will
         replace any netloc part of the request argument's uri attribute
         value.
-
-        .. _`section 3.4.1.2`: https://tools.ietf.org/html/rfc5849#section-3.4.1.2
         """
         sign = self.SIGNATURE_METHODS.get(self.signature_method)
         if not sign:

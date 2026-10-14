@@ -347,7 +347,7 @@ class OAuth2Client:
         headers=None,
         **kwargs,
     ):
-        """Revoke token method defined via `RFC7009`_.
+        """Revoke token method defined via :rfc:`7009`.
 
         :param url: Revoke Token endpoint, must be HTTPS.
         :param token: The token to be revoked.
@@ -358,8 +358,6 @@ class OAuth2Client:
         :param auth: An auth tuple or method as accepted by requests.
         :param headers: Dict to default request headers with.
         :return: Revocation Response
-
-        .. _`RFC7009`: https://tools.ietf.org/html/rfc7009
         """
         if auth is None:
             auth = self.client_auth(self.revocation_endpoint_auth_method)
@@ -384,7 +382,7 @@ class OAuth2Client:
         headers=None,
         **kwargs,
     ):
-        """Implementation of OAuth 2.0 Token Introspection defined via `RFC7662`_.
+        """Implementation of OAuth 2.0 Token Introspection defined via :rfc:`7662`.
 
         :param url: Introspection Endpoint, must be HTTPS.
         :param token: The token to be introspected.
@@ -395,8 +393,6 @@ class OAuth2Client:
         :param auth: An auth tuple or method as accepted by requests.
         :param headers: Dict to default request headers with.
         :return: Introspection Response
-
-        .. _`RFC7662`: https://tools.ietf.org/html/rfc7662
         """
         if auth is None:
             auth = self.client_auth(self.token_endpoint_auth_method)
