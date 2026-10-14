@@ -46,7 +46,7 @@ def test_missing_token(test_client):
     """A request without token gets the resource_metadata URL in WWW-Authenticate."""
     rv = test_client.get("/user")
     assert rv.status_code == 401
-    assert rv.json["error"] == "missing_authorization"
+    assert "error" not in rv.json
     assert rv.headers["Content-Type"] == "application/json"
     assert (
         f'resource_metadata="{RESOURCE_METADATA_URL}"' in rv.headers["WWW-Authenticate"]
