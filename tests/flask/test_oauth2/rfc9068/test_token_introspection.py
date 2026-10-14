@@ -2,9 +2,10 @@ import time
 
 import pytest
 from flask import json
+from joserfc import jwt
+from joserfc.jwk import KeySet
 
 from authlib.common.security import generate_token
-from authlib.jose import jwt
 from authlib.oauth2.rfc6749.grants import (
     AuthorizationCodeGrant as _AuthorizationCodeGrant,
 )
@@ -24,7 +25,7 @@ resource_server = "resource-server-id"
 
 @pytest.fixture
 def jwks():
-    return read_file_path("jwks_private.json")
+    return KeySet.import_key_set(read_file_path("jwks_private.json"))
 
 
 @pytest.fixture(autouse=True)
@@ -114,14 +115,11 @@ def claims(client, user):
 
 
 def create_access_token(claims, jwks, alg="RS256", typ="at+jwt"):
-    header = {"alg": alg, "typ": typ}
-    access_token = jwt.encode(
-        header,
+    return jwt.encode(
+        {"alg": alg, "typ": typ},
         claims,
         key=jwks,
-        check=False,
     )
-    return access_token.decode()
 
 
 @pytest.fixture

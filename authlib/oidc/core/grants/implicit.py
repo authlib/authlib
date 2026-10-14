@@ -1,9 +1,9 @@
 import logging
-import warnings
 
 from joserfc import jwt
 
 from authlib._joserfc_helpers import import_any_key
+from authlib.deprecate import deprecate
 from authlib.oauth2.rfc6749 import AccessDeniedError
 from authlib.oauth2.rfc6749 import ImplicitGrant
 from authlib.oauth2.rfc6749 import InvalidScopeError
@@ -173,11 +173,9 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
     def _compatible_resolve_jwt_config(self, grant, client):
         if not hasattr(self, "get_jwt_config"):
             return {}
-        warnings.warn(
+        deprecate(
             "get_jwt_config(self, client) is deprecated and will be removed in version 1.8. "
-            "Use resolve_client_private_key, get_client_claims, get_client_algorithm instead.",
-            DeprecationWarning,
-            stacklevel=2,
+            "Use resolve_client_private_key, get_client_claims, get_client_algorithm instead."
         )
         try:
             config = self.get_jwt_config(client)

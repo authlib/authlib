@@ -7,12 +7,17 @@ from joserfc import jwt
 from joserfc.jwk import KeySet
 from joserfc.jwk import OctKey
 
+from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.oauth2.rfc7523 import JWTBearerGrant as _JWTBearerGrant
 from authlib.oauth2.rfc7523 import JWTBearerTokenGenerator
+from tests.util import HMAC_SECRET
 from tests.util import read_file_path
 
 from .models import Client
 from .models import db
+
+foo_key = OctKey.import_key(HMAC_SECRET, {"kid": "1"})
+bar_key = OctKey.import_key("another-hmac-secret-of-32-bytes!", {"kid": "2"})
 
 
 class JWTBearerGrant(_JWTBearerGrant):
@@ -23,12 +28,7 @@ class JWTBearerGrant(_JWTBearerGrant):
         return Client.query.filter_by(client_id=issuer).first()
 
     def resolve_client_public_key(self, client):
-        return KeySet(
-            [
-                OctKey.import_key("foo", {"kid": "1"}),
-                OctKey.import_key("bar", {"kid": "2"}),
-            ]
-        )
+        return KeySet([foo_key, bar_key])
 
     def authenticate_user(self, subject):
         return None
@@ -68,7 +68,7 @@ def test_missing_assertion(test_client):
 
 def test_invalid_assertion(test_client):
     assertion = JWTBearerGrant.sign(
-        "foo",
+        foo_key,
         issuer="client-id",
         audience="https://provider.test/token",
         subject="none",
@@ -84,7 +84,7 @@ def test_invalid_assertion(test_client):
 
 def test_authorize_token(test_client):
     assertion = JWTBearerGrant.sign(
-        "foo",
+        foo_key,
         issuer="client-id",
         audience="https://provider.test/token",
         subject=None,
@@ -110,7 +110,7 @@ def test_unauthorized_client(test_client, client):
     db.session.commit()
 
     assertion = JWTBearerGrant.sign(
-        "bar",
+        bar_key,
         issuer="client-id",
         audience="https://provider.test/token",
         subject=None,
@@ -129,7 +129,7 @@ def test_token_generator(test_client, app, server):
     app.config.update({"OAUTH2_ACCESS_TOKEN_GENERATOR": m})
     server.load_config(app.config)
     assertion = JWTBearerGrant.sign(
-        "foo",
+        foo_key,
         issuer="client-id",
         audience="https://provider.test/token",
         subject=None,
@@ -145,13 +145,13 @@ def test_token_generator(test_client, app, server):
 
 
 def test_jwt_bearer_token_generator(test_client, server):
-    private_key = read_file_path("jwks_private.json")
+    private_key = KeySet.import_key_set(read_file_path("jwks_private.json"))
     server.register_token_generator(
         JWTBearerGrant.GRANT_TYPE,
         JWTBearerTokenGenerator(private_key),
     )
     assertion = JWTBearerGrant.sign(
-        "foo",
+        foo_key,
         issuer="client-id",
         audience="https://provider.test/token",
         subject=None,
@@ -166,12 +166,40 @@ def test_jwt_bearer_token_generator(test_client, server):
     assert resp["access_token"].count(".") == 2
 
 
+def test_jwt_bearer_token_generator_jwks_dict(client):
+    """A JWKS dict is still accepted as the generator key but deprecated."""
+    with pytest.warns(AuthlibDeprecationWarning, match="KeySet.import_key_set"):
+        generator = JWTBearerTokenGenerator(read_file_path("jwks_private.json"))
+    token = generator.generate(JWTBearerGrant.GRANT_TYPE, client)
+    assert token["access_token"].count(".") == 2
+
+
+@pytest.mark.filterwarnings(
+    "ignore:Using implicit key type is not recommended:joserfc.errors.SecurityWarning"
+)
+def test_sign_with_raw_key(test_client):
+    """A raw secret is still accepted as the signing key but deprecated."""
+    with pytest.warns(AuthlibDeprecationWarning, match="Please use OctKey"):
+        assertion = JWTBearerGrant.sign(
+            HMAC_SECRET,
+            issuer="client-id",
+            audience="https://provider.test/token",
+            header={"alg": "HS256", "kid": "1"},
+        )
+    rv = test_client.post(
+        "/oauth/token",
+        data={"grant_type": JWTBearerGrant.GRANT_TYPE, "assertion": assertion},
+    )
+    assert "access_token" in json.loads(rv.data)
+
+
 def test_jwt_bearer_token_generator_casts_sub_to_string(client, user):
     """The generated JWT ``sub`` must be a string (RFC 7519 Section 4.1.2), even
     when ``get_user_id()`` returns a non-string such as an integer primary key.
     ``joserfc`` 1.7.3 rejects non-string ``sub`` claims."""
     generator = JWTBearerTokenGenerator(
-        read_file_path("jwks_private.json"), issuer="https://provider.test"
+        KeySet.import_key_set(read_file_path("jwks_private.json")),
+        issuer="https://provider.test",
     )
     token = generator.generate(
         JWTBearerGrant.GRANT_TYPE, client, user=user, scope="profile"
@@ -187,7 +215,7 @@ def test_invalid_payload_assertion(test_client):
     assertion = jws.serialize_compact(
         {"alg": "HS256", "kid": "1"},
         "text",
-        OctKey.import_key("foo"),
+        foo_key,
     )
     rv = test_client.post(
         "/oauth/token",
@@ -201,7 +229,7 @@ def test_missing_assertion_claims(test_client):
     assertion = jwt.encode(
         {"alg": "HS256", "kid": "1"},
         {"iss": "client-id"},
-        OctKey.import_key("foo"),
+        foo_key,
     )
     rv = test_client.post(
         "/oauth/token",
@@ -220,7 +248,7 @@ def test_invalid_audience(test_client, audience):
     does not contain its own identity as the intended audience."""
 
     assertion = JWTBearerGrant.sign(
-        "foo",
+        foo_key,
         issuer="client-id",
         audience=audience,
         subject=None,
@@ -240,7 +268,7 @@ def test_invalid_audience(test_client, audience):
 )
 def test_valid_audience(test_client, audience):
     assertion = JWTBearerGrant.sign(
-        "foo",
+        foo_key,
         issuer="client-id",
         audience=audience,
         header={"alg": "HS256", "kid": "1"},
@@ -262,7 +290,7 @@ def test_missing_audience_configuration(test_client, monkeypatch, audiences):
         monkeypatch.setattr(JWTBearerGrant, "get_audiences", lambda self: audiences)
 
     assertion = JWTBearerGrant.sign(
-        "foo",
+        foo_key,
         issuer="client-id",
         audience="https://provider.test/token",
         header={"alg": "HS256", "kid": "1"},
@@ -296,7 +324,7 @@ def test_non_object_payload_assertion(test_client):
     assertion = jws.serialize_compact(
         {"alg": "HS256", "kid": "1"},
         '["client-id"]',
-        OctKey.import_key("foo"),
+        foo_key,
     )
     rv = test_client.post(
         "/oauth/token",
@@ -313,7 +341,7 @@ def test_missing_iss_claim(test_client):
     assertion = jwt.encode(
         {"alg": "HS256", "kid": "1"},
         {"aud": "https://provider.test/token", "exp": int(time.time() + 3600)},
-        OctKey.import_key("foo"),
+        foo_key,
     )
     rv = test_client.post(
         "/oauth/token",
@@ -333,7 +361,7 @@ def test_non_string_iss_claim(test_client):
             "aud": "https://provider.test/token",
             "exp": int(time.time() + 3600),
         },
-        OctKey.import_key("foo"),
+        foo_key,
     )
     rv = test_client.post(
         "/oauth/token",
@@ -348,7 +376,7 @@ def test_unknown_issuer(test_client):
     """'resolve_issuer_client' returning None yields an 'invalid_grant'
     error."""
     assertion = JWTBearerGrant.sign(
-        "foo",
+        foo_key,
         issuer="unknown-client",
         audience="https://provider.test/token",
         subject=None,

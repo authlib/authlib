@@ -20,6 +20,10 @@ from .models import save_authorization_code
 
 authorize_url = "/oauth/authorize"
 
+ignore_alg_none_warning = pytest.mark.filterwarnings(
+    'ignore:JWS algorithm "none" is deprecated:joserfc.errors.SecurityWarning'
+)
+
 
 @pytest.fixture
 def metadata():
@@ -220,6 +224,7 @@ def test_server_require_request_object(test_client, server, metadata):
     )
 
 
+@ignore_alg_none_warning
 def test_server_require_request_object_alg_none(test_client, server, metadata):
     """When server metadata 'require_signed_request_object' is true, the JWT alg cannot be none."""
 
@@ -274,6 +279,7 @@ def test_client_require_signed_request_object(test_client, client, server, db):
     )
 
 
+@ignore_alg_none_warning
 def test_client_require_signed_request_object_alg_none(test_client, client, server, db):
     """When client metadata 'require_signed_request_object' is true, the JWT alg cannot be none."""
 
@@ -507,6 +513,7 @@ def test_registration(test_client, server):
     assert resp["error"] == "invalid_client_metadata"
 
 
+@ignore_alg_none_warning
 @pytest.mark.parametrize("require_signed", ["server", "client", None])
 @pytest.mark.parametrize("algorithm_source", ["metadata", "override", "only_none"])
 @pytest.mark.parametrize("parameter", ["request", "request_uri"])

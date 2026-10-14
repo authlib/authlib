@@ -7,6 +7,7 @@ from sqlalchemy import Text
 
 from authlib.common.encoding import json_dumps
 from authlib.common.encoding import json_loads
+from authlib.common.encoding import to_bytes
 from authlib.oauth2.rfc6749 import ClientMixin
 from authlib.oauth2.rfc6749 import list_to_scope
 from authlib.oauth2.rfc6749 import scope_to_list
@@ -130,7 +131,9 @@ class OAuth2ClientMixin(ClientMixin):
         return redirect_uri in self.redirect_uris
 
     def check_client_secret(self, client_secret):
-        return secrets.compare_digest(self.client_secret, client_secret)
+        return secrets.compare_digest(
+            to_bytes(self.client_secret), to_bytes(client_secret)
+        )
 
     def check_endpoint_auth_method(self, method, endpoint):
         if endpoint == "token":

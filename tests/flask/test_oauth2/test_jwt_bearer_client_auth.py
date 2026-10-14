@@ -5,12 +5,17 @@ from flask import json
 from joserfc import jws
 from joserfc import jwt
 from joserfc.jwk import OctKey
+from joserfc.jwk import RSAKey
 
+from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.oauth2.rfc6749.grants import ClientCredentialsGrant
 from authlib.oauth2.rfc7523 import JWTBearerClientAssertion
 from authlib.oauth2.rfc7523 import client_secret_jwt_sign
 from authlib.oauth2.rfc7523 import private_key_jwt_sign
+from tests.util import HMAC_SECRET
 from tests.util import read_file_path
+
+secret_key = OctKey.import_key(HMAC_SECRET)
 
 
 @pytest.fixture(autouse=True)
@@ -26,6 +31,7 @@ def server(server):
 
 @pytest.fixture(autouse=True)
 def client(client, db):
+    client.client_secret = HMAC_SECRET
     client.set_client_metadata(
         {
             "scope": "profile",
@@ -39,7 +45,7 @@ def client(client, db):
     return client
 
 
-def register_jwt_client_auth(server, validate_jti=True):
+def register_jwt_client_auth(server, validate_jti=True, public_key=None):
     class JWTClientAuth(JWTBearerClientAssertion):
         def get_audiences(self):
             return ["https://provider.test/oauth/token"]
@@ -47,10 +53,8 @@ def register_jwt_client_auth(server, validate_jti=True):
         def validate_jti(self, claims, jti):
             return jti != "used"
 
-        def resolve_client_public_key(self, client, headers):
-            if headers["alg"] == "RS256":
-                return read_file_path("jwk_public.json")
-            return client.client_secret
+        def resolve_client_public_key(self, client):
+            return public_key or OctKey.import_key(client.client_secret)
 
     server.register_client_auth_method(
         JWTClientAuth.CLIENT_AUTH_METHOD,
@@ -80,7 +84,7 @@ def test_invalid_jwt(test_client, server):
             "grant_type": "client_credentials",
             "client_assertion_type": JWTBearerClientAssertion.CLIENT_ASSERTION_TYPE,
             "client_assertion": client_secret_jwt_sign(
-                client_secret="invalid-secret",
+                client_secret=OctKey.import_key("an-invalid-hmac-secret-32-bytes!"),
                 client_id="client-id",
                 token_endpoint="https://provider.test/oauth/token",
             ),
@@ -99,7 +103,7 @@ def test_not_found_client(test_client, server):
             "grant_type": "client_credentials",
             "client_assertion_type": JWTBearerClientAssertion.CLIENT_ASSERTION_TYPE,
             "client_assertion": client_secret_jwt_sign(
-                client_secret="client-secret",
+                client_secret=secret_key,
                 client_id="invalid-client",
                 token_endpoint="https://provider.test/oauth/token",
             ),
@@ -127,7 +131,7 @@ def test_not_supported_auth_method(test_client, server, client, db):
             "grant_type": "client_credentials",
             "client_assertion_type": JWTBearerClientAssertion.CLIENT_ASSERTION_TYPE,
             "client_assertion": client_secret_jwt_sign(
-                client_secret="client-secret",
+                client_secret=secret_key,
                 client_id="client-id",
                 token_endpoint="https://provider.test/oauth/token",
             ),
@@ -145,7 +149,7 @@ def test_client_secret_jwt(test_client, server):
             "grant_type": "client_credentials",
             "client_assertion_type": JWTBearerClientAssertion.CLIENT_ASSERTION_TYPE,
             "client_assertion": client_secret_jwt_sign(
-                client_secret="client-secret",
+                client_secret=secret_key,
                 client_id="client-id",
                 token_endpoint="https://provider.test/oauth/token",
                 claims={"jti": "nonce"},
@@ -157,14 +161,16 @@ def test_client_secret_jwt(test_client, server):
 
 
 def test_private_key_jwt(test_client, server):
-    register_jwt_client_auth(server)
+    register_jwt_client_auth(
+        server, public_key=RSAKey.import_key(read_file_path("jwk_public.json"))
+    )
     rv = test_client.post(
         "/oauth/token",
         data={
             "grant_type": "client_credentials",
             "client_assertion_type": JWTBearerClientAssertion.CLIENT_ASSERTION_TYPE,
             "client_assertion": private_key_jwt_sign(
-                private_key=read_file_path("jwk_private.json"),
+                private_key=RSAKey.import_key(read_file_path("jwk_private.json")),
                 client_id="client-id",
                 token_endpoint="https://provider.test/oauth/token",
             ),
@@ -183,7 +189,7 @@ def test_not_validate_jti(test_client, server):
             "grant_type": "client_credentials",
             "client_assertion_type": JWTBearerClientAssertion.CLIENT_ASSERTION_TYPE,
             "client_assertion": client_secret_jwt_sign(
-                client_secret="client-secret",
+                client_secret=secret_key,
                 client_id="client-id",
                 token_endpoint="https://provider.test/oauth/token",
             ),
@@ -201,7 +207,7 @@ def test_validate_jti_failed(test_client, server):
             "grant_type": "client_credentials",
             "client_assertion_type": JWTBearerClientAssertion.CLIENT_ASSERTION_TYPE,
             "client_assertion": client_secret_jwt_sign(
-                client_secret="client-secret",
+                client_secret=secret_key,
                 client_id="client-id",
                 token_endpoint="https://provider.test/oauth/token",
                 claims={"jti": "used"},
@@ -217,7 +223,7 @@ def test_invalid_assertion(test_client, server):
     client_assertion = jws.serialize_compact(
         {"alg": "HS256"},
         "text",
-        OctKey.import_key("client-secret"),
+        secret_key,
     )
     rv = test_client.post(
         "/oauth/token",
@@ -233,7 +239,7 @@ def test_invalid_assertion(test_client, server):
 
 def test_missing_exp_claim(test_client, server):
     register_jwt_client_auth(server)
-    key = OctKey.import_key("client-secret")
+    key = secret_key
     # missing "exp" value
     claims = {
         "iss": "client-id",
@@ -257,7 +263,7 @@ def test_missing_exp_claim(test_client, server):
 
 def test_iss_sub_not_same(test_client, server):
     register_jwt_client_auth(server)
-    key = OctKey.import_key("client-secret")
+    key = secret_key
     # missing "exp" value
     claims = {
         "sub": "client-id",
@@ -282,7 +288,7 @@ def test_iss_sub_not_same(test_client, server):
 
 def test_missing_jti(test_client, server):
     register_jwt_client_auth(server)
-    key = OctKey.import_key("client-secret")
+    key = secret_key
     # missing "exp" value
     claims = {
         "sub": "client-id",
@@ -315,15 +321,15 @@ def test_issuer_as_audience(test_client, server):
         def validate_jti(self, claims, jti):
             return True
 
-        def resolve_client_public_key(self, client, headers):
-            return client.client_secret
+        def resolve_client_public_key(self, client):
+            return OctKey.import_key(client.client_secret)
 
     server.register_client_auth_method(
         JWTClientAuth.CLIENT_AUTH_METHOD,
         JWTClientAuth(),
     )
 
-    key = OctKey.import_key("client-secret")
+    key = secret_key
     claims = {
         "iss": "client-id",
         "sub": "client-id",
@@ -368,7 +374,7 @@ def test_non_object_payload_assertion(test_client, server):
     client_assertion = jws.serialize_compact(
         {"alg": "HS256"},
         '["client-id"]',
-        OctKey.import_key("client-secret"),
+        secret_key,
     )
     rv = test_client.post(
         "/oauth/token",
@@ -393,9 +399,7 @@ def test_missing_sub_claim(test_client, server):
         "exp": int(time.time() + 3600),
         "jti": "nonce",
     }
-    client_assertion = jwt.encode(
-        {"alg": "HS256"}, claims, OctKey.import_key("client-secret")
-    )
+    client_assertion = jwt.encode({"alg": "HS256"}, claims, secret_key)
     rv = test_client.post(
         "/oauth/token",
         data={
@@ -419,9 +423,7 @@ def test_non_string_sub_claim(test_client, server):
         "exp": int(time.time() + 3600),
         "jti": "nonce",
     }
-    client_assertion = jwt.encode(
-        {"alg": "HS256"}, claims, OctKey.import_key("client-secret")
-    )
+    client_assertion = jwt.encode({"alg": "HS256"}, claims, secret_key)
     rv = test_client.post(
         "/oauth/token",
         data={
@@ -433,3 +435,70 @@ def test_non_string_sub_claim(test_client, server):
     resp = json.loads(rv.data)
     assert resp["error"] == "invalid_client"
     assert resp["error_description"] == "Invalid claim: 'sub'"
+
+
+def test_resolve_client_public_key_with_headers(test_client, server):
+    """The former 'resolve_client_public_key(client, headers)' signature is
+    still supported but deprecated."""
+
+    class JWTClientAuth(JWTBearerClientAssertion):
+        def get_audiences(self):
+            return ["https://provider.test/oauth/token"]
+
+        def validate_jti(self, claims, jti):
+            return True
+
+        def resolve_client_public_key(self, client, headers):
+            return OctKey.import_key(client.client_secret)
+
+    server.register_client_auth_method(
+        JWTClientAuth.CLIENT_AUTH_METHOD, JWTClientAuth()
+    )
+    data = {
+        "grant_type": "client_credentials",
+        "client_assertion_type": JWTBearerClientAssertion.CLIENT_ASSERTION_TYPE,
+        "client_assertion": client_secret_jwt_sign(
+            client_secret=secret_key,
+            client_id="client-id",
+            token_endpoint="https://provider.test/oauth/token",
+        ),
+    }
+    with pytest.warns(AuthlibDeprecationWarning, match="only 'client' parameter"):
+        rv = test_client.post("/oauth/token", data=data)
+    assert "access_token" in json.loads(rv.data)
+
+
+@pytest.mark.filterwarnings(
+    "ignore:Using implicit key type is not recommended:joserfc.errors.SecurityWarning"
+)
+def test_client_secret_jwt_with_raw_keys(test_client, server):
+    """Raw secrets are still accepted to sign and verify the assertion but
+    deprecated."""
+
+    class JWTClientAuth(JWTBearerClientAssertion):
+        def get_audiences(self):
+            return ["https://provider.test/oauth/token"]
+
+        def validate_jti(self, claims, jti):
+            return True
+
+        def resolve_client_public_key(self, client):
+            return client.client_secret
+
+    server.register_client_auth_method(
+        JWTClientAuth.CLIENT_AUTH_METHOD, JWTClientAuth()
+    )
+    with pytest.warns(AuthlibDeprecationWarning, match="Please use OctKey"):
+        client_assertion = client_secret_jwt_sign(
+            client_secret=HMAC_SECRET,
+            client_id="client-id",
+            token_endpoint="https://provider.test/oauth/token",
+        )
+    data = {
+        "grant_type": "client_credentials",
+        "client_assertion_type": JWTBearerClientAssertion.CLIENT_ASSERTION_TYPE,
+        "client_assertion": client_assertion,
+    }
+    with pytest.warns(AuthlibDeprecationWarning, match="Please use OctKey"):
+        rv = test_client.post("/oauth/token", data=data)
+    assert "access_token" in json.loads(rv.data)

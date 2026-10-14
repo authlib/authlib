@@ -48,6 +48,21 @@ def test_invalid_client(test_client):
     assert resp["error"] == "invalid_client"
 
 
+def test_non_ascii_client_secret(test_client, client):
+    """A non-ASCII client secret is rejected as an invalid client."""
+    headers = create_basic_header("client-id", "sécret")
+    rv = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "client_credentials",
+        },
+        headers=headers,
+    )
+    assert rv.status_code == 401
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_client"
+
+
 def test_invalid_grant_type(test_client, client, db):
     client.set_client_metadata(
         {

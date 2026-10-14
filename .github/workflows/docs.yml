@@ -1,12 +1,7 @@
 name: docs
 
 on:
-  push:
-    branches-ignore:
-    - 'wip-*'
-  pull_request:
-    branches-ignore:
-    - 'wip-*'
+  workflow_call:
 
 env:
   FORCE_COLOR: '1'

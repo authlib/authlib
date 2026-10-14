@@ -4,6 +4,7 @@ import pytest
 from flask import json
 from joserfc.jwk import RSAKey
 
+from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.oauth2.drafts import IDJAGGrant as _IDJAGGrant
 from authlib.oauth2.rfc6749 import InvalidGrantError
 from tests.util import read_file_path
@@ -16,6 +17,7 @@ from .oauth2_server import create_basic_header
 
 private_pem = read_file_path("rsa_private.pem")
 public_pem = read_file_path("rsa_public.pem")
+rsa_private = RSAKey.import_key(private_pem)
 rsa_public = RSAKey.import_key(public_pem)
 
 # Simulated trusted-issuer registry and JTI replay store
@@ -79,7 +81,7 @@ def client(client, db):
 def _sign(**overrides):
     """Produce a valid ID-JAG assertion for the test fixtures."""
     defaults = dict(
-        key=private_pem,
+        key=rsa_private,
         issuer="https://idp.example.com",
         audience="https://provider.test/token",
         subject="foo",  # matches User.username created by conftest
@@ -116,6 +118,21 @@ def test_valid_id_jag_flow(test_client):
     assert "refresh_token" not in resp
 
 
+@pytest.mark.filterwarnings(
+    "ignore:Using implicit key type is not recommended:joserfc.errors.SecurityWarning"
+)
+def test_sign_with_raw_key(test_client):
+    """A raw PEM key is still accepted to sign the assertion but deprecated."""
+    with pytest.warns(AuthlibDeprecationWarning, match="Please use OctKey"):
+        assertion = _sign(key=private_pem)
+    rv = test_client.post(
+        "/oauth/token",
+        headers=create_basic_header("client-id", "client-secret"),
+        data={"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": assertion},
+    )
+    assert "access_token" in json.loads(rv.data)
+
+
 def test_wrong_typ_header(test_client):
     """Standard JWT (typ: JWT) must be rejected."""
     from joserfc import jwt
@@ -131,7 +148,7 @@ def test_wrong_typ_header(test_client):
             "jti": "jti-typ-test",
             "client_id": "client-id",
         },
-        RSAKey.import_key(private_pem),
+        rsa_private,
     )
     rv = test_client.post(
         "/oauth/token",

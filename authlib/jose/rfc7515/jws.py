@@ -305,9 +305,7 @@ class JsonWebSignature:
             if self._private_headers:
                 names = names.union(self._private_headers)
             for k in crit_headers:
-                if k not in names:
-                    raise InvalidCritHeaderParameterNameError(k)
-                elif k not in header:
+                if k not in names or k not in header:
                     raise InvalidCritHeaderParameterNameError(k)
 
     def _validate_json_jws(self, payload_segment, payload, header_obj, key):

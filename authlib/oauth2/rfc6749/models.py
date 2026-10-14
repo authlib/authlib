@@ -71,9 +71,13 @@ class ClientMixin:
 
             import secrets
 
+            from authlib.common.encoding import to_bytes
+
 
             def check_client_secret(self, client_secret):
-                return secrets.compare_digest(self.client_secret, client_secret)
+                return secrets.compare_digest(
+                    to_bytes(self.client_secret), to_bytes(client_secret)
+                )
 
         :param client_secret: A string of client secret
         :return: bool

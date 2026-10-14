@@ -19,6 +19,9 @@ class KeySet:
     def find_by_kid(self, kid, **params):
         """Find the key matches the given kid value.
 
+        The key type is not checked against the algorithm. If keys of
+        different types share the same kid, the first one is returned.
+
         :param kid: A string of kid
         :return: Key instance
         :raise: ValueError

@@ -1,6 +1,6 @@
 import time
-import warnings
 
+from authlib.deprecate import deprecate
 from authlib.oauth2 import OAuth2Request
 
 
@@ -79,11 +79,9 @@ class LegacyMixin:
 
         # compatible code
         if "aud" not in claims and hasattr(self, "get_audiences"):
-            warnings.warn(
+            deprecate(
                 "get_audiences(self, request) is deprecated and will be removed in version 1.8. "
-                "You can set the ``aud`` value in get_client_claims instead.",
-                DeprecationWarning,
-                stacklevel=2,
+                "You can set the ``aud`` value in get_client_claims instead."
             )
             claims["aud"] = self.get_audiences(request)
 
@@ -94,11 +92,9 @@ class LegacyMixin:
         if not hasattr(self, "get_jwt_config"):
             return {}
 
-        warnings.warn(
+        deprecate(
             "get_jwt_config(self, grant) is deprecated and will be removed in version 1.8. "
-            "Use resolve_client_private_key, get_client_claims, get_client_algorithm instead.",
-            DeprecationWarning,
-            stacklevel=2,
+            "Use resolve_client_private_key, get_client_claims, get_client_algorithm instead."
         )
         try:
             config = self.get_jwt_config(grant, client)

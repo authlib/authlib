@@ -63,7 +63,7 @@ class JWTBearerClientAssertion:
 
             try:
                 key = import_any_key(self.resolve_client_public_key(client))
-            except TypeError:  # pragma: no cover
+            except TypeError:
                 key = import_any_key(self.resolve_client_public_key(client, headers))
                 deprecate(
                     "resolve_client_public_key takes only 'client' parameter.",
