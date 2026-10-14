@@ -2,7 +2,6 @@ from ..rfc6749 import InvalidGrantError
 from ..rfc6749 import InvalidRequestError
 from ..rfc6749 import JsonResponse
 from ..rfc6749 import TokenEndpoint
-from ..rfc6749 import UnsupportedTokenTypeError
 
 
 class RevocationEndpoint(TokenEndpoint):
@@ -26,9 +25,12 @@ class RevocationEndpoint(TokenEndpoint):
             revocation.
         """
         self.check_params(request, client)
-        token = self.query_token(
-            request.form["token"], request.form.get("token_type_hint")
-        )
+        # Per RFC 7009 §2.2, an invalid token type hint value is ignored.
+        hint = request.form.get("token_type_hint")
+        if hint not in self.SUPPORTED_TOKEN_TYPES:
+            hint = None
+
+        token = self.query_token(request.form["token"], hint)
         if token and not token.check_client(client):
             raise InvalidGrantError()
         return token
@@ -36,10 +38,6 @@ class RevocationEndpoint(TokenEndpoint):
     def check_params(self, request, client):
         if "token" not in request.form:
             raise InvalidRequestError()
-
-        hint = request.form.get("token_type_hint")
-        if hint and hint not in self.SUPPORTED_TOKEN_TYPES:
-            raise UnsupportedTokenTypeError()
 
     def create_endpoint_response(self, request):
         """Validate revocation request and create the response for revocation.

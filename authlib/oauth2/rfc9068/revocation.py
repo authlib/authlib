@@ -46,7 +46,7 @@ class JWTRevocationEndpoint(RevocationEndpoint):
         self.check_params(request, client)
 
         # do not attempt to revoke refresh_tokens
-        if request.form.get("token_type_hint") not in ("access_token", None):
+        if request.form.get("token_type_hint") == "refresh_token":
             raise ContinueIteration()
 
         validator = JWTBearerTokenValidator(issuer=self.issuer, resource_server=None)

@@ -240,7 +240,13 @@ class MissingAuthorizationError(ForbiddenError):
         return headers
 
 
-class UnsupportedTokenTypeError(ForbiddenError):
+class UnsupportedTokenTypeError(OAuth2Error):
+    """The authorization server does not support the revocation of the
+    presented token type.
+
+    :rfc:`7009#section-2.2.1`
+    """
+
     error = "unsupported_token_type"
 
 

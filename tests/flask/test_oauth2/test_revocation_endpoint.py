@@ -78,8 +78,7 @@ def test_invalid_token(test_client):
         },
         headers=headers,
     )
-    resp = json.loads(rv.data)
-    assert resp["error"] == "unsupported_token_type"
+    assert rv.status_code == 200
 
     rv = test_client.post(
         "/oauth/revoke",
@@ -151,3 +150,15 @@ def test_insecure_transport(test_client, monkeypatch):
         rv = test_client.post("/oauth/revoke", base_url="http://client.test")
     assert rv.status_code == 400
     assert json.loads(rv.data)["error"] == "insecure_transport"
+
+
+def test_revoke_with_unknown_hint(test_client, client, token):
+    """Per RFC 7009 §2.2, an unknown token type hint is ignored."""
+    headers = create_basic_header("client-id", "client-secret")
+    rv = test_client.post(
+        "/oauth/revoke",
+        data={"token": token.access_token, "token_type_hint": "unknown"},
+        headers=headers,
+    )
+    assert rv.status_code == 200
+    assert token.is_revoked()

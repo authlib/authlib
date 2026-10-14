@@ -128,7 +128,7 @@ def test_revocation(test_client, client, access_token):
     rv = test_client.post(
         "/oauth/revoke", data={"token": access_token}, headers=headers
     )
-    assert rv.status_code == 401
+    assert rv.status_code == 400
     resp = json.loads(rv.data)
     assert resp["error"] == "unsupported_token_type"
 
@@ -180,6 +180,19 @@ def test_revocation_different_issuer(test_client, claims, jwks, client):
     rv = test_client.post(
         "/oauth/revoke", data={"token": access_token}, headers=headers
     )
-    assert rv.status_code == 401
+    assert rv.status_code == 400
+    resp = json.loads(rv.data)
+    assert resp["error"] == "unsupported_token_type"
+
+
+def test_revocation_unknown_hint(test_client, client, access_token):
+    """Per RFC 7009 §2.2, an unknown token type hint is ignored."""
+    headers = create_basic_header(client.client_id, client.client_secret)
+    rv = test_client.post(
+        "/oauth/revoke",
+        data={"token": access_token, "token_type_hint": "unknown"},
+        headers=headers,
+    )
+    assert rv.status_code == 400
     resp = json.loads(rv.data)
     assert resp["error"] == "unsupported_token_type"

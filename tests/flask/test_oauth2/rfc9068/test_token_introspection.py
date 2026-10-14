@@ -251,3 +251,16 @@ def test_introspection_invalid_claim(test_client, claims, client, jwks):
     assert rv.status_code == 401
     resp = json.loads(rv.data)
     assert resp["error"] == "invalid_token"
+
+
+def test_introspection_unknown_hint(test_client, client, access_token):
+    """Per RFC 7662 §2.1, an unknown token type hint is ignored."""
+    headers = create_basic_header(client.client_id, client.client_secret)
+    rv = test_client.post(
+        "/oauth/introspect",
+        data={"token": access_token, "token_type_hint": "unknown"},
+        headers=headers,
+    )
+    assert rv.status_code == 200
+    resp = json.loads(rv.data)
+    assert resp["active"]
