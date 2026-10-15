@@ -6,7 +6,6 @@ from authlib.oauth2.auth import TokenAuth
 from authlib.oauth2.client import OAuth2Client
 
 from ..base_client import InvalidTokenError
-from ..base_client import MissingTokenError
 from ..base_client import OAuthError
 from ..base_client import UnsupportedTokenTypeError
 from .utils import update_session_configure
@@ -134,7 +133,5 @@ class OAuth2Session(OAuth2Client, Session):
         if self.default_timeout:
             kwargs.setdefault("timeout", self.default_timeout)
         if not withhold_token and auth is None:
-            if not self.token:
-                raise MissingTokenError()
             auth = self.token_auth
         return super().request(method, url, auth=auth, **kwargs)
