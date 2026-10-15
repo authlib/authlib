@@ -195,6 +195,21 @@ register our own authentication methods, like :ref:`oauth2_client_auth`::
             token_endpoint_auth_method=ClientSecretJWT(token_endpoint),
         )
 
+Identity providers may cap the lifetime of the client assertion. Auth0,
+for instance, rejects ``client_secret_jwt`` and ``private_key_jwt``
+assertions that live longer than 5 minutes. Both classes accept an
+``expires_in`` parameter (in seconds) for that::
+
+    from authlib.oauth2.rfc7523 import PrivateKeyJWT
+
+    oauth.register(
+        'name',
+        ...
+        token_endpoint_auth_method=PrivateKeyJWT(
+            token_endpoint, expires_in=300
+        ),
+    )
+
 Accessing OAuth Resources
 -------------------------
 

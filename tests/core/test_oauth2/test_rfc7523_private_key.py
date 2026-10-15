@@ -66,12 +66,26 @@ def test_all_set():
         claims={"foo1a": "bar1a"},
         headers={"foo1b": "bar1b"},
         alg="RS512",
+        expires_in=120,
     )
 
     assert jwt_signer.token_endpoint == "https://provider.test/oauth/access_token"
     assert jwt_signer.claims == {"foo1a": "bar1a"}
     assert jwt_signer.headers == {"foo1b": "bar1b"}
     assert jwt_signer.alg == "RS512"
+    assert jwt_signer.expires_in == 120
+
+
+def test_expires_in_set():
+    jwt_signer = PrivateKeyJWT(expires_in=60)
+
+    assert jwt_signer.expires_in == 60
+
+
+def test_expires_in_not_set():
+    jwt_signer = PrivateKeyJWT()
+
+    assert jwt_signer.expires_in == 3600
 
 
 def sign_and_decode(jwt_signer, client_id, token_endpoint):
@@ -260,3 +274,16 @@ def test_sign_with_non_recommended_alg():
     decoded = jwt.decode(data, RSAKey.import_key(public_key), algorithms=["RS384"])
 
     assert decoded.header["alg"] == "RS384"
+
+
+def test_sign_custom_expires_in():
+    jwt_signer = PrivateKeyJWT(expires_in=60)
+
+    decoded, pre_sign_time, iat, exp, jti = sign_and_decode(
+        jwt_signer,
+        "client_id_1",
+        "https://provider.test/oauth/access_token",
+    )
+
+    assert exp >= iat + 60
+    assert exp <= iat + 60 + 2
