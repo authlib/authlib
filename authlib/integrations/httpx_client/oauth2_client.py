@@ -109,15 +109,26 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
             **kwargs,
         )
 
+    async def _ensure_initial_token(self):
+        """Fetch a missing client-credentials token, once per client."""
+        if self.token:
+            return
+        token_endpoint = self.metadata.get("token_endpoint")
+        if (
+            self.metadata.get("grant_type") != "client_credentials"
+            or not token_endpoint
+        ):
+            raise MissingTokenError()
+        async with self._token_refresh_lock:
+            if not self.token:
+                await self.fetch_token(token_endpoint, grant_type="client_credentials")
+
     async def request(
         self, method, url, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs
     ):
         if not withhold_token and auth is USE_CLIENT_DEFAULT:
-            if not self.token:
-                raise MissingTokenError()
-
+            await self._ensure_initial_token()
             await self.ensure_active_token(self.token)
-
             auth = self.token_auth
 
         return await super().request(method, url, auth=auth, **kwargs)
@@ -127,11 +138,8 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
         self, method, url, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs
     ):
         if not withhold_token and auth is USE_CLIENT_DEFAULT:
-            if not self.token:
-                raise MissingTokenError()
-
+            await self._ensure_initial_token()
             await self.ensure_active_token(self.token)
-
             auth = self.token_auth
 
         async with super().stream(method, url, auth=auth, **kwargs) as resp:
@@ -255,16 +263,25 @@ class OAuth2Client(_OAuth2Client, httpx2.Client):
     def handle_error(error_type, error_description):
         raise OAuthError(error_type, error_description)
 
+    def _ensure_initial_token(self):
+        """Fetch a missing token for a configured client-credentials grant."""
+        if self.token:
+            return
+        token_endpoint = self.metadata.get("token_endpoint")
+        if (
+            self.metadata.get("grant_type") != "client_credentials"
+            or not token_endpoint
+        ):
+            raise MissingTokenError()
+        self.fetch_token(token_endpoint, grant_type="client_credentials")
+
     def request(
         self, method, url, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs
     ):
         if not withhold_token and auth is USE_CLIENT_DEFAULT:
-            if not self.token:
-                raise MissingTokenError()
-
+            self._ensure_initial_token()
             if not self.ensure_active_token(self.token):
                 raise InvalidTokenError()
-
             auth = self.token_auth
 
         return super().request(method, url, auth=auth, **kwargs)
@@ -273,12 +290,9 @@ class OAuth2Client(_OAuth2Client, httpx2.Client):
         self, method, url, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs
     ):
         if not withhold_token and auth is USE_CLIENT_DEFAULT:
-            if not self.token:
-                raise MissingTokenError()
-
+            self._ensure_initial_token()
             if not self.ensure_active_token(self.token):
                 raise InvalidTokenError()
-
             auth = self.token_auth
 
         return super().stream(method, url, auth=auth, **kwargs)

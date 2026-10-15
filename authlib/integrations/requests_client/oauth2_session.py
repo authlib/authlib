@@ -135,6 +135,14 @@ class OAuth2Session(OAuth2Client, Session):
             kwargs.setdefault("timeout", self.default_timeout)
         if not withhold_token and auth is None:
             if not self.token:
-                raise MissingTokenError()
+                token_endpoint = self.metadata.get("token_endpoint")
+                grant_type = self.metadata.get("grant_type")
+                if grant_type == "client_credentials" and token_endpoint:
+                    self.fetch_token(
+                        token_endpoint,
+                        grant_type="client_credentials",
+                    )
+                else:
+                    raise MissingTokenError()
             auth = self.token_auth
         return super().request(method, url, auth=auth, **kwargs)
