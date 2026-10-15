@@ -2,10 +2,12 @@ import time
 from unittest import mock
 
 import pytest
+import requests
 from flask import Flask
 from joserfc import jwt
 from joserfc.errors import InvalidClaimError
 from joserfc.errors import MissingClaimError
+from joserfc.errors import UnsupportedAlgorithmError
 from joserfc.jwk import KeySet
 from joserfc.jwk import OctKey
 
@@ -206,3 +208,251 @@ def test_force_fetch_jwks_uri():
             token["id_token"] = id_token
             user = client.parse_id_token(token, nonce="n")
             assert user.sub == "123"
+
+
+def make_signed_userinfo_client():
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        fetch_token=get_bearer_token,
+        jwks={"keys": [secret_key.as_dict()]},
+        issuer="https://provider.test",
+        userinfo_endpoint="https://provider.test/userinfo",
+    )
+    return app, client
+
+
+def encode_signed_userinfo(claims):
+    return jwt.encode({"alg": "HS256", "kid": "f"}, claims, secret_key)
+
+
+def make_signed_userinfo_response(id_token, content_type="application/jwt"):
+    def fake_send(sess, req, **kwargs):
+        resp = mock.MagicMock(spec=requests.Response)
+        resp.status_code = 200
+        resp.headers = {"Content-Type": content_type}
+        resp.text = id_token
+        return resp
+
+    return fake_send
+
+
+def test_fetch_userinfo_signed_jwt_response():
+    app, client = make_signed_userinfo_client()
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "123",
+        "name": "John Doe",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    id_token = encode_signed_userinfo(claims)
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(id_token),
+        ):
+            user = client.userinfo()
+            assert user.sub == "123"
+            assert user["name"] == "John Doe"
+
+
+def test_fetch_userinfo_signed_jwt_aud_accepts_list():
+    app, client = make_signed_userinfo_client()
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": ["dev", "other-rp"],
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    id_token = encode_signed_userinfo(claims)
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(id_token),
+        ):
+            user = client.userinfo()
+            assert user.sub == "123"
+
+
+def test_fetch_userinfo_signed_jwt_rejects_wrong_issuer():
+    app, client = make_signed_userinfo_client()
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://evil.test",
+        "aud": "dev",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    id_token = encode_signed_userinfo(claims)
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(id_token),
+        ):
+            with pytest.raises(InvalidClaimError):
+                client.userinfo()
+
+
+def test_fetch_userinfo_signed_jwt_rejects_wrong_audience():
+    app, client = make_signed_userinfo_client()
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "another-client",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    id_token = encode_signed_userinfo(claims)
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(id_token),
+        ):
+            with pytest.raises(InvalidClaimError):
+                client.userinfo()
+
+
+def test_fetch_userinfo_signed_jwt_rejects_bad_signature():
+    app, client = make_signed_userinfo_client()
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    attacker_key = OctKey.import_key("attacker-oct-secret", {"kty": "oct", "kid": "f"})
+    id_token = jwt.encode({"alg": "HS256", "kid": "f"}, claims, attacker_key)
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(id_token),
+        ):
+            from joserfc.errors import BadSignatureError
+
+            with pytest.raises(BadSignatureError):
+                client.userinfo()
+
+
+def test_fetch_userinfo_content_type_with_charset():
+    app, client = make_signed_userinfo_client()
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    id_token = encode_signed_userinfo(claims)
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(id_token, "application/jwt; charset=utf-8"),
+        ):
+            user = client.userinfo()
+            assert user.sub == "123"
+
+
+def test_fetch_userinfo_json_still_works():
+    app, client = make_signed_userinfo_client()
+
+    def fake_send(sess, req, **kwargs):
+        resp = mock.MagicMock(spec=requests.Response)
+        resp.status_code = 200
+        resp.headers = {"Content-Type": "application/json"}
+        resp.json = lambda: {"sub": "456"}
+        return resp
+
+    with app.test_request_context():
+        with mock.patch("requests.sessions.Session.send", fake_send):
+            user = client.userinfo()
+            assert user.sub == "456"
+
+
+def test_fetch_userinfo_signed_jwt_rejects_unsupported_alg():
+    app, client = make_signed_userinfo_client()
+    # restrict the userinfo signing algs to RS256; the HS256 token must then
+    # be rejected, mirroring id_token_signing_alg_values_supported handling
+    client.server_metadata["userinfo_signing_alg_values_supported"] = ["RS256"]
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    id_token = encode_signed_userinfo(claims)
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(id_token),
+        ):
+            with pytest.raises(UnsupportedAlgorithmError):
+                client.userinfo()
+
+
+def test_fetch_userinfo_signed_jwt_via_jwks_uri_key_rotation():
+    app, client = make_signed_userinfo_client()
+    # token signed by a key absent from the cached jwks dict; the client must
+    # raise InvalidKeyIdError internally and force a refresh from jwks_uri
+    secret_keys = KeySet.import_key_set(read_key_file("jwks_private.json"))
+
+    client.server_metadata["jwks"] = {"keys": [secret_key.as_dict()]}
+    client.server_metadata["jwks_uri"] = "https://provider.test/jwks"
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "123",
+        "name": "John Doe",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    id_token = jwt.encode({"alg": "RS256"}, claims, secret_keys)
+
+    def fake_send(sess, req, **kwargs):
+        if "jwks" in req.url:
+            resp = mock.MagicMock()
+            resp.json = lambda: read_key_file("jwks_public.json")
+            resp.status_code = 200
+            return resp
+        resp = mock.MagicMock(spec=requests.Response)
+        resp.status_code = 200
+        resp.headers = {"Content-Type": "application/jwt"}
+        resp.text = id_token
+        return resp
+
+    with app.test_request_context():
+        with mock.patch("requests.sessions.Session.send", fake_send):
+            user = client.userinfo()
+            assert user.sub == "123"
+            assert user["name"] == "John Doe"

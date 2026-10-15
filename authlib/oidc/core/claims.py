@@ -17,6 +17,7 @@ __all__ = [
     "CodeIDToken",
     "ImplicitIDToken",
     "HybridIDToken",
+    "SignedUserInfo",
     "UserInfo",
     "get_claim_cls_by_response_type",
 ]
@@ -271,6 +272,33 @@ class UserInfo(dict):
             if key in self.REGISTERED_CLAIMS:
                 return self.get(key)
             raise error
+
+
+class SignedUserInfo(JWTClaims):
+    """Claims of a signed UserInfo Response.
+
+    Defined per `Section 5.3.2`_: when the UserInfo Claims are returned
+    as a JWT, the response MUST contain the Claims ``iss`` (issuer) and
+    ``aud`` (audience) as members. The ``iss`` value MUST be the OP's
+    Issuer Identifier URL. The ``aud`` value MUST be or include the
+    RP's Client ID value.
+
+    Unlike an ID Token, a signed UserInfo Response has no required
+    ``nonce``, ``iat`` or ``auth_time``; claims that are present are
+    validated structurally by the underlying JWT claims registry,
+    including time-based claims.
+
+    .. _`Section 5.3.2`: https://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse
+    """
+
+    REGISTERED_CLAIMS = [
+        "iss",
+        "aud",
+        "exp",
+        "nbf",
+        "iat",
+        "jti",
+    ] + UserInfo.REGISTERED_CLAIMS
 
 
 def get_claim_cls_by_response_type(response_type):
