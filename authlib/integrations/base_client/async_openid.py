@@ -7,6 +7,7 @@ from authlib.common.security import generate_token
 from authlib.common.urls import add_params_to_uri
 from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core import ImplicitIDToken
+from authlib.oidc.core import SignedUserInfo
 from authlib.oidc.core import UserInfo
 
 __all__ = ["AsyncOpenIDMixin"]
@@ -32,12 +33,55 @@ class AsyncOpenIDMixin:
         return jwk_set
 
     async def userinfo(self, **kwargs):
-        """Fetch user info from ``userinfo_endpoint``."""
+        """Fetch user info from ``userinfo_endpoint``.
+
+        When the provider returns the UserInfo Claims as a signed JWT
+        (``Content-Type: application/jwt``, as allowed by `Section 5.3.2`_),
+        the JWT is decoded with the provider's JWK Set, the same trust
+        path as :meth:`parse_id_token`, and its ``iss`` and ``aud``
+        claims are validated.
+
+        .. _`Section 5.3.2`: https://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse
+        """
         metadata = await self.load_server_metadata()
         resp = await self.get(metadata["userinfo_endpoint"], **kwargs)
         resp.raise_for_status()
-        data = resp.json()
+        content_type = resp.headers.get("Content-Type", "")
+        media_type = content_type.split(";")[0].strip().lower()
+        if media_type == "application/jwt":
+            data = await self._parse_signed_userinfo(resp.text, metadata)
+        else:
+            data = resp.json()
         return UserInfo(data)
+
+    async def _parse_signed_userinfo(self, text, metadata, leeway=120):
+        alg_values = metadata.get("userinfo_signing_alg_values_supported")
+        jwks = await self.fetch_jwk_set()
+        key_set = KeySet.import_key_set(jwks)
+        try:
+            token = jwt.decode(
+                text,
+                key=key_set,
+                registry=JWSRegistry(algorithms=alg_values, strict_check_header=False),
+            )
+        except InvalidKeyIdError:
+            jwks = await self.fetch_jwk_set(force=True)
+            key_set = KeySet.import_key_set(jwks)
+            token = jwt.decode(
+                text,
+                key=key_set,
+                registry=JWSRegistry(algorithms=alg_values, strict_check_header=False),
+            )
+
+        claims = SignedUserInfo(token.claims, token.header)
+        claims_options = {}
+        if "issuer" in metadata:
+            claims_options["iss"] = {"values": [metadata["issuer"]]}
+        if self.client_id:
+            claims_options["aud"] = {"essential": True, "values": [self.client_id]}
+        claims.options = claims_options
+        claims.validate(leeway=leeway)
+        return claims
 
     async def parse_id_token(
         self, token, nonce, claims_options=None, claims_cls=None, leeway=120
