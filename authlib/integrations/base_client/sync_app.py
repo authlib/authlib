@@ -1,6 +1,7 @@
 import logging
 import time
 
+from authlib.common.security import generate_pkce_code_verifier
 from authlib.common.security import generate_token
 from authlib.common.urls import urlparse
 from authlib.consts import default_user_agent
@@ -279,7 +280,7 @@ class OAuth2Base:
         if client.code_challenge_method:
             code_verifier = kwargs.get("code_verifier")
             if not code_verifier:
-                code_verifier = generate_token(48)
+                code_verifier = generate_pkce_code_verifier()
                 kwargs["code_verifier"] = code_verifier
             rv["code_verifier"] = code_verifier
             log.debug(f"Using code_verifier: {code_verifier!r}")

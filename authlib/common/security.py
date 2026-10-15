@@ -6,10 +6,28 @@ from urllib.parse import urlsplit
 
 UNICODE_ASCII_CHARACTER_SET = string.ascii_letters + string.digits
 
+#: RFC 7636 section 4.1 unreserved characters:
+#: ``ALPHA / DIGIT / "-" / "." / "_" / "~"``.
+PKCE_CODE_VERIFIER_CHARACTER_SET = UNICODE_ASCII_CHARACTER_SET + "-._~"
+
 
 def generate_token(length=30, chars=UNICODE_ASCII_CHARACTER_SET):
     rand = random.SystemRandom()
     return "".join(rand.choice(chars) for _ in range(length))
+
+
+def generate_pkce_code_verifier(length=128):
+    """Generate a PKCE ``code_verifier`` per RFC 7636 section 4.1: the
+    character set is ``ALPHA / DIGIT / "-" / "." / "_" / "~"`` and length
+    must be 43-128 characters. Defaults to the maximum length for the
+    largest practical entropy margin.
+    """
+    if not 43 <= length <= 128:
+        raise ValueError(
+            "RFC 7636 requires a code_verifier length between 43 and 128 "
+            f"characters, got {length}"
+        )
+    return generate_token(length, PKCE_CODE_VERIFIER_CHARACTER_SET)
 
 
 def is_secure_transport(uri):
