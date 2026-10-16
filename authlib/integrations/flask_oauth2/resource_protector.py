@@ -12,6 +12,7 @@ from authlib.oauth2.rfc6749 import MissingAuthorizationError
 
 from .errors import raise_http_exception
 from .requests import FlaskJsonRequest
+from .requests import FlaskOAuth2Request
 from .signals import token_authenticated
 
 
@@ -64,7 +65,10 @@ class ResourceProtector(_ResourceProtector):
         :param scopes: a list of scope values
         :return: token object
         """
-        request = FlaskJsonRequest(_req)
+        if _req.form:
+            request = FlaskOAuth2Request(_req)
+        else:
+            request = FlaskJsonRequest(_req)
         # backward compatibility
         kwargs["scopes"] = scopes
         for claim in kwargs:
