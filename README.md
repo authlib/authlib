@@ -76,6 +76,7 @@ Generic, spec-compliant implementation to build clients and providers:
   - [x] OpenID Connect Discovery 1.0
   - [x] OpenID Connect Dynamic Client Registration 1.0
   - [x] [OpenID Connect RP-Initiated Logout 1.0](https://openid.net/specs/openid-connect-rpinitiated-1_0.html)
+  - [x] [OpenID Connect Back-Channel Logout 1.0](https://openid.net/specs/openid-connect-backchannel-1_0.html)
 
 Connect third party OAuth providers with Authlib built-in client integrations:
 
