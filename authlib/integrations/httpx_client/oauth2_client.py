@@ -87,7 +87,7 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
     ):
         # extract httpx2.Client kwargs
         client_kwargs = self._extract_session_request_params(kwargs)
-        httpx2.AsyncClient.__init__(self, **client_kwargs)
+        super(_OAuth2Client, self).__init__(**client_kwargs)
 
         # We use a Lock to synchronize coroutines to prevent
         # multiple concurrent attempts to refresh the same token
@@ -234,7 +234,7 @@ class OAuth2Client(_OAuth2Client, httpx2.Client):
     ):
         # extract httpx2.Client kwargs
         client_kwargs = self._extract_session_request_params(kwargs)
-        httpx2.Client.__init__(self, **client_kwargs)
+        super(_OAuth2Client, self).__init__(**client_kwargs)
 
         _OAuth2Client.__init__(
             self,
