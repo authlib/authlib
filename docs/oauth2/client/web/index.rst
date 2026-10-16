@@ -470,6 +470,35 @@ provide the value of ``jwks`` instead of ``jwks_uri``::
     )
 
 
+Custom claims
+~~~~~~~~~~~~~
+
+``token['userinfo']`` is a ``UserInfo`` object built from every claim in the
+validated ``id_token``, so custom claims are available like any standard
+claim::
+
+    token = oauth.google.authorize_access_token(request)
+    userinfo = token['userinfo']
+    organization = userinfo.get('organization')
+
+This only works when the provider puts the claim in the ``id_token`` itself.
+Many providers expose extra claims only through the userinfo endpoint, or only
+when the matching scope is requested. In that case, add the scope to
+``client_kwargs`` and fetch the claims with the access token::
+
+    oauth.register(
+        'organization',
+        server_metadata_url='https://example.com/.well-known/openid-configuration',
+        client_kwargs={'scope': 'openid email profile organization'},
+    )
+
+    token = oauth.organization.authorize_access_token(request)
+    userinfo = oauth.organization.userinfo(token=token)
+
+Check the provider's documentation for the scope names and the claims each
+endpoint returns.
+
+
 RP-Initiated Logout
 -------------------
 
