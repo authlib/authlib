@@ -84,6 +84,23 @@ The ``client_kwargs`` is a dict configuration to pass extra parameters to
 There are several ``token_endpoint_auth_method``, get a deep inside the
 :ref:`client_auth_methods`.
 
+Any other keyword argument accepted by ``OAuth2Session`` can be passed the
+same way. For example, ``leeway`` is the number of seconds before the actual
+expiration of an access token at which the token is considered expired and is
+refreshed (the default is 60)::
+
+    client_kwargs = {
+        'scope': 'profile',
+        'leeway': 30,
+    }
+
+This ``leeway`` only affects access token expiration. The clock skew tolerated
+when validating the claims of an ``id_token`` (``exp``, ``iat`` and so on) is a
+separate setting. It defaults to 120 seconds and is passed to
+``authorize_access_token``::
+
+    token = oauth.github.authorize_access_token(request, leeway=30)
+
 Routes for Authorization
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
