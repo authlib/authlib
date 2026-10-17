@@ -11,6 +11,10 @@ Version 1.x.x
 
 **Unreleased**
 
+- An expired token with no refresh token is refreshed with client
+  credentials only when the session's ``grant_type`` is
+  ``client_credentials``. A missing grant type is not treated as client
+  credentials, so a restored user token stays ``InvalidTokenError``.
 - Reject PEM and SSH key material used as symmetric JOSE keys, including
   PEM keys with leading whitespace, comments, or a byte-order mark and
   keys supplied through an oct JWK or an ``OctKey`` instance.
