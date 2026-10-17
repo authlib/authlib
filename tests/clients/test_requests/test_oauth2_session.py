@@ -492,6 +492,44 @@ def test_auto_refresh_token2(token):
     assert update_token.called
 
 
+def test_auto_refresh_client_credentials_guesses_missing_grant_type(token):
+    old_token = dict(access_token="a", token_type="bearer", expires_at=100)
+    new_token = dict(token)
+    new_token["access_token"] = "fresh"
+
+    def fake_send(r, **kwargs):
+        if "provider.test/token" in r.url:
+            assert "grant_type=client_credentials" in r.body
+            return mock_json_response(new_token)(r)
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        resp.json = lambda: {"ok": True}
+        return resp
+
+    sess = OAuth2Session(
+        "foo",
+        client_secret="s",
+        token=old_token,
+        token_endpoint="https://provider.test/token",
+    )
+    sess.send = fake_send
+    sess.get("https://resource.test/user")
+    assert sess.token["access_token"] == "fresh"
+    assert sess.metadata["grant_type"] == "client_credentials"
+
+
+def test_expired_token_with_other_grant_is_not_client_credentials():
+    token = dict(access_token="a", token_type="bearer", expires_at=100)
+    sess = OAuth2Session(
+        "foo",
+        token=token,
+        token_endpoint="https://provider.test/token",
+        grant_type="authorization_code",
+    )
+    with pytest.raises(OAuthError):
+        sess.get("https://resource.test/user")
+
+
 def test_revoke_token():
     sess = OAuth2Session("a")
     answer = {"status": "ok"}

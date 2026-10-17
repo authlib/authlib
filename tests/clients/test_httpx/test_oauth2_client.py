@@ -324,7 +324,17 @@ def test_auto_refresh_token():
         "foo",
         token=old_token,
         token_endpoint="https://provider.test/token",
-        update_token=update_token,
+        transport=transport,
+    ) as sess:
+        sess.get("https://resource.test/user")
+        assert sess.metadata["grant_type"] == "client_credentials"
+        assert sess.token["access_token"] == default_token["access_token"]
+
+    with OAuth2Client(
+        "foo",
+        token=old_token,
+        token_endpoint="https://provider.test/token",
+        grant_type="authorization_code",
         transport=transport,
     ) as sess:
         with pytest.raises(OAuthError):
