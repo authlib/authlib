@@ -63,7 +63,7 @@ class JWTBearerClientAssertion:
 
             try:
                 key = import_any_key(self.resolve_client_public_key(client))
-            except TypeError:  # pragma: no cover
+            except TypeError:
                 key = import_any_key(self.resolve_client_public_key(client, headers))
                 deprecate(
                     "resolve_client_public_key takes only 'client' parameter.",
@@ -119,14 +119,12 @@ class JWTBearerClientAssertion:
 
     def process_assertion_claims(self, assertion, resolve_key):
         """Extract JWT payload claims from request "assertion", per
-        `Section 3.1`_.
+        :rfc:`7523#section-3.1`.
 
         :param assertion: assertion string value in the request
         :param resolve_key: function to resolve the sign key
         :return: JWTClaims
         :raise: InvalidClientError
-
-        .. _`Section 3.1`: https://tools.ietf.org/html/rfc7523#section-3.1
         """
         try:
             token = jwt.decode(assertion, resolve_key)

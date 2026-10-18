@@ -26,7 +26,7 @@ class ClientCredentialsGrant(BaseGrant, TokenEndpointMixin):
         |         |                                  |               |
         +---------+                                  +---------------+
 
-    https://tools.ietf.org/html/rfc6749#section-4.4
+    :rfc:`6749#section-4.4`
     """
 
     GRANT_TYPE = "client_credentials"

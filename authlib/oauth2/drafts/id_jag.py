@@ -1,6 +1,6 @@
 """Identity Assertion JWT Authorization Grant (ID-JAG).
 
-A draft IETF extension (``draft-ietf-oauth-identity-chaining``) that
+A draft IETF extension (``draft-ietf-oauth-identity-assertion-authz-grant``) that
 enables cross-application access using identity assertions issued by an
 external enterprise IdP.
 
@@ -30,7 +30,6 @@ from authlib.common.encoding import json_loads
 from authlib.common.security import generate_token
 
 from ..rfc6749 import BaseGrant
-from ..rfc6749 import InvalidClientError
 from ..rfc6749 import InvalidGrantError
 from ..rfc6749 import InvalidRequestError
 from ..rfc6749 import TokenEndpointMixin
@@ -50,11 +49,15 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
     the same grant type URI as RFC 7523; differentiation is by the
     ``typ: oauth-id-jag+jwt`` header in the JWT.
 
+    Clients must authenticate at the token endpoint, and the assertion's
+    ``client_id`` must match the authenticated client. The default method is
+    ``client_secret_basic``; subclasses can configure other methods with
+    ``TOKEN_ENDPOINT_AUTH_METHODS``.
+
     Subclasses **must** implement:
 
     - :meth:`get_audiences`
     - :meth:`resolve_issuer_key`
-    - :meth:`resolve_client_by_id`
     - :meth:`authenticate_user`
     - :meth:`check_jti`
     - :meth:`check_id_jag_permission`
@@ -103,14 +106,15 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
 
         :param key: signing key (private key or shared secret)
         :param issuer: ``iss`` claim - identifies the IdP
-        :param audience: ``aud`` claim - the resource AS token endpoint
+        :param audience: ``aud`` claim - the resource AS issuer identifier
         :param subject: ``sub`` claim - the end user (required)
-        :param client_id: ``client_id`` claim - the application
+        :param client_id: ``client_id`` claim - the client identifier at the
+            resource AS
         :param jti: ``jti`` claim (auto-generated when *None*)
         :param issued_at: ``iat`` claim (defaults to now)
         :param expires_at: ``exp`` claim
         :param claims: additional claims dict
-        :param kwargs: forwarded to :func:`sign_jwt_bearer_assertion`
+        :param kwargs: forwarded to ``sign_jwt_bearer_assertion``
             (e.g. ``alg="RS256"``)
         :return: compact-serialised JWT string
         """
@@ -146,23 +150,19 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
     def validate_token_request(self):
         """Validate an ID-JAG token request.
 
-        Resolves the client from the ``client_id`` claim (not from
-        ``iss``) and enforces the ID-JAG policy hook.
+        Authenticates the client, binds it to the assertion's ``client_id``
+        claim, and enforces replay protection and the ID-JAG policy hook.
         """
+        client = self.authenticate_token_endpoint_client()
+
         assertion = self.request.form.get("assertion")
         if not assertion:
             raise InvalidRequestError("Missing 'assertion' in request")
 
         claims = self._process_assertion_claims(assertion)
 
-        # Resolve client from the client_id claim (NOT from iss).
         client_id_claim = claims["client_id"]
-        client = self.resolve_client_by_id(client_id_claim)
-        if not client:
-            raise InvalidClientError(description=f"Unknown client: {client_id_claim}")
-
-        # If client authentication is also present, it must match.
-        if self.request.client and self.request.client.client_id != client_id_claim:
+        if client.get_client_id() != client_id_claim:
             raise InvalidGrantError(
                 description="Authenticated client does not match 'client_id' claim"
             )
@@ -170,6 +170,13 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
         if not client.check_grant_type(self.GRANT_TYPE):
             raise UnauthorizedClientError(
                 f"The client is not authorized to use 'grant_type={self.GRANT_TYPE}'"
+            )
+
+        # Bind the assertion to its client before recording it as used.
+        jti = claims["jti"]
+        if not self.check_jti(claims, jti):
+            raise InvalidGrantError(
+                description="JWT has already been used (jti replay)"
             )
 
         self.request.client = client
@@ -232,12 +239,6 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
 
         self._verify_claims(token.claims)
 
-        jti = token.claims.get("jti")
-        if not self.check_jti(token.claims, jti):
-            raise InvalidGrantError(
-                description="JWT has already been used (jti replay)"
-            )
-
         return token.claims
 
     def _extract_assertion(self, assertion: str):
@@ -285,8 +286,8 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
     def get_audiences(self) -> list:
         """Return the list of valid ``aud`` values for this AS.
 
-        Typically the token endpoint URL and/or the AS issuer identifier.
-        The returned list must be non-empty; ``aud`` validation is
+        Per the ID-JAG draft, ``aud`` is the issuer identifier of the
+        Resource Authorization Server. The returned list must be non-empty; ``aud`` validation is
         mandatory for ID-JAG assertions.
         """
         raise NotImplementedError()
@@ -297,11 +298,6 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
         :param issuer: ``iss`` claim identifying the IdP
         :param headers: JWT headers (may contain ``kid``)
         """
-        raise NotImplementedError()
-
-    def resolve_client_by_id(self, client_id):
-        """Return the client model identified by the ``client_id`` claim,
-        or *None* if not found."""
         raise NotImplementedError()
 
     def authenticate_user(self, subject):

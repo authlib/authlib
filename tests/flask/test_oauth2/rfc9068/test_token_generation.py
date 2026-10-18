@@ -1,8 +1,10 @@
 import pytest
+from joserfc import jwt
+from joserfc.jwk import KeySet
 
 from authlib.common.urls import url_decode
 from authlib.common.urls import urlparse
-from authlib.jose import jwt
+from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.oauth2.rfc6749.grants import (
     AuthorizationCodeGrant as _AuthorizationCodeGrant,
 )
@@ -43,7 +45,7 @@ def client(client, db):
 
 @pytest.fixture
 def jwks():
-    return read_file_path("jwks_private.json")
+    return KeySet.import_key_set(read_file_path("jwks_private.json"))
 
 
 @pytest.fixture(autouse=True)
@@ -97,7 +99,8 @@ def test_generate_jwt_access_token(test_client, client, user, jwks):
     )
 
     access_token = res.json["access_token"]
-    claims = jwt.decode(access_token, jwks)
+    token = jwt.decode(access_token, jwks)
+    claims = token.claims
 
     assert claims["iss"] == issuer
     assert claims["sub"] == str(user.id)
@@ -112,7 +115,7 @@ def test_generate_jwt_access_token(test_client, client, user, jwks):
     # that the 'application/' prefix be omitted. Therefore, the 'typ' value used
     # SHOULD be 'at+jwt'.
 
-    assert claims.header["typ"] == "at+jwt"
+    assert token.header["typ"] == "at+jwt"
 
 
 def test_generate_jwt_access_token_extra_claims(
@@ -155,7 +158,7 @@ def test_generate_jwt_access_token_extra_claims(
     )
 
     access_token = res.json["access_token"]
-    claims = jwt.decode(access_token, jwks)
+    claims = jwt.decode(access_token, jwks).claims
     assert claims["username"] == user.username
 
 
@@ -187,7 +190,7 @@ def test_generate_jwt_access_token_no_user(test_client, client, user, jwks):
     )
 
     access_token = res.json["access_token"]
-    claims = jwt.decode(access_token, jwks)
+    claims = jwt.decode(access_token, jwks).claims
 
     assert claims["sub"] == client.client_id
 
@@ -223,8 +226,24 @@ def test_optional_fields(test_client, token_generator, user, client, jwks):
     )
 
     access_token = res.json["access_token"]
-    claims = jwt.decode(access_token, jwks)
+    claims = jwt.decode(access_token, jwks).claims
 
     assert claims["auth_time"] == 1234
     assert claims["amr"] == "amr"
     assert claims["acr"] == "acr"
+
+
+def test_jwks_dict(client, user, jwks):
+    """A JWKS dict is still accepted by 'get_jwks' but deprecated."""
+
+    class DictJWTBearerTokenGenerator(JWTBearerTokenGenerator):
+        def get_jwks(self):
+            return read_file_path("jwks_private.json")
+
+    token_generator = DictJWTBearerTokenGenerator(issuer=issuer)
+    with pytest.warns(AuthlibDeprecationWarning, match="KeySet.import_key_set"):
+        access_token = token_generator.access_token_generator(
+            client, "authorization_code", user, "profile"
+        )
+    claims = jwt.decode(access_token, jwks).claims
+    assert claims["sub"] == str(user.id)

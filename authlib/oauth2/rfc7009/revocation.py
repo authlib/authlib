@@ -8,9 +8,7 @@ from ..rfc6749 import UnsupportedTokenTypeError
 
 class RevocationEndpoint(TokenEndpoint):
     """Implementation of revocation endpoint which is described in
-    `RFC7009`_.
-
-    .. _RFC7009: https://tools.ietf.org/html/rfc7009
+    :rfc:`7009`.
     """
 
     #: Endpoint name to be registered

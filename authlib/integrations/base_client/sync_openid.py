@@ -40,7 +40,11 @@ class OpenIDMixin:
     def parse_id_token(
         self, token, nonce, claims_options=None, claims_cls=None, leeway=120
     ):
-        """Return an instance of UserInfo from token's ``id_token``."""
+        """Return UserInfo after validating the token's ``id_token``.
+
+        The expected ``nonce`` is controlled by the application. Token claims
+        such as ``nonce_supported`` cannot disable its validation.
+        """
         if "id_token" not in token:
             return None
 
@@ -78,10 +82,6 @@ class OpenIDMixin:
             )
 
         claims = claims_cls(token.claims, token.header, claims_options, claims_params)
-        # https://github.com/authlib/authlib/issues/259
-        if claims.get("nonce_supported") is False:
-            claims.params["nonce"] = None
-
         claims.validate(leeway=leeway)
         return UserInfo(claims)
 

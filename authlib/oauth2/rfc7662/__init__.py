@@ -4,7 +4,7 @@
 This module represents a direct implementation of
 OAuth 2.0 Token Introspection.
 
-https://tools.ietf.org/html/rfc7662
+:rfc:`7662`
 """
 
 from .introspection import IntrospectionEndpoint

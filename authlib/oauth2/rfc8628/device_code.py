@@ -171,7 +171,7 @@ class DeviceCodeGrant(BaseGrant, TokenEndpointMixin):
 
                 user_id, allowed = data.split()
                 user = User.get(user_id)
-                return user, bool(allowed)
+                return user, allowed == "1"
 
         Note, user grant information is saved by verification endpoint.
         """

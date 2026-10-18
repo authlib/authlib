@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import re
 
 from authlib.common.encoding import to_bytes
@@ -22,12 +23,14 @@ def create_s256_code_challenge(code_verifier):
 def compare_plain_code_challenge(code_verifier, code_challenge):
     # If the "code_challenge_method" from Section 4.3 was "plain",
     # they are compared directly
-    return code_verifier == code_challenge
+    return hmac.compare_digest(to_bytes(code_verifier), to_bytes(code_challenge))
 
 
 def compare_s256_code_challenge(code_verifier, code_challenge):
     # BASE64URL-ENCODE(SHA256(ASCII(code_verifier))) == code_challenge
-    return create_s256_code_challenge(code_verifier) == code_challenge
+    return hmac.compare_digest(
+        to_bytes(create_s256_code_challenge(code_verifier)), to_bytes(code_challenge)
+    )
 
 
 class CodeChallenge:

@@ -8,6 +8,9 @@ from joserfc import jwt
 from joserfc.jwk import OctKey
 
 from authlib.integrations.requests_client import AssertionSession
+from tests.util import HMAC_SECRET
+
+hmac_key = OctKey.import_key(HMAC_SECRET)
 
 
 @pytest.fixture
@@ -36,7 +39,7 @@ def test_refresh_token(token):
         subject="foo",
         audience="foo",
         alg="HS256",
-        key="secret",
+        key=hmac_key,
     )
     sess.send = verifier
     sess.get("https://provider.test")
@@ -51,7 +54,7 @@ def test_refresh_token(token):
         issued_at=now,
         expires_at=now + 3600,
         header={"alg": "HS256"},
-        key="secret",
+        key=hmac_key,
         scope="email",
         claims={"test_mode": "true"},
     )
@@ -68,7 +71,7 @@ def test_without_alg():
         issuer="foo",
         subject="foo",
         audience="foo",
-        key="secret",
+        key=hmac_key,
     )
     with pytest.raises(ValueError):
         sess.get("https://provider.test")
@@ -93,14 +96,13 @@ def test_assertion_includes_default_jti(token):
         subject="foo",
         audience="foo",
         alg="HS256",
-        key="secret",
+        key=hmac_key,
     )
     sess.send = verifier
     sess.get("https://provider.test")
 
     assert len(assertions) == 1
-    key = OctKey.import_key("secret")
-    claims = jwt.decode(assertions[0], key).claims
+    claims = jwt.decode(assertions[0], hmac_key).claims
     assert "jti" in claims
     assert len(claims["jti"]) == 36
 
@@ -128,16 +130,15 @@ def test_assertion_jti_is_unique_per_refresh(token):
         subject="foo",
         audience="foo",
         alg="HS256",
-        key="secret",
+        key=hmac_key,
     )
     sess.send = verifier
     sess.get("https://provider.test")
     sess.get("https://provider.test")
 
     assert len(assertions) == 2
-    key = OctKey.import_key("secret")
-    jti1 = jwt.decode(assertions[0], key).claims["jti"]
-    jti2 = jwt.decode(assertions[1], key).claims["jti"]
+    jti1 = jwt.decode(assertions[0], hmac_key).claims["jti"]
+    jti2 = jwt.decode(assertions[1], hmac_key).claims["jti"]
     assert jti1
     assert jti2
     assert jti1 != jti2
@@ -162,15 +163,14 @@ def test_assertion_custom_jti_is_preserved(token):
         subject="foo",
         audience="foo",
         alg="HS256",
-        key="secret",
+        key=hmac_key,
         claims={"jti": "my-custom-jti-value"},
     )
     sess.send = verifier
     sess.get("https://provider.test")
 
     assert len(assertions) == 1
-    key = OctKey.import_key("secret")
-    claims = jwt.decode(assertions[0], key).claims
+    claims = jwt.decode(assertions[0], hmac_key).claims
     assert claims["jti"] == "my-custom-jti-value"
 
 
@@ -188,7 +188,7 @@ def test_refresh_token_non_json_error_response():
         subject="foo",
         audience="foo",
         alg="HS256",
-        key="secret",
+        key=hmac_key,
     )
     sess.send = fake_send
     with pytest.raises(requests.HTTPError):

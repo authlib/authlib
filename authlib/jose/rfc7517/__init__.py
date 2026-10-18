@@ -4,7 +4,7 @@
 This module represents a direct implementation of
 JSON Web Key (JWK).
 
-https://tools.ietf.org/html/rfc7517
+:rfc:`7517`
 """
 
 from ._cryptography_key import load_pem_key

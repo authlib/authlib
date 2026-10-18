@@ -70,13 +70,11 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
 
     def process_assertion_claims(self, assertion):
         """Extract JWT payload claims from request "assertion", per
-        `Section 3.1`_.
+        :rfc:`7523#section-3.1`.
 
         :param assertion: assertion string value in the request
         :return: JWTClaims
         :raise: InvalidGrantError
-
-        .. _`Section 3.1`: https://tools.ietf.org/html/rfc7523#section-3.1
         """
         headers, claims = self.extract_assertion(assertion)
         # "iss" is read before the signature and the claims are verified, so it
@@ -135,7 +133,7 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
     def validate_token_request(self):
         """The client makes a request to the token endpoint by sending the
         following parameters using the "application/x-www-form-urlencoded"
-        format per `Section 2.1`_:
+        format per :rfc:`7523#section-2.1`:
 
         grant_type
              REQUIRED.  Value MUST be set to
@@ -160,8 +158,6 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
             &assertion=eyJhbGciOiJFUzI1NiIsImtpZCI6IjE2In0.
             eyJpc3Mi[...omitted for brevity...].
             J9l-ZhwP[...omitted for brevity...]
-
-        .. _`Section 2.1`: https://tools.ietf.org/html/rfc7523#section-2.1
         """
         assertion = self.request.form.get("assertion")
         if not assertion:

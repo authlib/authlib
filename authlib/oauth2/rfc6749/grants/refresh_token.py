@@ -2,9 +2,7 @@
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A special grant endpoint for refresh_token grant_type. Refreshing an
-Access Token per `Section 6`_.
-
-.. _`Section 6`: https://tools.ietf.org/html/rfc6749#section-6
+Access Token per :rfc:`6749#section-6`.
 """
 
 import logging
@@ -23,9 +21,7 @@ log = logging.getLogger(__name__)
 
 class RefreshTokenGrant(BaseGrant, TokenEndpointMixin):
     """A special grant endpoint for refresh_token grant_type. Refreshing an
-    Access Token per `Section 6`_.
-
-    .. _`Section 6`: https://tools.ietf.org/html/rfc6749#section-6
+    Access Token per :rfc:`6749#section-6`.
     """
 
     GRANT_TYPE = "refresh_token"

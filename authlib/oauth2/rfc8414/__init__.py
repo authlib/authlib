@@ -4,7 +4,7 @@
 This module represents a direct implementation of
 OAuth 2.0 Authorization Server Metadata.
 
-https://tools.ietf.org/html/rfc8414
+:rfc:`8414`
 """
 
 from .models import AuthorizationServerMetadata

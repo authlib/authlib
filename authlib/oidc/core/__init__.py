@@ -6,6 +6,7 @@ OpenID Connect Core 1.0 Implementation.
 http://openid.net/specs/openid-connect-core-1_0.html
 """
 
+from .authorization_request import OpenIDJWTAuthenticationRequest
 from .claims import CodeIDToken
 from .claims import HybridIDToken
 from .claims import IDToken
@@ -20,6 +21,7 @@ from .models import AuthorizationCodeMixin
 from .userinfo import UserInfoEndpoint
 
 __all__ = [
+    "OpenIDJWTAuthenticationRequest",
     "AuthorizationCodeMixin",
     "IDToken",
     "CodeIDToken",

@@ -1,0 +1,47 @@
+name: lint
+
+permissions:
+  contents: read
+
+on:
+  workflow_call:
+
+jobs:
+  prek:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+
+    - uses: j178/prek-action@1382ad72dea72f9d53832f2bcb65b3e87a947204 # v3.0.1
+      with:
+        extra-args: --all-files
+
+  commits:
+    name: check commit messages
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        fetch-depth: 0
+        persist-credentials: false
+
+    - uses: j178/prek-action@1382ad72dea72f9d53832f2bcb65b3e87a947204 # v3.0.1
+      with:
+        install-only: true
+
+    - name: Check each commit message
+      env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      run: |
+        shas=$(git rev-list --no-merges "$BASE_SHA..$HEAD_SHA")
+        status=0
+        for sha in $shas; do
+          echo "Checking commit $sha"
+          git log -1 --format=%B "$sha" > "$RUNNER_TEMP/commit-msg"
+          prek run --stage commit-msg --commit-msg-filename "$RUNNER_TEMP/commit-msg" || status=1
+        done
+        exit $status

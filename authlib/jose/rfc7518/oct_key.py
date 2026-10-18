@@ -65,6 +65,10 @@ class OctKey(Key):
 
     @staticmethod
     def _check_key(raw_key):
+        # Per RFC 7518 §3.2, an HMAC key must be at least as long as the hash output.
+        if not raw_key:
+            raise ValueError("oct key material must not be empty")
+
         # PEM parsers accept leading text, including comments and whitespace.
         if any(marker in raw_key for marker in POSSIBLE_UNSAFE_KEYS):
             raise ValueError("This key may not be safe to import")

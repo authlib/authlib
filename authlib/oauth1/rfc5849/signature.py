@@ -1,9 +1,7 @@
 """authlib.oauth1.rfc5849.signature.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This module represents a direct implementation of `section 3.4`_ of the spec.
-
-.. _`section 3.4`: https://tools.ietf.org/html/rfc5849#section-3.4
+This module represents a direct implementation of :rfc:`5849#section-3.4`.
 """
 
 import binascii
@@ -27,7 +25,7 @@ SIGNATURE_TYPE_BODY = "BODY"
 
 
 def construct_base_string(method, uri, params, host=None):
-    """Generate signature base string from request, per `Section 3.4.1`_.
+    """Generate signature base string from request, per :rfc:`5849#section-3.4.1`.
 
     For example, the HTTP request::
 
@@ -52,8 +50,6 @@ def construct_base_string(method, uri, params, host=None):
         key%3D9djdj82h48djs9d2%26oauth_nonce%3D7d8f3e4a%26oauth_signature_m
         ethod%3DHMAC-SHA1%26oauth_timestamp%3D137131201%26oauth_token%3Dkkk
         9d7dh3k39sjv7
-
-    .. _`Section 3.4.1`: https://tools.ietf.org/html/rfc5849#section-3.4.1
     """
     # Create base string URI per Section 3.4.1.2
     base_string_uri = normalize_base_string_uri(uri, host)
@@ -84,7 +80,7 @@ def construct_base_string(method, uri, params, host=None):
 
 
 def normalize_base_string_uri(uri, host=None):
-    """Normalize Base String URI per `Section 3.4.1.2`_.
+    """Normalize Base String URI per :rfc:`5849#section-3.4.1.2`.
 
     For example, the HTTP request::
 
@@ -99,8 +95,6 @@ def normalize_base_string_uri(uri, host=None):
         Host: www.example.net:8080
 
     is represented by the base string URI: "https://www.example.net:8080/".
-
-    .. _`Section 3.4.1.2`: https://tools.ietf.org/html/rfc5849#section-3.4.1.2
 
     The host argument overrides the netloc part of the uri argument.
     """
@@ -155,7 +149,7 @@ def normalize_base_string_uri(uri, host=None):
 
 
 def normalize_parameters(params):
-    """Normalize parameters per `Section 3.4.1.3.2`_.
+    """Normalize parameters per :rfc:`5849#section-3.4.1.3.2`.
 
     For example, the list of parameters from the previous section would
     be normalized as follows:
@@ -220,8 +214,6 @@ def normalize_parameters(params):
         a2=r%20b&a3=2%20q&a3=a&b5=%3D%253D&c%40=&c2=&oauth_consumer_key=9dj
         dj82h48djs9d2&oauth_nonce=7d8f3e4a&oauth_signature_method=HMAC-SHA1
         &oauth_timestamp=137131201&oauth_token=kkk9d7dh3k39sjv7
-
-    .. _`Section 3.4.1.3.2`: https://tools.ietf.org/html/rfc5849#section-3.4.1.3.2
     """
     # 1.  First, the name and value of each parameter are encoded
     #     (`Section 3.6`_).
@@ -252,15 +244,12 @@ def generate_signature_base_string(request):
 
 
 def hmac_sha1_signature(base_string, client_secret, token_secret):
-    """Generate signature via HMAC-SHA1 method, per `Section 3.4.2`_.
+    """Generate signature via HMAC-SHA1 method, per :rfc:`5849#section-3.4.2`.
 
     The "HMAC-SHA1" signature method uses the HMAC-SHA1 signature
-    algorithm as defined in `RFC2104`_::
+    algorithm as defined in :rfc:`2104`::
 
         digest = HMAC - SHA1(key, text)
-
-    .. _`RFC2104`: https://tools.ietf.org/html/rfc2104
-    .. _`Section 3.4.2`: https://tools.ietf.org/html/rfc5849#section-3.4.2
     """
     # The HMAC-SHA1 function variables are used in following way:
 
@@ -297,17 +286,14 @@ def hmac_sha1_signature(base_string, client_secret, token_secret):
 
 
 def rsa_sha1_signature(base_string, rsa_private_key):
-    """Generate signature via RSA-SHA1 method, per `Section 3.4.3`_.
+    """Generate signature via RSA-SHA1 method, per :rfc:`5849#section-3.4.3`.
 
     The "RSA-SHA1" signature method uses the RSASSA-PKCS1-v1_5 signature
-    algorithm as defined in `RFC3447, Section 8.2`_ (also known as
+    algorithm as defined in :rfc:`3447#section-8.2` (also known as
     PKCS#1), using SHA-1 as the hash function for EMSA-PKCS1-v1_5.  To
     use this method, the client MUST have established client credentials
     with the server that included its RSA public key (in a manner that is
     beyond the scope of this specification).
-
-    .. _`Section 3.4.3`: https://tools.ietf.org/html/rfc5849#section-3.4.3
-    .. _`RFC3447, Section 8.2`: https://tools.ietf.org/html/rfc3447#section-8.2
     """
     from .rsa import sign_sha1
 
@@ -318,15 +304,13 @@ def rsa_sha1_signature(base_string, rsa_private_key):
 
 
 def plaintext_signature(client_secret, token_secret):
-    """Generate signature via PLAINTEXT method, per `Section 3.4.4`_.
+    """Generate signature via PLAINTEXT method, per :rfc:`5849#section-3.4.4`.
 
     The "PLAINTEXT" method does not employ a signature algorithm.  It
     MUST be used with a transport-layer mechanism such as TLS or SSL (or
     sent over a secure channel with equivalent protections).  It does not
     utilize the signature base string or the "oauth_timestamp" and
     "oauth_nonce" parameters.
-
-    .. _`Section 3.4.4`: https://tools.ietf.org/html/rfc5849#section-3.4.4
     """
     # The "oauth_signature" protocol parameter is set to the concatenated
     # value of:

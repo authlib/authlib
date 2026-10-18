@@ -1,16 +1,20 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "Authlib"
 description = "The ultimate Python library in building OAuth and OpenID Connect servers and clients."
 authors = [{name = "Hsiaoming Yang", email="me@lepture.com"}]
+maintainers = [
+    {name = "Hsiaoming Yang", email = "me@lepture.com"},
+    {name = "Éloi Rivard", email = "eloi@yaal.coop"},
+]
 dependencies = [
     "cryptography>=45.0.1",
-    "joserfc>=1.6.1",
+    "joserfc>=1.6.8",
 ]
-license = {text = "BSD-3-Clause"}
+license = "BSD-3-Clause"
 requires-python = ">=3.10"
 dynamic = ["version"]
 readme = "README.md"
@@ -19,7 +23,6 @@ classifiers = [
     "Environment :: Console",
     "Environment :: Web Environment",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: BSD License",
     "Operating System :: OS Independent",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
@@ -28,6 +31,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: 3.15",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
     "Topic :: Security",
@@ -52,6 +56,7 @@ dev = [
     "pytest>=8.2",
     "pytest-asyncio>=0.21",
     "pytest-env>=1.0",
+    "scriv[toml]>=1.8.0",
     "tox-uv >= 1.16.0",
 ]
 
@@ -84,6 +89,7 @@ docs = [
     "sphinx>=7.0",
     "sphinx-design>=0.5",
     "sphinx-copybutton>=0.5",
+    "sphinxcontrib-mermaid>=2.1",
 ]
 
 [tool.setuptools.dynamic]
@@ -92,6 +98,15 @@ version = {attr = "authlib.__version__"}
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["authlib", "authlib.*"]
+
+[tool.scriv]
+format = "rst"
+changelog = "docs/upgrades/changelog.rst"
+version = "literal: authlib/consts.py: version"
+categories = ["Breaking changes", "Added", "Changed", "Deprecated", "Fixed", "Security"]
+rst_header_chars = "-~"
+compact_fragments = true
+entry_title_template = "Version {{ version }} — {{ date.strftime('%Y-%m-%d') }}"
 
 [tool.ruff.lint]
 select = [
@@ -134,9 +149,3 @@ exclude_lines = [
     "deprecate",
     "if TYPE_CHECKING:",
 ]
-
-[tool.check-manifest]
-ignore = ["tox.ini"]
-
-[tool.distutils.bdist_wheel]
-universal = true

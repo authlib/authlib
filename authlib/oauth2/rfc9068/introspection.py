@@ -119,7 +119,7 @@ class JWTIntrospectionEndpoint(IntrospectionEndpoint):
         """
         raise NotImplementedError()
 
-    def get_username(self, user_id: str) -> str:
+    def get_username(self, user_id: str) -> str | None:
         """Returns an username from a user ID.
         Developers MAY re-implement this method::
 

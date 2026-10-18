@@ -78,12 +78,10 @@ class ClientAuth:
     def get_oauth_signature(self, method, uri, headers, body):
         """Get an OAuth signature to be used in signing a request.
 
-        To satisfy `section 3.4.1.2`_ item 2, if the request argument's
+        To satisfy :rfc:`5849#section-3.4.1.2` item 2, if the request argument's
         headers dict attribute contains a Host item, its value will
         replace any netloc part of the request argument's uri attribute
         value.
-
-        .. _`section 3.4.1.2`: https://tools.ietf.org/html/rfc5849#section-3.4.1.2
         """
         sign = self.SIGNATURE_METHODS.get(self.signature_method)
         if not sign:
@@ -172,9 +170,9 @@ class ClientAuth:
         urlencoded, if no content type is set, a guess is made.
         """
         content_type = to_native(headers.get("Content-Type", ""))
-        if self.signature_type == SIGNATURE_TYPE_BODY:
-            content_type = CONTENT_TYPE_FORM_URLENCODED
-        elif not content_type and extract_params(body):
+        if self.signature_type == SIGNATURE_TYPE_BODY or (
+            not content_type and extract_params(body)
+        ):
             content_type = CONTENT_TYPE_FORM_URLENCODED
 
         if CONTENT_TYPE_FORM_URLENCODED in content_type:

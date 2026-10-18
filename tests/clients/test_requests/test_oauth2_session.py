@@ -16,6 +16,7 @@ from authlib.integrations.requests_client import OAuthError
 from authlib.oauth2.rfc6749 import MismatchingStateException
 from authlib.oauth2.rfc7523 import ClientSecretJWT
 from authlib.oauth2.rfc7523 import PrivateKeyJWT
+from tests.util import HMAC_SECRET
 
 from ..util import read_key_file
 
@@ -578,7 +579,9 @@ def test_introspect_token():
 
 
 def test_client_secret_jwt(token):
-    sess = OAuth2Session("id", "secret", token_endpoint_auth_method="client_secret_jwt")
+    sess = OAuth2Session(
+        "id", HMAC_SECRET, token_endpoint_auth_method="client_secret_jwt"
+    )
     sess.register_client_auth_method(ClientSecretJWT())
 
     mock_assertion_response(token, sess)
@@ -589,7 +592,7 @@ def test_client_secret_jwt(token):
 def test_client_secret_jwt2(token):
     sess = OAuth2Session(
         "id",
-        OctKey.import_key("secret"),
+        OctKey.import_key(HMAC_SECRET),
         token_endpoint_auth_method=ClientSecretJWT(),
     )
     mock_assertion_response(token, sess)
