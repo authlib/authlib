@@ -8,6 +8,7 @@ from httpx2 import WSGITransport
 
 from authlib.common.security import generate_token
 from authlib.common.urls import url_encode
+from authlib.integrations.base_client import InvalidTokenError
 from authlib.integrations.httpx_client import OAuth2Client
 from authlib.integrations.httpx_client import OAuthError
 
@@ -324,7 +325,18 @@ def test_auto_refresh_token():
         "foo",
         token=old_token,
         token_endpoint="https://provider.test/token",
-        update_token=update_token,
+        transport=transport,
+    ) as sess:
+        with pytest.raises(InvalidTokenError):
+            sess.get("https://resource.test/user")
+        assert sess.metadata.get("grant_type") is None
+        assert sess.token["access_token"] == "a"
+
+    with OAuth2Client(
+        "foo",
+        token=old_token,
+        token_endpoint="https://provider.test/token",
+        grant_type="authorization_code",
         transport=transport,
     ) as sess:
         with pytest.raises(OAuthError):

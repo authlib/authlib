@@ -10,6 +10,7 @@ from joserfc.jwk import RSAKey
 from authlib.common.security import generate_token
 from authlib.common.urls import add_params_to_uri
 from authlib.common.urls import url_encode
+from authlib.integrations.base_client import InvalidTokenError
 from authlib.integrations.requests_client import OAuth2Session
 from authlib.integrations.requests_client import OAuthError
 from authlib.oauth2.rfc6749 import MismatchingStateException
@@ -490,6 +491,49 @@ def test_auto_refresh_token2(token):
     sess.send = mock_json_response(token)
     sess.get("https://resource.test/user")
     assert update_token.called
+
+
+def test_restored_user_token_without_grant_type_is_not_refreshed():
+    """A restored expired user token with no refresh token and no grant_type
+    raises InvalidTokenError. Missing grant_type is not client_credentials.
+    """
+    seen = []
+
+    def fake_send(request, **kwargs):
+        seen.append(request.url)
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        resp.json = lambda: {
+            "access_token": "APP-TOKEN",
+            "token_type": "bearer",
+            "expires_in": 3600,
+        }
+        return resp
+
+    sess = OAuth2Session(
+        "cid",
+        client_secret="sec",
+        token_endpoint="https://p.test/token",
+        token=dict(access_token="USER-TOKEN", token_type="bearer", expires_at=100),
+    )
+    sess.send = fake_send
+    with pytest.raises(InvalidTokenError):
+        sess.get("https://api.test/me")
+    assert seen == []
+    assert sess.metadata.get("grant_type") is None
+    assert sess.token["access_token"] == "USER-TOKEN"
+
+
+def test_expired_token_with_other_grant_is_not_client_credentials():
+    token = dict(access_token="a", token_type="bearer", expires_at=100)
+    sess = OAuth2Session(
+        "foo",
+        token=token,
+        token_endpoint="https://provider.test/token",
+        grant_type="authorization_code",
+    )
+    with pytest.raises(OAuthError):
+        sess.get("https://resource.test/user")
 
 
 def test_revoke_token():

@@ -320,6 +320,17 @@ class OAuth2Client:
             **session_kwargs,
         )
 
+    def _refresh_grant_type(self):
+        """Grant used when an expired token has no refresh token.
+
+        Client-credentials refresh runs only when this session was given
+        ``grant_type="client_credentials"``. A missing grant is not guessed.
+        A restored user token with no refresh token stays an error.
+        ``fetch_token`` still guesses a grant for the call that obtains a
+        token.
+        """
+        return self.metadata.get("grant_type")
+
     def ensure_active_token(self, token=None):
         if token is None:
             token = self.token
@@ -330,7 +341,7 @@ class OAuth2Client:
         if refresh_token and url:
             self.refresh_token(url, refresh_token=refresh_token)
             return True
-        elif self.metadata.get("grant_type") == "client_credentials":
+        elif self._refresh_grant_type() == "client_credentials":
             access_token = token["access_token"]
             new_token = self.fetch_token(url, grant_type="client_credentials")
             if self.update_token:

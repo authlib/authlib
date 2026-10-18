@@ -8,6 +8,14 @@ Here you can see the full list of changes between each Authlib release.
 
 .. scriv-insert-here
 
+Unreleased
+----------
+
+- An expired token with no refresh token is refreshed with client
+  credentials only when the session's ``grant_type`` is
+  ``client_credentials``. A missing grant type is not treated as client
+  credentials, so a restored user token stays ``InvalidTokenError``.
+
 .. _changelog-1.9.1:
 
 Version 1.9.1 — 2026-10-14
