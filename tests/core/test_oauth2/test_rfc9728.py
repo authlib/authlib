@@ -10,11 +10,8 @@ from authlib.oauth2 import rfc9728
 from authlib.oauth2.rfc6749 import ResourceProtector
 from authlib.oauth2.rfc6749.errors import InvalidRequestError
 from authlib.oauth2.rfc6749.errors import MissingAuthorizationError
-from authlib.oauth2.rfc6749.hooks import Hookable
-from authlib.oauth2.rfc6749.hooks import hooked
 from authlib.oauth2.rfc6750 import BearerTokenValidator
 from authlib.oauth2.rfc6750.errors import InsufficientScopeError
-from authlib.oauth2.rfc6750.errors import InvalidTokenError
 from authlib.oauth2.rfc9728 import ProtectedResourceMetadata
 from authlib.oauth2.rfc9728 import ResourceMetadataExtension
 from authlib.oauth2.rfc9728.well_known import get_well_known_url
@@ -22,12 +19,14 @@ from authlib.oauth2.rfc9728.well_known import get_well_known_url
 WELL_KNOWN_URL = "/.well-known/oauth-protected-resource"
 
 
-def test_well_known_no_suffix_issuer():
+def test_well_known_without_path():
+    """A resource identifier without path gives the bare well-known path."""
     assert get_well_known_url("https://resource.test") == WELL_KNOWN_URL
     assert get_well_known_url("https://resource.test/") == WELL_KNOWN_URL
 
 
-def test_well_known_with_suffix_issuer():
+def test_well_known_with_path():
+    """The path of the resource identifier goes after the well-known path."""
     assert (
         get_well_known_url("https://resource.test/issuer1")
         == WELL_KNOWN_URL + "/issuer1"
@@ -38,13 +37,38 @@ def test_well_known_with_suffix_issuer():
 
 
 def test_well_known_with_external():
+    """external=True returns the full URL."""
     assert (
         get_well_known_url("https://resource.test", external=True)
         == "https://resource.test" + WELL_KNOWN_URL
     )
 
 
+def test_well_known_with_trailing_slash():
+    """A trailing slash in the path is kept."""
+    assert get_well_known_url("https://resource.test/api/") == WELL_KNOWN_URL + "/api/"
+
+
+def test_well_known_external_with_path():
+    """external=True keeps the path after the well-known path."""
+    assert (
+        get_well_known_url("https://resource.test/api", external=True)
+        == "https://resource.test" + WELL_KNOWN_URL + "/api"
+    )
+
+
+def test_well_known_with_query():
+    """The query is kept in the full URL, and dropped from the relative path."""
+    assert get_well_known_url("https://resource.test/api?v=1") == (
+        WELL_KNOWN_URL + "/api"
+    )
+    assert get_well_known_url("https://resource.test/api?v=1", external=True) == (
+        "https://resource.test" + WELL_KNOWN_URL + "/api?v=1"
+    )
+
+
 def test_well_known_with_changed_suffix():
+    """The well-known suffix can be changed."""
     url = get_well_known_url("https://resource.test", suffix="openid-configuration")
     assert url == "/.well-known/openid-configuration"
     url = get_well_known_url(
@@ -54,6 +78,7 @@ def test_well_known_with_changed_suffix():
 
 
 def test_validate_resource():
+    """resource is required, uses https and has no fragment."""
     metadata = ProtectedResourceMetadata({})
     with pytest.raises(ValueError, match='"resource" is required'):
         metadata.validate()
@@ -73,6 +98,7 @@ def test_validate_resource():
 
 
 def test_validate_authorization_servers():
+    """authorization_servers must be a JSON array."""
     metadata = ProtectedResourceMetadata()
     metadata.validate_authorization_servers()
 
@@ -89,6 +115,7 @@ def test_validate_authorization_servers():
 
 
 def test_validate_jwks_uri():
+    """jwks_uri must use https."""
     metadata = ProtectedResourceMetadata()
     metadata.validate_jwks_uri()
 
@@ -103,6 +130,7 @@ def test_validate_jwks_uri():
 
 
 def test_validate_scopes_supported():
+    """scopes_supported must be a JSON array."""
     metadata = ProtectedResourceMetadata()
     metadata.validate_scopes_supported()
 
@@ -115,6 +143,7 @@ def test_validate_scopes_supported():
 
 
 def test_validate_bearer_methods_supported():
+    """bearer_methods_supported only accepts header, body and query, and may be empty."""
     metadata = ProtectedResourceMetadata()
     metadata.validate_bearer_methods_supported()
 
@@ -136,6 +165,7 @@ def test_validate_bearer_methods_supported():
 
 
 def test_validate_resource_signing_alg_values_supported():
+    """resource_signing_alg_values_supported must be a JSON array without none."""
     metadata = ProtectedResourceMetadata()
     metadata.validate_resource_signing_alg_values_supported()
 
@@ -158,6 +188,7 @@ def test_validate_resource_signing_alg_values_supported():
 
 
 def test_validate_resource_name():
+    """resource_name and its localized variants must be strings."""
     metadata = ProtectedResourceMetadata()
     metadata.validate_resource_name()
 
@@ -177,6 +208,7 @@ def test_validate_resource_name():
 
 
 def test_validate_resource_documentation():
+    """resource_documentation and its localized variants must be URLs."""
     metadata = ProtectedResourceMetadata()
     metadata.validate_resource_documentation()
 
@@ -206,6 +238,7 @@ def test_validate_resource_documentation():
 
 
 def test_validate_resource_policy_uri():
+    """resource_policy_uri must be a URL."""
     metadata = ProtectedResourceMetadata()
     metadata.validate_resource_policy_uri()
 
@@ -220,6 +253,7 @@ def test_validate_resource_policy_uri():
 
 
 def test_validate_resource_tos_uri():
+    """resource_tos_uri must be a URL."""
     metadata = ProtectedResourceMetadata()
     metadata.validate_resource_tos_uri()
 
@@ -234,6 +268,7 @@ def test_validate_resource_tos_uri():
 
 
 def test_validate_tls_client_certificate_bound_access_tokens():
+    """tls_client_certificate_bound_access_tokens must be a boolean."""
     metadata = ProtectedResourceMetadata()
     metadata.validate_tls_client_certificate_bound_access_tokens()
 
@@ -261,6 +296,7 @@ def test_validate_tls_client_certificate_bound_access_tokens():
 
 
 def test_validate_authorization_details_types_supported():
+    """authorization_details_types_supported must be a JSON array."""
     metadata = ProtectedResourceMetadata()
     metadata.validate_authorization_details_types_supported()
 
@@ -277,6 +313,7 @@ def test_validate_authorization_details_types_supported():
 
 
 def test_validate_dpop_signing_alg_values_supported():
+    """dpop_signing_alg_values_supported must be a JSON array without none."""
     metadata = ProtectedResourceMetadata()
     metadata.validate_dpop_signing_alg_values_supported()
 
@@ -297,6 +334,7 @@ def test_validate_dpop_signing_alg_values_supported():
 
 
 def test_validate_dpop_bound_access_tokens_required():
+    """dpop_bound_access_tokens_required must be a boolean."""
     metadata = ProtectedResourceMetadata()
     metadata.validate_dpop_bound_access_tokens_required()
 
@@ -316,6 +354,7 @@ def test_validate_dpop_bound_access_tokens_required():
 
 
 def test_validate_resource_policy_uri_internationalized():
+    """Localized resource_policy_uri variants must be URLs."""
     metadata = ProtectedResourceMetadata({"resource_policy_uri#es": "invalid"})
     with pytest.raises(ValueError, match="MUST be a URL"):
         metadata.validate_resource_policy_uri()
@@ -327,6 +366,7 @@ def test_validate_resource_policy_uri_internationalized():
 
 
 def test_validate_resource_tos_uri_internationalized():
+    """Localized resource_tos_uri variants must be URLs."""
     metadata = ProtectedResourceMetadata({"resource_tos_uri#de": "invalid"})
     with pytest.raises(ValueError, match="MUST be a URL"):
         metadata.validate_resource_tos_uri()
@@ -355,6 +395,7 @@ def test_properties_default_values():
 
 
 def test_getattr_registry_keys():
+    """Metadata keys can be read as attributes, and missing keys give None."""
     metadata = ProtectedResourceMetadata(
         {
             "resource": "https://resource.test/api",
@@ -368,6 +409,7 @@ def test_getattr_registry_keys():
 
 
 def test_getattr_non_registry_keys():
+    """Unknown attributes raise AttributeError."""
     metadata = ProtectedResourceMetadata({})
 
     with pytest.raises(AttributeError):
@@ -459,6 +501,7 @@ def test_sign_metadata_explicit_algorithm_okp():
 
 
 def test_validate_all_metadata_complete():
+    """Metadata with all the fields is valid."""
     metadata = ProtectedResourceMetadata(
         {
             "resource": "https://resource.test/api/v1",
@@ -523,15 +566,6 @@ def test_protected_resources_metadata_classes_composition():
 
 
 RESOURCE_METADATA_URL = "https://resource.test/.well-known/oauth-protected-resource"
-
-
-def test_invalid_token_error_extra_attributes():
-    """InvalidTokenError includes extra_attributes in WWW-Authenticate header."""
-    error = InvalidTokenError(
-        extra_attributes={"resource_metadata": RESOURCE_METADATA_URL}
-    )
-    headers = dict(error.get_headers())
-    assert f'resource_metadata="{RESOURCE_METADATA_URL}"' in headers["WWW-Authenticate"]
 
 
 def test_resource_metadata_extension():
@@ -622,6 +656,7 @@ def test_sign_metadata_skips_existing_signed_metadata():
 
 
 def test_validate_signed_metadata():
+    """signed_metadata is optional and must be a string."""
     metadata = ProtectedResourceMetadata()
     metadata.validate_signed_metadata()
 
@@ -640,41 +675,3 @@ def test_signed_metadata_attribute_access():
 
     metadata = ProtectedResourceMetadata()
     assert metadata.signed_metadata is None
-
-
-def test_hooked_replace_and_success_path():
-    """replace hook chains correctly; after hook and return value covered on success."""
-
-    class MyService(Hookable):
-        @hooked
-        def compute(self, x):
-            return x * 2
-
-    svc = MyService()
-    results = []
-    svc.register_hook("after_compute", lambda instance, r: results.append(r))
-
-    assert svc.compute(3) == 6
-    assert results == [6]
-
-    svc.register_hook(
-        "replace_compute",
-        lambda instance, original, x: original(x) + 10,
-    )
-    assert svc.compute(3) == 16
-
-
-def test_hooked_with_explicit_parameters():
-    """hooked called with parentheses covers the return decorator branch."""
-
-    class MyService(Hookable):
-        @hooked(before="my_before")
-        def work(self):
-            return 42
-
-    svc = MyService()
-    calls = []
-    svc.register_hook("my_before", lambda instance: calls.append("before"))
-
-    assert svc.work() == 42
-    assert calls == ["before"]

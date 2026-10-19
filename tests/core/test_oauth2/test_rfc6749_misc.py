@@ -7,6 +7,8 @@ from authlib.oauth2.rfc6749 import OAuth2Token
 from authlib.oauth2.rfc6749 import errors
 from authlib.oauth2.rfc6749 import parameters
 from authlib.oauth2.rfc6749 import util
+from authlib.oauth2.rfc6749.hooks import Hookable
+from authlib.oauth2.rfc6749.hooks import hooked
 
 
 def test_parse_authorization_code_response():
@@ -105,3 +107,41 @@ def test_oauth2token_is_expired_with_valid_token():
     future = int(time.time()) + 7200
     token = OAuth2Token({"access_token": "a", "expires_at": future})
     assert token.is_expired() is False
+
+
+def test_hooked_replace_and_success_path():
+    """A replace hook wraps the method, and the after hook gets its result."""
+
+    class MyService(Hookable):
+        @hooked
+        def compute(self, x):
+            return x * 2
+
+    svc = MyService()
+    results = []
+    svc.register_hook("after_compute", lambda instance, r: results.append(r))
+
+    assert svc.compute(3) == 6
+    assert results == [6]
+
+    svc.register_hook(
+        "replace_compute",
+        lambda instance, original, x: original(x) + 10,
+    )
+    assert svc.compute(3) == 16
+
+
+def test_hooked_with_explicit_parameters():
+    """hooked accepts custom hook names."""
+
+    class MyService(Hookable):
+        @hooked(before="my_before")
+        def work(self):
+            return 42
+
+    svc = MyService()
+    calls = []
+    svc.register_hook("my_before", lambda instance: calls.append("before"))
+
+    assert svc.work() == 42
+    assert calls == ["before"]
