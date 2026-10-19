@@ -445,3 +445,66 @@ async def test_request_without_token():
     async with AsyncOAuth2Client("a", transport=transport) as client:
         with pytest.raises(OAuthError):
             await client.get("https://provider.test/token")
+
+
+@pytest.mark.asyncio
+async def test_client_credentials_auto_fetch_token_on_first_request():
+    transport = ASGITransport(AsyncMockDispatch(default_token))
+    async with AsyncOAuth2Client(
+        "foo",
+        client_secret="bar",
+        token_endpoint="https://provider.test/token",
+        grant_type="client_credentials",
+        transport=transport,
+    ) as client:
+        await client.get("https://provider.test/resource")
+        assert client.token["access_token"] == default_token["access_token"]
+
+
+@pytest.mark.asyncio
+async def test_non_client_credentials_raises_missing_token():
+    transport = ASGITransport(AsyncMockDispatch())
+    async with AsyncOAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(OAuthError):
+            await client.get("https://provider.test/resource")
+
+
+@pytest.mark.asyncio
+async def test_client_credentials_auto_fetch_token_on_first_stream():
+    transport = ASGITransport(AsyncMockDispatch(default_token))
+    async with AsyncOAuth2Client(
+        "foo",
+        client_secret="bar",
+        token_endpoint="https://provider.test/token",
+        grant_type="client_credentials",
+        transport=transport,
+    ) as client:
+        async with client.stream("GET", "https://provider.test/resource") as stream:
+            await stream.aread()
+        assert client.token["access_token"] == default_token["access_token"]
+
+
+@pytest.mark.asyncio
+async def test_non_client_credentials_raises_missing_token_on_stream():
+    transport = ASGITransport(AsyncMockDispatch())
+    async with AsyncOAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(OAuthError):
+            async with client.stream("GET", "https://provider.test/resource") as stream:
+                await stream.aread()
+
+
+@pytest.mark.asyncio
+async def test_ensure_active_token_with_provided_token():
+    transport = ASGITransport(AsyncMockDispatch(default_token))
+    async with AsyncOAuth2Client(
+        "foo",
+        token_endpoint="https://provider.test/token",
+        grant_type="client_credentials",
+        transport=transport,
+    ) as client:
+        token = deepcopy(default_token)
+        token["expires_at"] = time.time() + 3600
+        client.token = token
+        with mock.patch.object(client, "fetch_token") as mocked:
+            await client.ensure_active_token(token)
+            mocked.assert_not_called()
