@@ -57,7 +57,7 @@ class ProtectedResourceMetadata(dict):
     ]
 
     def validate_resource(self):
-        """REQUIRED. The protected resource's resource identifier as defined in
+        """The protected resource's resource identifier as defined in
         Section 1.2 of RFC9728.
         """
         resource = self.get("resource")
@@ -75,13 +75,13 @@ class ProtectedResourceMetadata(dict):
             raise ValueError('"resource" MUST NOT contain a fragment')
 
     def validate_authorization_servers(self):
-        """OPTIONAL. JSON array containing a list of OAuth authorization server
+        """JSON array containing a list of OAuth authorization server
         issuer identifiers, as defined in [RFC8414].
         """
         validate_array_value(self, "authorization_servers")
 
     def validate_jwks_uri(self):
-        """OPTIONAL.  URL of the protected resource's JSON Web Key (JWK) Set
+        """URL of the protected resource's JSON Web Key (JWK) Set
         [JWK] document. This contains public keys belonging to the protected
         resource, such as signing key(s) that the resource server uses to sign
         resource responses. This URL MUST use the https scheme. When both
@@ -95,7 +95,7 @@ class ProtectedResourceMetadata(dict):
             raise ValueError('"jwks_uri" MUST use "https" scheme')
 
     def validate_scopes_supported(self):
-        """RECOMMENDED. JSON array containing a list of scope values, as
+        """JSON array containing a list of scope values, as
         defined in OAuth 2.0 [RFC6749], that are used in authorization
         requests to request access to this protected resource. Protected
         resources MAY choose not to advertise some scope values supported
@@ -104,7 +104,7 @@ class ProtectedResourceMetadata(dict):
         validate_array_value(self, "scopes_supported")
 
     def validate_bearer_methods_supported(self):
-        """OPTIONAL. JSON array containing a list of the supported methods of
+        """JSON array containing a list of the supported methods of
         sending an OAuth 2.0 bearer token [RFC6750] to the protected resource.
         Defined values are ["header", "body", "query"], corresponding to
         Sections 2.1, 2.2, and 2.3 of [RFC6750]. The empty array [] can be used
@@ -121,7 +121,7 @@ class ProtectedResourceMetadata(dict):
                 )
 
     def validate_resource_signing_alg_values_supported(self):
-        """OPTIONAL. JSON array containing a list of the JWS [JWS] signing
+        """JSON array containing a list of the JWS [JWS] signing
         algorithms (alg values) [JWA] supported by the protected resource for
         signing resource responses, for instance, as described in
         [FAPI.MessageSigning]. No default algorithms are implied if this entry
@@ -151,7 +151,7 @@ class ProtectedResourceMetadata(dict):
         _validate_localized_string(self, "resource_name")
 
     def validate_resource_documentation(self):
-        """OPTIONAL. URL of a page containing human-readable information that
+        """URL of a page containing human-readable information that
         developers might want or need to know when using the protected
         resource. The value of this field MAY be internationalized, as
         described in Section 2.1.
@@ -159,7 +159,7 @@ class ProtectedResourceMetadata(dict):
         _validate_localized_url(self, "resource_documentation")
 
     def validate_resource_policy_uri(self):
-        """OPTIONAL. URL of a page containing human-readable information about
+        """URL of a page containing human-readable information about
         the protected resource's requirements on how the client can use the
         data provided by the protected resource. The value of this field MAY be
         internationalized, as described in Section 2.1.
@@ -168,14 +168,14 @@ class ProtectedResourceMetadata(dict):
         _validate_localized_url(self, "resource_policy_uri")
 
     def validate_resource_tos_uri(self):
-        """OPTIONAL. URL of a page containing human-readable information about
+        """URL of a page containing human-readable information about
         the protected resource's terms of service. The value of this field MAY
         be internationalized, as described in Section 2.1.
         """
         _validate_localized_url(self, "resource_tos_uri")
 
     def validate_tls_client_certificate_bound_access_tokens(self):
-        """OPTIONAL. Boolean value indicating protected resource support for
+        """Boolean value indicating protected resource support for
         mutual-TLS client certificate-bound access tokens [RFC8705]. If
         omitted, the default value is false.
         """
@@ -207,7 +207,7 @@ class ProtectedResourceMetadata(dict):
             )
 
     def validate_dpop_bound_access_tokens_required(self):
-        """OPTIONAL. Boolean value specifying whether the protected resource
+        """Boolean value specifying whether the protected resource
         always requires the use of DPoP-bound access tokens [RFC9449].
         If omitted, the default value is false.
 
@@ -217,7 +217,7 @@ class ProtectedResourceMetadata(dict):
             raise ValueError('"dpop_bound_access_tokens_required" MUST be a boolean')
 
     def validate_signed_metadata(self):
-        """OPTIONAL. JWT containing metadata values as claims per :rfc:`9728#section-2.2`."""
+        """JWT containing metadata values as claims per :rfc:`9728#section-2.2`."""
         value = self.get("signed_metadata")
         if value is not None and not isinstance(value, str):
             raise ValueError('"signed_metadata" MUST be a string')

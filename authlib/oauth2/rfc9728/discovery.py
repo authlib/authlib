@@ -17,7 +17,7 @@ class AuthorizationServerMetadata(dict):
     REGISTRY_KEYS = ["protected_resources"]
 
     def validate_protected_resources(self):
-        """OPTIONAL. JSON array of resource identifiers for protected
+        """JSON array of resource identifiers for protected
         resources that accept access tokens issued by this authorization
         server (Section 4).
         """
