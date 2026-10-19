@@ -7,6 +7,7 @@ from authlib._joserfc_helpers import import_any_key
 from authlib.common.security import is_secure_transport
 from authlib.common.urls import is_valid_url
 from authlib.common.urls import urlparse
+from authlib.oauth2.rfc8414.models import validate_array_value
 
 from .well_known import get_well_known_url
 
@@ -144,18 +145,10 @@ class ProtectedResourceMetadata(dict):
         include this field. The value of this field MAY be internationalized,
         as described in Section 2.1.
         """
-        value = self.get("resource_name")
-        if value and not isinstance(value, str):
-            raise ValueError('"resource_name" MUST be a string')
-
         # rfc9728 §2.1: "To specify the languages and scripts, language tags
         # [BCP47] are added to resource metadata parameter names, delimited
         # by a # character."
-        for key in self.keys():
-            if key.startswith("resource_name#"):
-                value = self.get(key)
-                if value and not isinstance(value, str):
-                    raise ValueError(f'"{key}" MUST be a string')
+        _validate_localized_string(self, "resource_name")
 
     def validate_resource_documentation(self):
         """OPTIONAL. URL of a page containing human-readable information that
@@ -163,15 +156,7 @@ class ProtectedResourceMetadata(dict):
         resource. The value of this field MAY be internationalized, as
         described in Section 2.1.
         """
-        value = self.get("resource_documentation")
-        if value and not is_valid_url(value):
-            raise ValueError('"resource_documentation" MUST be a URL')
-
-        for key in self.keys():
-            if key.startswith("resource_documentation#"):
-                value = self.get(key)
-                if value and not is_valid_url(value):
-                    raise ValueError(f'"{key}" MUST be a URL')
+        _validate_localized_url(self, "resource_documentation")
 
     def validate_resource_policy_uri(self):
         """OPTIONAL. URL of a page containing human-readable information about
@@ -180,30 +165,14 @@ class ProtectedResourceMetadata(dict):
         internationalized, as described in Section 2.1.
 
         """
-        value = self.get("resource_policy_uri")
-        if value and not is_valid_url(value):
-            raise ValueError('"resource_policy_uri" MUST be a URL')
-
-        for key in self.keys():
-            if key.startswith("resource_policy_uri#"):
-                value = self.get(key)
-                if value and not is_valid_url(value):
-                    raise ValueError(f'"{key}" MUST be a URL')
+        _validate_localized_url(self, "resource_policy_uri")
 
     def validate_resource_tos_uri(self):
         """OPTIONAL. URL of a page containing human-readable information about
         the protected resource's terms of service. The value of this field MAY
         be internationalized, as described in Section 2.1.
         """
-        value = self.get("resource_tos_uri")
-        if value and not is_valid_url(value):
-            raise ValueError('"resource_tos_uri" MUST be a URL')
-
-        for key in self.keys():
-            if key.startswith("resource_tos_uri#"):
-                value = self.get(key)
-                if value and not is_valid_url(value):
-                    raise ValueError(f'"{key}" MUST be a URL')
+        _validate_localized_url(self, "resource_tos_uri")
 
     def validate_tls_client_certificate_bound_access_tokens(self):
         """OPTIONAL. Boolean value indicating protected resource support for
@@ -380,8 +349,19 @@ class ResourceMetadataExtension:
         )
 
 
-def validate_array_value(metadata, key):
-    """Helper function to validate that a metadata key is a JSON array."""
-    values = metadata.get(key)
-    if values is not None and not isinstance(values, list):
-        raise ValueError(f'"{key}" MUST be JSON array')
+def _localized_keys(metadata, key):
+    return [k for k in metadata if k == key or k.startswith(f"{key}#")]
+
+
+def _validate_localized_string(metadata, key):
+    for k in _localized_keys(metadata, key):
+        value = metadata[k]
+        if value and not isinstance(value, str):
+            raise ValueError(f'"{k}" MUST be a string')
+
+
+def _validate_localized_url(metadata, key):
+    for k in _localized_keys(metadata, key):
+        value = metadata[k]
+        if value and not is_valid_url(value):
+            raise ValueError(f'"{k}" MUST be a URL')
