@@ -41,11 +41,8 @@ def sign_jwt_bearer_assertion(
     payload["iat"] = issued_at
     payload["exp"] = expires_at
 
-    if claims is None:
-        claims = {}
     # jti uniquely identifies the JWT and prevents replay attacks (RFC 7523 §3)
-    if "jti" not in claims:
-        claims["jti"] = generate_token(36)
+    payload["jti"] = generate_token(36)
 
     if claims:
         payload.update(claims)
@@ -72,12 +69,6 @@ def _sign(key, client_id, token_endpoint, alg, claims=None, **kwargs):
     subject = client_id
     # The Audience SHOULD be the URL of the Authorization Server's Token Endpoint.
     audience = token_endpoint
-
-    # jti is required
-    if claims is None:
-        claims = {}
-    if "jti" not in claims:
-        claims["jti"] = generate_token(36)
 
     return sign_jwt_bearer_assertion(
         key=key,
