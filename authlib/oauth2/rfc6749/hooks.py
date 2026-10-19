@@ -1,3 +1,4 @@
+import functools
 from collections import defaultdict
 
 
@@ -34,6 +35,7 @@ def hooked(func=None, before=None, after=None, replace=None):
         after_name = after or f"after_{func.__name__}"
         replace_name = replace or f"replace_{func.__name__}"
 
+        @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
             self.execute_hook(before_name, *args, **kwargs)
 
