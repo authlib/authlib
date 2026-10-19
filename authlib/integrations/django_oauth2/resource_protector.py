@@ -72,8 +72,5 @@ def return_error_response(error):
     resp = JsonResponse(body, status=error.status_code)
     headers = error.get_headers()
     for k, v in headers:
-        if k in resp:
-            resp[k] += f", {v}"
-        else:
-            resp[k] = v
+        resp[k] = v
     return resp

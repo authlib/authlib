@@ -51,6 +51,20 @@ def test_invalid_token(factory):
     assert data["error"] == "invalid_token"
 
 
+def test_error_response_headers(factory):
+    """The error response has a single Content-Type and a WWW-Authenticate header."""
+
+    @require_oauth("profile")
+    def get_user_profile(request):
+        return JsonResponse({})
+
+    request = factory.get("/user")
+    resp = get_user_profile(request)
+    assert resp.status_code == 401
+    assert resp["Content-Type"] == "application/json"
+    assert "WWW-Authenticate" in resp
+
+
 def test_expired_token(factory, token):
     token.expires_in = -10
     token.save()
