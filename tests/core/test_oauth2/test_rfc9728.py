@@ -606,7 +606,6 @@ def test_resource_metadata_extension_insufficient_scope():
         protector.validate_request(scopes=["read"], request=FakeRequest())
 
     headers = dict(exc_info.value.get_headers())
-    # InsufficientScopeError has no WWW-Authenticate by default; extension injects it
     assert f'resource_metadata="{RESOURCE_METADATA_URL}"' in headers["WWW-Authenticate"]
     assert headers["WWW-Authenticate"].startswith("bearer ")
 
@@ -617,23 +616,19 @@ def test_sign_metadata_skips_existing_signed_metadata():
     metadata = ProtectedResourceMetadata({"resource": "https://resource.test/api"})
     metadata.sign_metadata(key, "HS256")
 
-    # sign again — signed_metadata from the first call must not appear in new claims
     metadata.sign_metadata(key, "HS256")
     decoded = jwt.decode(metadata["signed_metadata"], key)
     assert "signed_metadata" not in decoded.claims
 
 
 def test_validate_signed_metadata():
-    # can be absent
     metadata = ProtectedResourceMetadata()
     metadata.validate_signed_metadata()
 
-    # must be a string
     metadata = ProtectedResourceMetadata({"signed_metadata": 123})
     with pytest.raises(ValueError, match="MUST be a string"):
         metadata.validate_signed_metadata()
 
-    # valid
     metadata = ProtectedResourceMetadata({"signed_metadata": "a.b.c"})
     metadata.validate_signed_metadata()
 
@@ -645,9 +640,6 @@ def test_signed_metadata_attribute_access():
 
     metadata = ProtectedResourceMetadata()
     assert metadata.signed_metadata is None
-
-
-# -- hooks coverage --
 
 
 def test_hooked_replace_and_success_path():
@@ -662,11 +654,9 @@ def test_hooked_replace_and_success_path():
     results = []
     svc.register_hook("after_compute", lambda instance, r: results.append(r))
 
-    # success path without replace
     assert svc.compute(3) == 6
     assert results == [6]
 
-    # replace hook wraps the original
     svc.register_hook(
         "replace_compute",
         lambda instance, original, x: original(x) + 10,
