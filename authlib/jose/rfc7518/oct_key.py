@@ -41,6 +41,7 @@ class OctKey(Key):
         self.check_key_op(operation)
         if not self.raw_key:
             self.load_raw_key()
+        self._check_key(self.raw_key)
         return self.raw_key
 
     def load_raw_key(self):
@@ -62,6 +63,16 @@ class OctKey(Key):
     def validate_raw_key(cls, key):
         return isinstance(key, bytes)
 
+    @staticmethod
+    def _check_key(raw_key):
+        # Per RFC 7518 §3.2, an HMAC key must be at least as long as the hash output.
+        if not raw_key:
+            raise ValueError("oct key material must not be empty")
+
+        # PEM parsers accept leading text, including comments and whitespace.
+        if any(marker in raw_key for marker in POSSIBLE_UNSAFE_KEYS):
+            raise ValueError("This key may not be safe to import")
+
     @classmethod
     def import_key(cls, raw, options=None):
         """Import a key from bytes, string, or dict data."""
@@ -77,9 +88,7 @@ class OctKey(Key):
         else:
             raw_key = to_bytes(raw)
 
-            # security check
-            if raw_key.startswith(POSSIBLE_UNSAFE_KEYS):
-                raise ValueError("This key may not be safe to import")
+            cls._check_key(raw_key)
 
             key = cls(raw_key=raw_key, options=options)
         return key

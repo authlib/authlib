@@ -41,6 +41,12 @@ def sign_jwt_bearer_assertion(
     payload["iat"] = issued_at
     payload["exp"] = expires_at
 
+    if claims is None:
+        claims = {}
+    # jti uniquely identifies the JWT and prevents replay attacks (RFC 7523 §3)
+    if "jti" not in claims:
+        claims["jti"] = generate_token(36)
+
     if claims:
         payload.update(claims)
 

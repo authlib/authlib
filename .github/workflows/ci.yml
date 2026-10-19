@@ -1,0 +1,37 @@
+name: ci
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches-ignore:
+    - 'wip-*'
+  pull_request:
+    branches-ignore:
+    - 'wip-*'
+
+jobs:
+  tests:
+    uses: ./.github/workflows/python.yml
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  docs:
+    uses: ./.github/workflows/docs.yml
+
+  lint:
+    uses: ./.github/workflows/lint.yml
+
+  check:
+    if: always()
+    needs:
+    - tests
+    - docs
+    - lint
+    runs-on: ubuntu-latest
+    steps:
+    - uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
+      with:
+        jobs: ${{ toJSON(needs) }}

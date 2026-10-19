@@ -1,17 +1,12 @@
 name: tests
 
 on:
-  push:
-    branches-ignore:
-    - 'wip-*'
-    paths-ignore:
-    - 'docs/**'
-    - 'README.md'
-  pull_request:
-    branches-ignore:
-    - 'wip-*'
-    paths-ignore:
-    - 'docs/**'
+  workflow_call:
+    secrets:
+      CODECOV_TOKEN:
+        required: false
+      SONAR_TOKEN:
+        required: false
 
 env:
   FORCE_COLOR: '1'
@@ -25,53 +20,45 @@ jobs:
       max-parallel: 3
       matrix:
         python:
-        - version: "3.10"
-        - version: "3.11"
-        - version: "3.12"
-        - version: "3.13"
-        - version: "3.14"
-        - version: "pypy@3.11"
+        - "3.10"
+        - "3.11"
+        - "3.12"
+        - "3.13"
+        - "3.14"
+        - "3.15"
+        - "pypy3.11"
 
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         fetch-depth: 0
 
     - name: Install uv
-      uses: astral-sh/setup-uv@v7
+      uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
       with:
         enable-cache: true
-        cache-dependency-glob: |
-          **/uv.lock
+        cache-dependency-glob: pyproject.toml
 
-    - name: Set up Python ${{ matrix.python.version }}
-      run: |
-        uv python install ${{ matrix.python.version }}
-        uv python pin ${{ matrix.python.version }}
+    - name: Set up Python ${{ matrix.python }}
+      run: uv python install ${{ matrix.python }}
 
     - name: Install dependencies
-      run: |
-        uv sync
+      run: uv sync --python ${{ matrix.python }} --group clients --group jose
 
-    - name: Test with tox
-      env:
-        TOXENV: py,jose,clients,flask,django
-      run: |
-        uvx --with tox-uv tox -p auto
+    - name: Test with coverage
+      run: uv run coverage run --source=authlib -m pytest tests
 
     - name: Report coverage
       run: |
-        uv run coverage combine
         uv run coverage report
         uv run coverage xml
 
     - name: Check diff coverage for modified files
       if: github.event_name == 'pull_request'
-      run: |
-        uv run diff-cover coverage.xml --compare-branch=origin/${{ github.base_ref }} --fail-under=100 --format github-annotations:warning
+      run: uv run diff-cover coverage.xml --compare-branch=origin/${{ github.base_ref }} --fail-under=100 --format github-annotations:warning
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: ./coverage.xml
@@ -79,11 +66,35 @@ jobs:
         name: GitHub
 
     - name: SonarCloud Scan
-      uses: SonarSource/sonarqube-scan-action@v6
+      uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
       continue-on-error: true
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
     - name: Minimize cache
-      run: |
-        uv cache prune --ci
+      run: uv cache prune --ci
+
+  minversions:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+      with:
+        enable-cache: true
+        cache-dependency-glob: pyproject.toml
+
+    - name: Set up Python 3.10
+      run: uv python install 3.10
+
+    - name: Install lowest direct versions
+      run: uv sync --python 3.10 --resolution lowest-direct --upgrade --group clients --group jose
+
+    - name: Test
+      run: uv run --no-sync pytest tests
+
+    - name: Minimize cache
+      run: uv cache prune --ci

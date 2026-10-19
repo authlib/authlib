@@ -4,7 +4,7 @@
 This module represents a direct implementation of
 OAuth 2.0 Dynamic Client Registration Protocol.
 
-https://tools.ietf.org/html/rfc7591
+:rfc:`7591`
 """
 
 from .claims import ClientMetadataClaims

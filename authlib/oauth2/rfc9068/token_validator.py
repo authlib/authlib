@@ -1,13 +1,10 @@
 """authlib.oauth2.rfc9068.token_validator.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Implementation of Validating JWT Access Tokens per `Section 4`_.
-
-.. _`Section 7`: https://www.rfc-editor.org/rfc/rfc9068.html#name-validating-jwt-access-token
+Implementation of Validating JWT Access Tokens per :rfc:`9068#section-4`.
 """
 
 from joserfc import jwt
-from joserfc.errors import DecodeError
 from joserfc.errors import JoseError
 
 from authlib._joserfc_helpers import import_any_key
@@ -115,7 +112,7 @@ class JWTBearerTokenValidator(BearerTokenValidator):
         try:
             token = jwt.decode(token_string, key=key)
             return JWTAccessTokenClaims(token.claims, token.header, claims_options)
-        except DecodeError as exc:
+        except JoseError as exc:
             raise InvalidTokenError(
                 realm=self.realm, extra_attributes=self.extra_attributes
             ) from exc

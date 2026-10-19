@@ -44,6 +44,4 @@ Import a key with::
     key.as_json()
 
 You may pass extra parameters into ``import_key`` method, available parameters can
-be found on RFC7517 `Section 4`_.
-
-.. _`Section 4`: https://tools.ietf.org/html/rfc7517#section-4
+be found on :rfc:`7517#section-4`.

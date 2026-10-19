@@ -1,12 +1,11 @@
+# ruff: noqa: I001
+# The import order below is intentional: httpx compatibility must be loaded
+# before anyio so import errors refer to httpx.
 import typing
 from contextlib import asynccontextmanager
 
-import httpx
+from ._compat import httpx2
 from anyio import Lock  # Import after httpx so import errors refer to httpx
-from httpx import USE_CLIENT_DEFAULT
-from httpx import Auth
-from httpx import Request
-from httpx import Response
 
 from authlib.common.urls import url_decode
 from authlib.oauth2.auth import ClientAuth
@@ -19,6 +18,11 @@ from ..base_client import OAuthError
 from ..base_client import UnsupportedTokenTypeError
 from .utils import HTTPX_CLIENT_KWARGS
 from .utils import build_request
+
+USE_CLIENT_DEFAULT = httpx2.USE_CLIENT_DEFAULT
+Auth = httpx2.Auth
+Request = httpx2.Request
+Response = httpx2.Response
 
 __all__ = [
     "OAuth2Auth",
@@ -60,7 +64,7 @@ class OAuth2ClientAuth(Auth, ClientAuth):
         )
 
 
-class AsyncOAuth2Client(_OAuth2Client, httpx.AsyncClient):
+class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
     SESSION_REQUEST_PARAMS = HTTPX_CLIENT_KWARGS
 
     client_auth_class = OAuth2ClientAuth
@@ -81,9 +85,9 @@ class AsyncOAuth2Client(_OAuth2Client, httpx.AsyncClient):
         leeway=60,
         **kwargs,
     ):
-        # extract httpx.Client kwargs
+        # extract httpx2.Client kwargs
         client_kwargs = self._extract_session_request_params(kwargs)
-        httpx.AsyncClient.__init__(self, **client_kwargs)
+        httpx2.AsyncClient.__init__(self, **client_kwargs)
 
         # We use a Lock to synchronize coroutines to prevent
         # multiple concurrent attempts to refresh the same token
@@ -105,15 +109,26 @@ class AsyncOAuth2Client(_OAuth2Client, httpx.AsyncClient):
             **kwargs,
         )
 
+    async def _ensure_initial_token(self):
+        """Fetch a missing client-credentials token, once per client."""
+        if self.token:
+            return
+        token_endpoint = self.metadata.get("token_endpoint")
+        if (
+            self.metadata.get("grant_type") != "client_credentials"
+            or not token_endpoint
+        ):
+            raise MissingTokenError()
+        async with self._token_refresh_lock:
+            if not self.token:
+                await self.fetch_token(token_endpoint, grant_type="client_credentials")
+
     async def request(
         self, method, url, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs
     ):
         if not withhold_token and auth is USE_CLIENT_DEFAULT:
-            if not self.token:
-                raise MissingTokenError()
-
+            await self._ensure_initial_token()
             await self.ensure_active_token(self.token)
-
             auth = self.token_auth
 
         return await super().request(method, url, auth=auth, **kwargs)
@@ -123,11 +138,8 @@ class AsyncOAuth2Client(_OAuth2Client, httpx.AsyncClient):
         self, method, url, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs
     ):
         if not withhold_token and auth is USE_CLIENT_DEFAULT:
-            if not self.token:
-                raise MissingTokenError()
-
+            await self._ensure_initial_token()
             await self.ensure_active_token(self.token)
-
             auth = self.token_auth
 
         async with super().stream(method, url, auth=auth, **kwargs) as resp:
@@ -208,7 +220,7 @@ class AsyncOAuth2Client(_OAuth2Client, httpx.AsyncClient):
         )
 
 
-class OAuth2Client(_OAuth2Client, httpx.Client):
+class OAuth2Client(_OAuth2Client, httpx2.Client):
     SESSION_REQUEST_PARAMS = HTTPX_CLIENT_KWARGS
 
     client_auth_class = OAuth2ClientAuth
@@ -228,14 +240,9 @@ class OAuth2Client(_OAuth2Client, httpx.Client):
         update_token=None,
         **kwargs,
     ):
-        # extract httpx.Client kwargs
+        # extract httpx2.Client kwargs
         client_kwargs = self._extract_session_request_params(kwargs)
-        # app keyword was dropped!
-        app_value = client_kwargs.pop("app", None)
-        if app_value is not None:
-            client_kwargs["transport"] = httpx.WSGITransport(app=app_value)
-
-        httpx.Client.__init__(self, **client_kwargs)
+        httpx2.Client.__init__(self, **client_kwargs)
 
         _OAuth2Client.__init__(
             self,
@@ -256,16 +263,25 @@ class OAuth2Client(_OAuth2Client, httpx.Client):
     def handle_error(error_type, error_description):
         raise OAuthError(error_type, error_description)
 
+    def _ensure_initial_token(self):
+        """Fetch a missing token for a configured client-credentials grant."""
+        if self.token:
+            return
+        token_endpoint = self.metadata.get("token_endpoint")
+        if (
+            self.metadata.get("grant_type") != "client_credentials"
+            or not token_endpoint
+        ):
+            raise MissingTokenError()
+        self.fetch_token(token_endpoint, grant_type="client_credentials")
+
     def request(
         self, method, url, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs
     ):
         if not withhold_token and auth is USE_CLIENT_DEFAULT:
-            if not self.token:
-                raise MissingTokenError()
-
+            self._ensure_initial_token()
             if not self.ensure_active_token(self.token):
                 raise InvalidTokenError()
-
             auth = self.token_auth
 
         return super().request(method, url, auth=auth, **kwargs)
@@ -274,12 +290,9 @@ class OAuth2Client(_OAuth2Client, httpx.Client):
         self, method, url, withhold_token=False, auth=USE_CLIENT_DEFAULT, **kwargs
     ):
         if not withhold_token and auth is USE_CLIENT_DEFAULT:
-            if not self.token:
-                raise MissingTokenError()
-
+            self._ensure_initial_token()
             if not self.ensure_active_token(self.token):
                 raise InvalidTokenError()
-
             auth = self.token_auth
 
         return super().stream(method, url, auth=auth, **kwargs)

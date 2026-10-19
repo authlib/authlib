@@ -1,9 +1,7 @@
 """authlib.spec.rfc5849.parameters.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This module contains methods related to `section 3.5`_ of the OAuth 1.0a spec.
-
-.. _`section 3.5`: https://tools.ietf.org/html/rfc5849#section-3.5
+This module contains methods related to :rfc:`5849#section-3.5`.
 """
 
 from authlib.common.urls import extract_params
@@ -15,10 +13,10 @@ from .util import escape
 
 def prepare_headers(oauth_params, headers=None, realm=None):
     """**Prepare the Authorization header.**
-    Per `section 3.5.1`_ of the spec.
+    Per :rfc:`5849#section-3.5.1`.
 
     Protocol parameters can be transmitted using the HTTP "Authorization"
-    header field as defined by `RFC2617`_ with the auth-scheme name set to
+    header field as defined by :rfc:`2617` with the auth-scheme name set to
     "OAuth" (case insensitive).
 
     For example::
@@ -31,9 +29,6 @@ def prepare_headers(oauth_params, headers=None, realm=None):
             oauth_callback="http%3A%2F%2Fprinter.example.com%2Fready",
             oauth_signature="74KNZJeDHnMBp0EMJ9ZHt%2FXKycU%3D",
             oauth_version="1.0"
-
-    .. _`section 3.5.1`: https://tools.ietf.org/html/rfc5849#section-3.5.1
-    .. _`RFC2617`: https://tools.ietf.org/html/rfc2617
     """
     headers = headers or {}
 
@@ -64,10 +59,7 @@ def _append_params(oauth_params, params):
 
     Both params and oauth_params is must be lists of 2-tuples.
 
-    Per `section 3.5.2`_ and `3.5.3`_ of the spec.
-
-    .. _`section 3.5.2`: https://tools.ietf.org/html/rfc5849#section-3.5.2
-    .. _`3.5.3`: https://tools.ietf.org/html/rfc5849#section-3.5.3
+    Per :rfc:`5849#section-3.5.2` and :rfc:`5849#section-3.5.3`.
 
     """
     merged = list(params)
@@ -83,9 +75,7 @@ def _append_params(oauth_params, params):
 def prepare_form_encoded_body(oauth_params, body):
     """Prepare the Form-Encoded Body.
 
-    Per `section 3.5.2`_ of the spec.
-
-    .. _`section 3.5.2`: https://tools.ietf.org/html/rfc5849#section-3.5.2
+    Per :rfc:`5849#section-3.5.2`.
 
     """
     # append OAuth params to the existing body
@@ -95,9 +85,7 @@ def prepare_form_encoded_body(oauth_params, body):
 def prepare_request_uri_query(oauth_params, uri):
     """Prepare the Request URI Query.
 
-    Per `section 3.5.3`_ of the spec.
-
-    .. _`section 3.5.3`: https://tools.ietf.org/html/rfc5849#section-3.5.3
+    Per :rfc:`5849#section-3.5.3`.
 
     """
     # append OAuth params to the existing set of query components

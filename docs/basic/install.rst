@@ -30,9 +30,9 @@ Using Authlib with requests::
 
     $ pip install Authlib requests
 
-Using Authlib with httpx::
+Using Authlib with httpx2::
 
-    $ pip install Authlib httpx
+    $ pip install Authlib httpx2
 
 Using Authlib with Flask::
 
@@ -44,7 +44,7 @@ Using Authlib with Django::
 
 Using Authlib with Starlette::
 
-    $ pip install Authlib httpx Starlette
+    $ pip install Authlib httpx2 Starlette
 
 
 Get the Source Code

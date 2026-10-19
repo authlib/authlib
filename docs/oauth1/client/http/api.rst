@@ -20,8 +20,8 @@ Requests OAuth 1.0
     :members:
 
 
-HTTPX OAuth 1.0
----------------
+HTTPX2 OAuth 1.0
+----------------
 
 .. module:: authlib.integrations.httpx_client
 

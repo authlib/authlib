@@ -1,7 +1,9 @@
 import time
+from types import SimpleNamespace
 from unittest import mock
 
 from joserfc import jwt
+from joserfc.jwk import ECKey
 from joserfc.jwk import RSAKey
 
 from authlib.oauth2.rfc7523 import PrivateKeyJWT
@@ -64,12 +66,26 @@ def test_all_set():
         claims={"foo1a": "bar1a"},
         headers={"foo1b": "bar1b"},
         alg="RS512",
+        expires_in=120,
     )
 
     assert jwt_signer.token_endpoint == "https://provider.test/oauth/access_token"
     assert jwt_signer.claims == {"foo1a": "bar1a"}
     assert jwt_signer.headers == {"foo1b": "bar1b"}
     assert jwt_signer.alg == "RS512"
+    assert jwt_signer.expires_in == 120
+
+
+def test_expires_in_set():
+    jwt_signer = PrivateKeyJWT(expires_in=60)
+
+    assert jwt_signer.expires_in == 60
+
+
+def test_expires_in_not_set():
+    jwt_signer = PrivateKeyJWT()
+
+    assert jwt_signer.expires_in == 3600
 
 
 def sign_and_decode(jwt_signer, client_id, token_endpoint):
@@ -231,6 +247,21 @@ def test_sign_with_additional_claims():
     assert {"alg": "RS256", "typ": "JWT"} == decoded.header
 
 
+def test_sign_with_ec_key():
+    """``PrivateKeyJWT`` should accept an ``ECKey`` private key and sign with ES256."""
+    ec_key = ECKey.generate_key("P-256", private=True)
+    jwt_signer = PrivateKeyJWT(alg="ES256")
+    auth = SimpleNamespace(client_id="client_id_1", client_secret=ec_key)
+
+    data = jwt_signer.sign(auth, "https://provider.test/oauth/access_token")
+    decoded = jwt.decode(data, ec_key)
+
+    assert decoded.claims["iss"] == "client_id_1"
+    assert decoded.claims["sub"] == "client_id_1"
+    assert decoded.claims["aud"] == "https://provider.test/oauth/access_token"
+    assert decoded.header["alg"] == "ES256"
+
+
 def test_sign_with_non_recommended_alg():
     """Signing must work with algorithms outside joserfc's recommended set."""
     jwt_signer = PrivateKeyJWT(alg="RS384")
@@ -243,3 +274,16 @@ def test_sign_with_non_recommended_alg():
     decoded = jwt.decode(data, RSAKey.import_key(public_key), algorithms=["RS384"])
 
     assert decoded.header["alg"] == "RS384"
+
+
+def test_sign_custom_expires_in():
+    jwt_signer = PrivateKeyJWT(expires_in=60)
+
+    decoded, pre_sign_time, iat, exp, jti = sign_and_decode(
+        jwt_signer,
+        "client_id_1",
+        "https://provider.test/oauth/access_token",
+    )
+
+    assert exp >= iat + 60
+    assert exp <= iat + 60 + 2

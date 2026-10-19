@@ -224,4 +224,4 @@ class JWTClaims(BaseClaims):
 
 
 def _validate_numeric_time(s):
-    return isinstance(s, (int, float))
+    return isinstance(s, (int, float)) and not isinstance(s, bool)

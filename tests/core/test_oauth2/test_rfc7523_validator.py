@@ -59,3 +59,20 @@ def test_expired_token(oct_key):
     time.sleep(0.1)
     with pytest.raises(InvalidTokenError):
         validator.validate_token(token, [], None)
+
+
+def test_custom_leeway(oct_key):
+    claims = {
+        "exp": int(time.time()) - 30,
+        "client_id": "client-id",
+        "grant_type": "client_credentials",
+    }
+    token_string = jwt.encode({"alg": "HS256"}, claims, oct_key)
+
+    validator_no_leeway = JWTBearerTokenValidator(oct_key, leeway=0)
+    token = validator_no_leeway.authenticate_token(token_string)
+    assert token is None
+
+    validator_with_leeway = JWTBearerTokenValidator(oct_key, leeway=60)
+    token = validator_with_leeway.authenticate_token(token_string)
+    assert token is not None

@@ -141,6 +141,8 @@ def test_read_unauthorized_client(test_client, token):
         client_secret="unauthorized_client_secret",
     )
     db.session.add(client)
+    token.client_id = "unauthorized_client_id"
+    db.session.add(token)
 
     headers = {"Authorization": f"bearer {token.access_token}"}
     rv = test_client.get("/configure_client/unauthorized_client_id", headers=headers)
@@ -267,6 +269,8 @@ def test_update_unauthorized_client(test_client, token):
         client_secret="unauthorized_client_secret",
     )
     db.session.add(client)
+    token.client_id = "unauthorized_client_id"
+    db.session.add(token)
 
     headers = {"Authorization": f"bearer {token.access_token}"}
     rv = test_client.put(
@@ -487,9 +491,54 @@ def test_delete_unauthorized_client(test_client, token):
         client_secret="unauthorized_client_secret",
     )
     db.session.add(client)
+    token.client_id = "unauthorized_client_id"
+    db.session.add(token)
 
     headers = {"Authorization": f"bearer {token.access_token}"}
     rv = test_client.delete("/configure_client/unauthorized_client_id", headers=headers)
     resp = json.loads(rv.data)
     assert rv.status_code == 403
     assert resp["error"] == "unauthorized_client"
+
+
+@pytest.fixture
+def other_client(db):
+    client = Client(client_id="other-client-id", client_secret="other-client-secret")
+    client.set_client_metadata({"client_name": "Other"})
+    db.session.add(client)
+    db.session.commit()
+    yield client
+    db.session.delete(client)
+
+
+def test_read_token_of_another_client(test_client, other_client, token):
+    """A registration access token cannot read another client."""
+    headers = {"Authorization": f"bearer {token.access_token}"}
+    rv = test_client.get("/configure_client/other-client-id", headers=headers)
+    resp = json.loads(rv.data)
+    assert rv.status_code == 400
+    assert resp["error"] == "access_denied"
+    assert "client_secret" not in resp
+
+
+def test_update_token_of_another_client(test_client, other_client, token):
+    """A registration access token cannot update another client."""
+    headers = {"Authorization": f"bearer {token.access_token}"}
+    body = {"client_id": "other-client-id", "client_name": "Hijacked"}
+    rv = test_client.put(
+        "/configure_client/other-client-id", json=body, headers=headers
+    )
+    resp = json.loads(rv.data)
+    assert rv.status_code == 400
+    assert resp["error"] == "access_denied"
+    assert other_client.client_name == "Other"
+
+
+def test_delete_token_of_another_client(test_client, other_client, token):
+    """A registration access token cannot delete another client."""
+    headers = {"Authorization": f"bearer {token.access_token}"}
+    rv = test_client.delete("/configure_client/other-client-id", headers=headers)
+    resp = json.loads(rv.data)
+    assert rv.status_code == 400
+    assert resp["error"] == "access_denied"
+    assert Client.query.filter_by(client_id="other-client-id").first()

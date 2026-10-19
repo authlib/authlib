@@ -55,6 +55,92 @@ If the decorator is not your favorite, there is a ``with`` statement for you::
             user = token.user
             return jsonify(user)
 
+.. _flask_oauth2_jwt_access_tokens:
+
+JWT access tokens
+-----------------
+
+When the authorization server issues JWT access tokens (:rfc:`9068`), the
+resource server can validate them locally, without a database or an
+introspection call. Subclass :class:`~authlib.oauth2.rfc9068.JWTBearerTokenValidator`
+and tell it where to find the issuer's public keys::
+
+    from authlib.oauth2.rfc9068 import JWTBearerTokenValidator
+
+    class MyJWTValidator(JWTBearerTokenValidator):
+        def get_jwks(self):
+            return app.config['AUTHORIZATION_SERVER_JWKS']
+
+    require_oauth = ResourceProtector()
+    require_oauth.register_token_validator(
+        MyJWTValidator(
+            issuer='https://auth.example.org',
+            resource_server='https://api.example.org',
+        )
+    )
+
+The validator checks the signature, the ``iss`` claim against ``issuer`` and
+the ``aud`` claim against ``resource_server``, so tokens issued for another API
+are rejected.
+
+Accepting tokens from several issuers
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A validator trusts one issuer. To accept tokens from an approved list of
+authorization servers, keep one validator per issuer and pick the right one
+from the ``iss`` claim. The ``iss`` value is read **before** the signature is
+checked and is only used to select a validator: the token is still verified
+with that issuer's keys, so a token that claims a trusted issuer but is signed
+with another key is rejected::
+
+    import json
+
+    from joserfc import jws
+    from joserfc.errors import JoseError
+    from authlib.oauth2.rfc6750 import InvalidTokenError
+    from authlib.oauth2.rfc9068 import JWTBearerTokenValidator
+
+    class IssuerValidator(JWTBearerTokenValidator):
+        def __init__(self, issuer, jwks, resource_server):
+            super().__init__(issuer, resource_server)
+            self.jwks = jwks
+
+        def get_jwks(self):
+            return self.jwks
+
+    class MultiIssuerValidator(JWTBearerTokenValidator):
+        def __init__(self, resource_server, trusted_issuers):
+            # trusted_issuers maps an issuer identifier to its JWKS
+            super().__init__(None, resource_server)
+            self.validators = {
+                issuer: IssuerValidator(issuer, jwks, resource_server)
+                for issuer, jwks in trusted_issuers.items()
+            }
+
+        def authenticate_token(self, token_string):
+            try:
+                payload = jws.extract_compact(token_string.encode()).payload
+                validator = self.validators[json.loads(payload)['iss']]
+            except (JoseError, ValueError, KeyError, TypeError):
+                raise InvalidTokenError(
+                    realm=self.realm, extra_attributes=self.extra_attributes
+                )
+            return validator.authenticate_token(token_string)
+
+    require_oauth.register_token_validator(
+        MultiIssuerValidator(
+            'https://api.example.org',
+            {
+                'https://auth-a.example.org': jwks_a,
+                'https://auth-b.example.org': jwks_b,
+            },
+        )
+    )
+
+Because each issuer has its own validator instance, nothing is shared between
+requests. Fetch and cache each issuer's JWKS as described in
+:class:`~authlib.oauth2.rfc9068.JWTBearerTokenValidator`.
+
 .. _flask_oauth2_multiple_scopes:
 
 Multiple Scopes

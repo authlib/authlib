@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from httpx import ASGITransport
+from httpx2 import ASGITransport
 from starlette.config import Config
 from starlette.datastructures import URL
 from starlette.requests import Request

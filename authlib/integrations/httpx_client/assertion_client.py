@@ -1,18 +1,18 @@
-import httpx
-from httpx import USE_CLIENT_DEFAULT
-from httpx import Response
-
 from authlib.oauth2.rfc7521 import AssertionClient as _AssertionClient
 from authlib.oauth2.rfc7523 import JWTBearerGrant
 
 from ..base_client import OAuthError
+from ._compat import httpx2
 from .oauth2_client import OAuth2Auth
 from .utils import extract_client_kwargs
+
+USE_CLIENT_DEFAULT = httpx2.USE_CLIENT_DEFAULT
+Response = httpx2.Response
 
 __all__ = ["AsyncAssertionClient"]
 
 
-class AsyncAssertionClient(_AssertionClient, httpx.AsyncClient):
+class AsyncAssertionClient(_AssertionClient, httpx2.AsyncClient):
     token_auth_class = OAuth2Auth
     oauth_error_class = OAuthError
     JWT_BEARER_GRANT_TYPE = JWTBearerGrant.GRANT_TYPE
@@ -31,10 +31,11 @@ class AsyncAssertionClient(_AssertionClient, httpx.AsyncClient):
         claims=None,
         token_placement="header",
         scope=None,
+        client_id=None,
         **kwargs,
     ):
         client_kwargs = extract_client_kwargs(kwargs)
-        httpx.AsyncClient.__init__(self, **client_kwargs)
+        httpx2.AsyncClient.__init__(self, **client_kwargs)
 
         _AssertionClient.__init__(
             self,
@@ -47,6 +48,7 @@ class AsyncAssertionClient(_AssertionClient, httpx.AsyncClient):
             claims=claims,
             token_placement=token_placement,
             scope=scope,
+            client_id=client_id,
             **kwargs,
         )
 
@@ -69,7 +71,7 @@ class AsyncAssertionClient(_AssertionClient, httpx.AsyncClient):
         return self.parse_response_token(resp)
 
 
-class AssertionClient(_AssertionClient, httpx.Client):
+class AssertionClient(_AssertionClient, httpx2.Client):
     token_auth_class = OAuth2Auth
     oauth_error_class = OAuthError
     JWT_BEARER_GRANT_TYPE = JWTBearerGrant.GRANT_TYPE
@@ -88,15 +90,11 @@ class AssertionClient(_AssertionClient, httpx.Client):
         claims=None,
         token_placement="header",
         scope=None,
+        client_id=None,
         **kwargs,
     ):
         client_kwargs = extract_client_kwargs(kwargs)
-        # app keyword was dropped!
-        app_value = client_kwargs.pop("app", None)
-        if app_value is not None:
-            client_kwargs["transport"] = httpx.WSGITransport(app=app_value)
-
-        httpx.Client.__init__(self, **client_kwargs)
+        httpx2.Client.__init__(self, **client_kwargs)
 
         _AssertionClient.__init__(
             self,
@@ -109,6 +107,7 @@ class AssertionClient(_AssertionClient, httpx.Client):
             claims=claims,
             token_placement=token_placement,
             scope=scope,
+            client_id=client_id,
             **kwargs,
         )
 

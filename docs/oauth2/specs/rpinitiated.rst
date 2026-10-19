@@ -15,6 +15,57 @@ an OpenID Provider (OP) log out the End-User.
 
 .. _OpenID Connect RP-Initiated Logout 1.0: https://openid.net/specs/openid-connect-rpinitiated-1_0.html
 
+The logout goes through the browser. The OP may ask the user to confirm, and
+only redirects back to the RP under some conditions:
+
+.. mermaid::
+
+    sequenceDiagram
+        autonumber
+        participant User as User's browser<br/>(User Agent)
+        participant RP as Relying Party<br/>(Client)
+        box rgba(80, 120, 220, 0.12) EndSessionEndpoint
+            participant OP as OpenID Provider<br/>(Authorization Server)
+        end
+
+        Note over RP: logout_redirect()
+        RP-->>User: 302 Found → /logout
+        User->>OP: GET /logout (id_token_hint, post_logout_redirect_uri, state)
+        opt No valid id_token_hint
+            OP-->>User: 200 OK + confirmation page
+            User->>OP: POST /logout
+        end
+        Note over OP: end_session()
+        alt Valid post_logout_redirect_uri
+            autonumber 5
+            OP-->>User: 302 Found → post_logout_redirect_uri?state=…
+            User->>RP: GET post_logout_redirect_uri?state=…
+            Note over RP: validate_logout_response()
+        else Otherwise
+            autonumber 5
+            OP-->>User: 200 OK + logged out page
+        end
+
+1. The RP redirects the browser to the end session endpoint of the OP. With
+   an Authlib client, ``logout_redirect()`` builds this redirection.
+2. The request contains the parameters listed in `Request Parameters`_.
+   :class:`EndSessionEndpoint` checks the ``id_token_hint`` signature with
+   the OP keys.
+3. Interactive mode only, when ``needs_confirmation`` is true: there is no
+   valid ``id_token_hint``. The application shows a confirmation page.
+4. The user confirms the logout.
+5. ``end_session`` terminates the user session. Then:
+
+   a. If the `Post-Logout Redirection`_ conditions are met, the OP
+      redirects the browser to ``post_logout_redirect_uri``, with the
+      ``state``.
+   b. Otherwise, ``create_endpoint_response`` returns ``None`` and the
+      application renders its own page.
+6. Case a only. The browser returns to the RP. With an Authlib client,
+   ``validate_logout_response()`` checks the ``state``.
+
+The ``/logout`` path is an example.
+
 End Session Endpoint
 --------------------
 
@@ -101,6 +152,10 @@ Post-logout redirection only happens when:
 1. A ``post_logout_redirect_uri`` is provided
 2. The client is resolved (via ``id_token_hint`` or ``client_id``)
 3. The URI is registered in the client's ``post_logout_redirect_uris``
+4. A valid ``id_token_hint`` is provided, or
+   :meth:`EndSessionEndpoint.is_post_logout_redirect_uri_legitimate` returns
+   ``True``. By default, it returns ``False``: without ``id_token_hint``,
+   there is no redirection.
 
 If all conditions are met, ``EndSessionRequest.redirect_uri`` contains the
 validated URI (with ``state`` appended if provided).
@@ -135,17 +190,20 @@ Relying Parties can register their ``post_logout_redirect_uris`` through
 :ref:`RFC7591: OAuth 2.0 Dynamic Client Registration Protocol <specs/rfc7591>`.
 
 To support RP-Initiated Logout client metadata, add the claims class to your
-registration and configuration endpoints::
+registration and configuration endpoints.
+``MyClientRegistrationEndpoint`` is your subclass of
+:class:`~authlib.oauth2.rfc7591.ClientRegistrationEndpoint`::
 
-    from authlib import oidc
     from authlib.oauth2 import rfc7591
+    from authlib.oidc import registration
+    from authlib.oidc import rpinitiated
 
     authorization_server.register_endpoint(
-        ClientRegistrationEndpoint(
+        MyClientRegistrationEndpoint(
             claims_classes=[
                 rfc7591.ClientMetadataClaims,
-                oidc.registration.ClientMetadataClaims,
-                oidc.rpinitiated.ClientMetadataClaims,
+                registration.ClientMetadataClaims,
+                rpinitiated.ClientMetadataClaims,
             ]
         )
     )

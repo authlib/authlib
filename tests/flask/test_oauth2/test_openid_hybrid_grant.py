@@ -1,22 +1,34 @@
 import pytest
 from flask import json
+from joserfc import jwt
+from joserfc.jwk import OctKey
 
 from authlib.common.urls import url_decode
 from authlib.common.urls import urlparse
-from authlib.jose import jwt
+from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.oauth2.rfc6749.grants import (
     AuthorizationCodeGrant as _AuthorizationCodeGrant,
 )
+from authlib.oauth2.rfc6749.requests import BasicOAuth2Payload
+from authlib.oauth2.rfc6749.requests import OAuth2Request
 from authlib.oidc.core import HybridIDToken
 from authlib.oidc.core.grants import OpenIDCode as _OpenIDCode
 from authlib.oidc.core.grants import OpenIDHybridGrant as _OpenIDHybridGrant
+from tests.util import HMAC_SECRET
 
+from .models import AuthorizationCode
 from .models import CodeGrantMixin
 from .models import exists_nonce
 from .models import save_authorization_code
 from .oauth2_server import create_basic_header
 
-JWT_CONFIG = {"iss": "Authlib", "key": "secret", "alg": "HS256", "exp": 3600}
+
+class IDTokenConfigMixin:
+    def resolve_client_private_key(self, client):
+        return OctKey.import_key(HMAC_SECRET)
+
+    def get_client_claims(self, client):
+        return {"iss": "Authlib", "aud": [client.get_client_id()]}
 
 
 @pytest.fixture(autouse=True)
@@ -25,22 +37,16 @@ def server(server):
         def save_authorization_code(self, code, request):
             return save_authorization_code(code, request)
 
-    class OpenIDCode(_OpenIDCode):
-        def get_jwt_config(self, grant, client):
-            return dict(JWT_CONFIG)
-
+    class OpenIDCode(IDTokenConfigMixin, _OpenIDCode):
         def exists_nonce(self, nonce, request):
             return exists_nonce(nonce, request)
 
         def generate_user_info(self, user, scopes):
             return user.generate_user_info(scopes)
 
-    class OpenIDHybridGrant(_OpenIDHybridGrant):
+    class OpenIDHybridGrant(IDTokenConfigMixin, _OpenIDHybridGrant):
         def save_authorization_code(self, code, request):
             return save_authorization_code(code, request)
-
-        def get_jwt_config(self, client):
-            return dict(JWT_CONFIG)
 
         def exists_nonce(self, nonce, request):
             return exists_nonce(nonce, request)
@@ -66,6 +72,7 @@ def client(client, db):
                 "code id_token token",
             ],
             "grant_types": ["authorization_code"],
+            "id_token_signed_response_alg": "HS256",
         }
     )
     db.session.add(client)
@@ -74,10 +81,17 @@ def client(client, db):
 
 
 def validate_claims(id_token, params):
-    claims = jwt.decode(
-        id_token, "secret", claims_cls=HybridIDToken, claims_params=params
-    )
+    token = jwt.decode(id_token, OctKey.import_key(HMAC_SECRET), algorithms=["HS256"])
+    claims = HybridIDToken(token.claims, token.header, params=params)
     claims.validate()
+
+
+def create_hybrid_request(client, user):
+    request = OAuth2Request("POST", "https://server.test/authorize")
+    request.payload = BasicOAuth2Payload({"nonce": "abc"})
+    request.client = client
+    request.user = user
+    return request
 
 
 def test_invalid_client_id(test_client):
@@ -158,6 +172,66 @@ def test_invalid_scope(test_client):
         },
     )
     assert "error=invalid_scope" in rv.location
+
+
+@pytest.mark.parametrize(
+    "response_type", ["code id_token", "code token", "code id_token token"]
+)
+def test_reject_openid_scope_not_allowed_for_client(
+    test_client, client, db, response_type
+):
+    client.set_client_metadata({**client.client_metadata, "scope": "profile"})
+    db.session.commit()
+
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": response_type,
+            "client_id": "client-id",
+            "scope": "openid profile",
+            "nonce": "abc",
+            "redirect_uri": "https://client.test",
+            "user_id": "1",
+        },
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["error"] == "invalid_scope"
+    assert "code" not in params
+    assert "id_token" not in params
+    assert "access_token" not in params
+    assert AuthorizationCode.query.count() == 0
+
+
+@pytest.mark.parametrize(
+    "response_type", ["code id_token", "code token", "code id_token token"]
+)
+def test_custom_token_generator_receives_allowed_scope(
+    test_client, server, response_type
+):
+    def generate_token(client, grant_type, user, scope, **kwargs):
+        return {
+            "access_token": "custom-token",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+            "scope": scope,
+        }
+
+    server.register_token_generator("implicit", generate_token)
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": response_type,
+            "client_id": "client-id",
+            "scope": "openid profile email",
+            "nonce": "abc",
+            "redirect_uri": "https://client.test",
+            "user_id": "1",
+        },
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["scope"] == "openid profile"
+    code = AuthorizationCode.query.filter_by(code=params["code"]).one()
+    assert code.scope == "openid profile"
 
 
 def test_missing_openid_in_scope_does_not_redirect_to_unregistered_uri(test_client):
@@ -344,3 +418,56 @@ def test_response_mode_form_post(test_client):
     assert b'name="code"' in rv.data
     assert b'name="id_token"' in rv.data
     assert b'name="access_token"' in rv.data
+
+
+def test_deprecated_get_jwt_config(client, user):
+    """Using get_jwt_config(self, client) should emit an AuthlibDeprecationWarning."""
+
+    class DeprecatedHybridGrant(_OpenIDHybridGrant):
+        def get_jwt_config(self, client):
+            return {
+                "key": OctKey.import_key(HMAC_SECRET),
+                "alg": "HS256",
+                "iss": "Authlib",
+                "aud": [client.get_client_id()],
+                "exp": 3600,
+            }
+
+        def generate_user_info(self, user, scopes):
+            return user.generate_user_info(scopes)
+
+    request = create_hybrid_request(client, user)
+    grant = DeprecatedHybridGrant(request, None)
+    token = {"scope": "openid profile", "expires_in": 3600}
+
+    with pytest.warns(AuthlibDeprecationWarning, match="get_jwt_config.*version 1.8"):
+        token = grant.process_implicit_token(token, code="code")
+    validate_claims(token["id_token"], {"nonce": "abc", "code": "code"})
+
+
+def test_deprecated_get_audiences(client, user):
+    """Using get_audiences(self, request) should emit an AuthlibDeprecationWarning."""
+
+    class DeprecatedHybridGrant(_OpenIDHybridGrant):
+        def resolve_client_private_key(self, client):
+            return OctKey.import_key(HMAC_SECRET)
+
+        def get_client_claims(self, client):
+            return {"iss": "Authlib"}
+
+        def get_audiences(self, request):
+            return ["custom-audience"]
+
+        def generate_user_info(self, user, scopes):
+            return user.generate_user_info(scopes)
+
+    request = create_hybrid_request(client, user)
+    grant = DeprecatedHybridGrant(request, None)
+    token = {"scope": "openid profile", "expires_in": 3600}
+
+    with pytest.warns(AuthlibDeprecationWarning, match="get_audiences.*version 1.8"):
+        token = grant.process_implicit_token(token, code="code")
+    id_token = jwt.decode(
+        token["id_token"], OctKey.import_key(HMAC_SECRET), algorithms=["HS256"]
+    )
+    assert id_token.claims["aud"] == ["custom-audience"]

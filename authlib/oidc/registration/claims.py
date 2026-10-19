@@ -55,7 +55,7 @@ class ClientMetadataClaims(BaseClaims):
                 raise InvalidClaimError(key)
 
     @classmethod
-    def get_claims_options(self, metadata):
+    def get_claims_options(cls, metadata):
         """Generate claims options validation from Authorization Server metadata."""
         options = {}
 

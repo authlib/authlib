@@ -44,7 +44,7 @@ Register Remote Apps
         ...
     )
 
-However, unlike Flask/Django, Starlette OAuth registry uses HTTPX
+However, unlike Flask/Django, Starlette OAuth registry uses HTTPX2
 :class:`~authlib.integrations.httpx_client.AsyncOAuth2Client` as the OAuth 2.0
 backend. While Flask and Django are using the Requests version of
 :class:`~authlib.integrations.requests_client.OAuth2Session`.
@@ -90,6 +90,14 @@ There should be a ``id_token`` in the response. Authlib has called `.parse_id_to
 automatically, we can get ``userinfo`` in the ``token``::
 
     userinfo = token['userinfo']
+
+When the authorization request includes a nonce, the ID Token must contain the
+same nonce. An ID Token claim ``nonce_supported=false`` does not disable this
+check. Applications requiring a provider-specific compatibility exception must
+implement that policy explicitly for the trusted provider; do not derive it from
+claims in the received token. Passing ``nonce=None`` to ``parse_id_token()`` omits
+nonce validation and should only be used when the application has deliberately
+chosen a flow without an expected nonce.
 
 RP-Initiated Logout
 -------------------

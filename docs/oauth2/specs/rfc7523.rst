@@ -9,9 +9,7 @@ RFC7523: JWT Profile for OAuth 2.0 Client Authentication and Authorization Grant
         JWT profile for OAuth 2.0 client authentication and authorization
         grants.
 
-This section contains the generic Python implementation of RFC7523_.
-
-.. _RFC7523: https://tools.ietf.org/html/rfc7523
+This section contains the generic Python implementation of :rfc:`7523`.
 
 .. module:: authlib.oauth2.rfc7523
 
@@ -27,6 +25,35 @@ Using JWTs as Authorization Grants
 JWT Profile for OAuth 2.0 Authorization Grants works in the same way with
 :ref:`RFC6749 <specs/rfc6749>` built-in grants. Which means it can be
 registered with :meth:`~authlib.oauth2.rfc6749.AuthorizationServer.register_grant`.
+
+The client signs the JWT itself, and exchanges it for an access token:
+
+.. mermaid::
+
+    sequenceDiagram
+        autonumber
+        participant Client
+        box rgba(80, 120, 220, 0.12) JWTBearerGrant
+            participant AS as Authorization Server
+        end
+        participant RS as Resource Server
+
+        Note over Client: Signs a JWT
+        Client->>AS: POST /token (jwt-bearer)
+        AS-->>Client: 200 OK + access token
+        Client->>RS: GET /api (bearer token)
+        RS-->>Client: 200 OK + resource
+
+1. The client sends ``grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer``
+   and the JWT as ``assertion``. In the JWT, ``iss`` is the client and ``sub``
+   is the user. ``JWTBearerGrant`` checks the signature with the client key,
+   then the claims, then ``has_granted_permission()``.
+2. The authorization server returns an access token, without a refresh token.
+3. The client calls the API of the Resource Server with the access token, in
+   the ``Authorization: Bearer`` header.
+4. The Resource Server returns the protected resource.
+
+The ``/token`` and ``/api`` paths are examples.
 
 The base class is :class:`JWTBearerGrant`, you need to implement the missing
 methods in order to use it. Here is an example::
@@ -65,6 +92,15 @@ methods in order to use it. Here is an example::
     # register grant to authorization server
     authorization_server.register_grant(JWTBearerGrant)
 
+``get_audiences()`` must return a non-empty list of audience identifiers for
+this authorization server. Assertions are rejected with ``invalid_grant``
+if the method is not overridden or returns an empty list, or if the JWT's
+``aud`` does not contain one of the configured identifiers.
+
+The assertion signature only proves the client identity. It does not prove
+the user consent. ``has_granted_permission()`` decides if the client may act
+for the user. It is not called when the assertion has no ``sub`` claim.
+
 When creating a client, authorization server will generate several key pairs.
 The server itself can only keep the public keys, which will be used to decode
 assertion value.
@@ -86,6 +122,51 @@ With the power of Assertion Framework, we can add more client authentication
 methods. In this section, Authlib provides two more options:
 ``client_secret_jwt`` and ``private_key_jwt``. RFC7523 itself doesn't define
 any names, these two names are defined by OpenID Connect in ClientAuthentication_.
+
+The JWT replaces the client credentials in a token request of any grant
+type. For instance, with the authorization code grant:
+
+.. mermaid::
+
+    sequenceDiagram
+        autonumber
+        participant User as User's browser<br/>(User Agent)
+        participant Client
+        box rgba(80, 120, 220, 0.12) JWTBearerClientAssertion
+            participant AS as Authorization Server
+        end
+        participant RS as Resource Server
+
+        rect rgba(120, 120, 120, 0.08)
+            Note over User,AS: Front channel (browser)
+            Client-->>User: 302 Found → /authorize
+            User->>AS: GET /authorize
+            AS-->>User: 302 Found → redirect_uri?code=…
+            User->>Client: GET redirect_uri?code=…
+        end
+        rect rgba(120, 120, 120, 0.08)
+            Note over Client,RS: Back channel (server to server)
+            Client->>AS: POST /token (authorization_code)
+            AS-->>Client: 200 OK + access token
+            Client->>RS: GET /api (bearer token)
+            RS-->>Client: 200 OK + resource
+        end
+
+1. The client redirects the browser to the authorization endpoint.
+2. The browser sends ``response_type=code``. The user logs in and consents.
+3. The authorization server redirects the browser to the client with a code.
+4. The client receives the code.
+5. The client sends ``grant_type=authorization_code``, the ``code``,
+   ``client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer``
+   and a JWT as ``client_assertion``. In the JWT, ``iss`` and ``sub`` are the
+   ``client_id``. ``JWTBearerClientAssertion`` checks the signature with the
+   client secret or public key.
+6. The authorization server returns the token response of the grant.
+7. The client calls the API of the Resource Server with the access token, in
+   the ``Authorization: Bearer`` header.
+8. The Resource Server returns the protected resource.
+
+The ``/authorize``, ``/token`` and ``/api`` paths are examples.
 
 The :class:`~authlib.oauth2.rfc6749.AuthorizationServer` has provided a method
 :meth:`~authlib.oauth2.rfc6749.AuthorizationServer.register_client_auth_method`

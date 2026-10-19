@@ -1,4 +1,6 @@
+from joserfc.jwk import ECKey
 from joserfc.jwk import OctKey
+from joserfc.jwk import OKPKey
 from joserfc.jwk import RSAKey
 
 from authlib.common.urls import add_params_to_qs
@@ -30,17 +32,25 @@ class ClientSecretJWT:
     :param claims: Extra JWT claims
     :param headers: Extra JWT headers
     :param alg: ``alg`` value, default is HS256
+    :param expires_in: Lifetime of the client assertion in seconds,
+        default is 3600. Identity providers may cap this, e.g. Auth0
+        rejects assertions that live longer than 5 minutes.
     """
 
     name = "client_secret_jwt"
     alg = "HS256"
+    expires_in = 3600
 
-    def __init__(self, token_endpoint=None, claims=None, headers=None, alg=None):
+    def __init__(
+        self, token_endpoint=None, claims=None, headers=None, alg=None, expires_in=None
+    ):
         self.token_endpoint = token_endpoint
         self.claims = claims
         self.headers = headers
         if alg is not None:
             self.alg = alg
+        if expires_in is not None:
+            self.expires_in = expires_in
 
     def sign(self, auth, token_endpoint):
         if isinstance(auth.client_secret, OctKey):
@@ -54,6 +64,7 @@ class ClientSecretJWT:
             claims=self.claims,
             header=self.headers,
             alg=self.alg,
+            expires_in=self.expires_in,
         )
 
     def __call__(self, auth, method, uri, headers, body):
@@ -94,13 +105,16 @@ class PrivateKeyJWT(ClientSecretJWT):
     :param claims: Extra JWT claims
     :param headers: Extra JWT headers
     :param alg: ``alg`` value, default is RS256
+    :param expires_in: Lifetime of the client assertion in seconds,
+        default is 3600. Identity providers may cap this, e.g. Auth0
+        rejects assertions that live longer than 5 minutes.
     """
 
     name = "private_key_jwt"
     alg = "RS256"
 
     def sign(self, auth, token_endpoint):
-        if isinstance(auth.client_secret, RSAKey):
+        if isinstance(auth.client_secret, (RSAKey, ECKey, OKPKey)):
             key = auth.client_secret
         else:
             key = RSAKey.import_key(auth.client_secret)
@@ -111,4 +125,5 @@ class PrivateKeyJWT(ClientSecretJWT):
             claims=self.claims,
             header=self.headers,
             alg=self.alg,
+            expires_in=self.expires_in,
         )

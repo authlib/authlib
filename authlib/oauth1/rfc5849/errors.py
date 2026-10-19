@@ -26,7 +26,7 @@ class OAuth1Error(AuthlibHTTPError):
 
 class InsecureTransportError(OAuth1Error):
     error = "insecure_transport"
-    description = "OAuth 2 MUST utilize https."
+    description = "OAuth 1 MUST utilize https."
 
     @classmethod
     def check(cls, uri):

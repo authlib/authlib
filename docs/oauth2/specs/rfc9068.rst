@@ -3,7 +3,7 @@
 RFC9068: JSON Web Token (JWT) Profile for OAuth 2.0 Access Tokens
 =================================================================
 
-This section contains the generic implementation of RFC9068_.
+This section contains the generic implementation of :rfc:`9068`.
 JSON Web Token (JWT) Profile for OAuth 2.0 Access Tokens allows
 developers to generate JWT access tokens.
 
@@ -30,7 +30,7 @@ possibilities:
 This specification is just about **access** tokens. Other kinds of tokens
 like refresh tokens are not covered.
 
-RFC9068_ define a few optional JWT claims inspired from RFC7643_ that can
+:rfc:`9068` define a few optional JWT claims inspired from :rfc:`7643` that can
 can be used to determine if the token bearer is authorized to access a
 resource: ``groups``, ``roles`` and ``entitlements``.
 
@@ -40,9 +40,6 @@ This module brings tools to:
 - protected resources endpoints and validate JWT access tokens with :class:`~authlib.oauth2.rfc9068.JWTBearerTokenValidator`
 - introspect JWT access tokens with :class:`~authlib.oauth2.rfc9068.JWTIntrospectionEndpoint`
 - deny JWT access tokens revokation attempts with :class:`~authlib.oauth2.rfc9068.JWTRevocationEndpoint`
-
-.. _RFC9068: https://www.rfc-editor.org/rfc/rfc9068.html
-.. _RFC7643: https://tools.ietf.org/html/rfc7643
 
 API Reference
 -------------

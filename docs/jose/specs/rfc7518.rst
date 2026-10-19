@@ -6,9 +6,7 @@ RFC7518: JSON Web Algorithms
 .. meta::
     :description: API references on RFC7518 JSON Web Algorithms (JWA) Authlib implementation.
 
-This section contains the generic implementation of RFC7518_.
-
-.. _RFC7518: https://tools.ietf.org/html/rfc7518
+This section contains the generic implementation of :rfc:`7518`.
 
 
 Algorithms for JWS
@@ -22,9 +20,7 @@ Find how to use them in :ref:`jws_guide`.
 HMAC with SHA-2 Functions
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-This section is defined by RFC7518 `Section 3.2`_.
-
-.. _`Section 3.2`: https://tools.ietf.org/html/rfc7518#section-3.2
+This section is defined by :rfc:`7518#section-3.2`.
 
 1. HS256: HMAC using SHA-256
 2. HS384: HMAC using SHA-384
@@ -34,9 +30,7 @@ Digital Signature with RSASSA-PKCS1-v1_5
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Algorithms in this section requires extra crypto backends.
-This section is defined by RFC7518 `Section 3.3`_.
-
-.. _`Section 3.3`: https://tools.ietf.org/html/rfc7518#section-3.3
+This section is defined by :rfc:`7518#section-3.3`.
 
 1. RS256: RSASSA-PKCS1-v1_5 using SHA-256
 2. RS384: RSASSA-PKCS1-v1_5 using SHA-384
@@ -46,9 +40,7 @@ Digital Signature with ECDSA
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Algorithms in this section requires extra crypto backends.
-This section is defined by RFC7518 `Section 3.4`_.
-
-.. _`Section 3.4`: https://tools.ietf.org/html/rfc7518#section-3.4
+This section is defined by :rfc:`7518#section-3.4`.
 
 1. ES256: ECDSA using P-256 and SHA-256
 2. ES384: ECDSA using P-384 and SHA-384
@@ -58,9 +50,7 @@ Digital Signature with RSASSA-PSS
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Algorithms in this section requires extra crypto backends.
-This section is defined by RFC7518 `Section 3.5`_.
-
-.. _`Section 3.5`: https://tools.ietf.org/html/rfc7518#section-3.5
+This section is defined by :rfc:`7518#section-3.5`.
 
 1. PS256: RSASSA-PSS using SHA-256 and MGF1 with SHA-256
 2. PS384: RSASSA-PSS using SHA-384 and MGF1 with SHA-384
@@ -108,8 +98,6 @@ Algorithms for JWK
 ------------------
 
 This section defines the parameters for keys using the algorithms via
-RFC7518 `Section 6`_.
+:rfc:`7518#section-6`.
 
 Find how to use them in :ref:`jwk_guide`.
-
-.. _`Section 6`: https://tools.ietf.org/html/rfc7518#section-6
