@@ -156,15 +156,19 @@ def test_post(test_client, db, token):
 
 def test_no_token(test_client):
     rv = test_client.post("/oauth/userinfo")
+    assert rv.status_code == 401
     resp = json.loads(rv.data)
-    assert resp["error"] == "missing_authorization"
+    assert "error" not in resp
+    assert rv.headers["WWW-Authenticate"] == "Bearer"
 
 
 def test_bad_token(test_client):
     headers = {"Authorization": "invalid token_string"}
     rv = test_client.post("/oauth/userinfo", headers=headers)
+    assert rv.status_code == 401
     resp = json.loads(rv.data)
-    assert resp["error"] == "unsupported_token_type"
+    assert "error" not in resp
+    assert rv.headers["WWW-Authenticate"] == "Bearer"
 
 
 def test_token_has_bad_scope(test_client, db, token):
