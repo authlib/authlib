@@ -46,7 +46,7 @@ finds out from the metadata of the Protected Resource:
         Client->>AS: Token request
         AS-->>Client: Access token
         Client->>RS: GET /api (bearer token)
-        RS-->>Client: 200 OK + resource
+        RS-->>Client: 200 OK + data
 
 1. The client calls the API without an access token.
 2. :class:`ResourceMetadataExtension` adds the URL of the metadata to the
@@ -61,7 +61,7 @@ finds out from the metadata of the Protected Resource:
 7. The client requests an access token, with any grant type.
 8. The Authorization Server issues the access token.
 9. The client calls the API again, with the access token.
-10. The Resource Server returns the resource.
+10. The Resource Server returns the data.
 
 Authlib provides the Resource Server and Authorization Server parts. The
 client side of the discovery is not implemented. The ``/api`` path is an
