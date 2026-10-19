@@ -24,6 +24,49 @@ role as ``issuer`` in :ref:`RFC 8414 <specs/rfc8414>` for authorization servers.
 identifier can cover multiple API endpoints, and the well-known metadata URL is
 derived from it.
 
+A client calls an API without knowing which Authorization Server to use. It
+finds out from the metadata of the Protected Resource:
+
+.. mermaid::
+
+    sequenceDiagram
+        autonumber
+        participant Client
+        box rgba(80, 120, 220, 0.12) ResourceMetadataExtension, ProtectedResourceMetadata
+            participant RS as Resource Server
+        end
+        participant AS as Authorization Server
+
+        Client->>RS: GET /api
+        RS-->>Client: 401 + WWW-Authenticate: Bearer resource_metadata="…"
+        Client->>RS: GET /.well-known/oauth-protected-resource
+        RS-->>Client: 200 OK + resource, authorization_servers, …
+        Client->>AS: GET /.well-known/oauth-authorization-server
+        AS-->>Client: 200 OK + Authorization Server metadata
+        Client->>AS: Token request
+        AS-->>Client: Access token
+        Client->>RS: GET /api (bearer token)
+        RS-->>Client: 200 OK + resource
+
+1. The client calls the API without an access token.
+2. :class:`ResourceMetadataExtension` adds the URL of the metadata to the
+   ``WWW-Authenticate`` header of the ``401`` response.
+3. The client fetches the metadata at this URL.
+4. The Resource Server returns its :class:`ProtectedResourceMetadata`. The
+   ``authorization_servers`` parameter lists the Authorization Servers that
+   it trusts.
+5. The client fetches the metadata of one of these Authorization Servers,
+   per :ref:`RFC 8414 <specs/rfc8414>`.
+6. The Authorization Server returns its metadata, with its endpoints.
+7. The client requests an access token, with any grant type.
+8. The Authorization Server issues the access token.
+9. The client calls the API again, with the access token.
+10. The Resource Server returns the resource.
+
+Authlib provides the Resource Server and Authorization Server parts. The
+client side of the discovery is not implemented. The ``/api`` path is an
+example.
+
 
 Resource Server
 ---------------
