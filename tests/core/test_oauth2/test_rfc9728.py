@@ -440,6 +440,24 @@ def test_sign_metadata_auto_algorithm_unsupported():
         metadata.sign_metadata(key)
 
 
+def test_sign_metadata_explicit_algorithm():
+    """An explicit algorithm is used even if joserfc does not recommend it."""
+    key = RSAKey.generate_key(2048)
+    metadata = ProtectedResourceMetadata({"resource": "https://resource.test/api"})
+    metadata.sign_metadata(key, algorithm="RS512")
+    decoded = jwt.decode(metadata["signed_metadata"], key, algorithms=["RS512"])
+    assert decoded.header["alg"] == "RS512"
+
+
+def test_sign_metadata_explicit_algorithm_okp():
+    """OKP keys can sign with an explicit algorithm."""
+    key = OKPKey.generate_key("Ed25519")
+    metadata = ProtectedResourceMetadata({"resource": "https://resource.test/api"})
+    metadata.sign_metadata(key, algorithm="Ed25519")
+    decoded = jwt.decode(metadata["signed_metadata"], key, algorithms=["Ed25519"])
+    assert decoded.header["alg"] == "Ed25519"
+
+
 def test_validate_all_metadata_complete():
     metadata = ProtectedResourceMetadata(
         {

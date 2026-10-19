@@ -298,7 +298,7 @@ class ProtectedResourceMetadata(dict):
 
         claims["iss"] = issuer or self["resource"]
 
-        token = jwt.encode({"alg": algorithm}, claims, key)
+        token = jwt.encode({"alg": algorithm}, claims, key, algorithms=[algorithm])
         self["signed_metadata"] = token
         return token
 
