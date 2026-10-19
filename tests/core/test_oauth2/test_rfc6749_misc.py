@@ -105,3 +105,74 @@ def test_oauth2token_is_expired_with_valid_token():
     future = int(time.time()) + 7200
     token = OAuth2Token({"access_token": "a", "expires_at": future})
     assert token.is_expired() is False
+
+
+def test_oauth2token_prefers_server_issued_at_over_client_clock():
+    """When issued_at is in the response, expires_at should be computed from it
+    instead of from the client clock."""
+    server_issued_at = 12345678
+    expires_in = 1234
+    token = OAuth2Token({
+        "access_token": "a",
+        "expires_in": expires_in,
+        "issued_at": server_issued_at,
+    })
+    assert token["expires_at"] == server_issued_at + expires_in
+
+
+def test_oauth2token_explicit_expires_at_takes_precedence():
+    """When expires_at is explicitly provided, it takes precedence over
+    computing from issued_at + expires_in."""
+    token = OAuth2Token({
+        "access_token": "a",
+        "expires_at": 99999999,
+        "expires_in": 1234,
+        "issued_at": 12345678,
+    })
+    assert token["expires_at"] == 99999999
+
+
+def test_oauth2token_falls_back_to_client_clock_without_issued_at():
+    """When only expires_in is present (no issued_at, no expires_at), fall back
+    to the client clock for backward compatibility."""
+    before = int(time.time())
+    token = OAuth2Token({
+        "access_token": "a",
+        "expires_in": 1234,
+    })
+    after = int(time.time())
+    assert before + 1234 <= token["expires_at"] <= after + 1234
+
+
+def test_oauth2token_accepts_zero_issued_at():
+    """issued_at=0 (Unix epoch) is a valid timestamp and should be used."""
+    token = OAuth2Token({
+        "access_token": "a",
+        "expires_in": 1234,
+        "issued_at": 0,
+    })
+    assert token["expires_at"] == 0 + 1234
+
+
+def test_oauth2token_ignores_negative_issued_at():
+    """Negative issued_at is invalid; fall back to client clock."""
+    before = int(time.time())
+    token = OAuth2Token({
+        "access_token": "a",
+        "expires_in": 1234,
+        "issued_at": -1,
+    })
+    after = int(time.time())
+    assert before + 1234 <= token["expires_at"] <= after + 1234
+
+
+def test_oauth2token_ignores_non_numeric_issued_at():
+    """Non-numeric issued_at should not crash; fall back to client clock."""
+    before = int(time.time())
+    token = OAuth2Token({
+        "access_token": "a",
+        "expires_in": 1234,
+        "issued_at": "not-a-number",
+    })
+    after = int(time.time())
+    assert before + 1234 <= token["expires_at"] <= after + 1234
