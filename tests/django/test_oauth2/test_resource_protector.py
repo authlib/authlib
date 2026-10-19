@@ -5,12 +5,23 @@ from django.http import JsonResponse
 
 from authlib.integrations.django_oauth2 import BearerTokenValidator
 from authlib.integrations.django_oauth2 import ResourceProtector
+from authlib.oauth2.rfc9728 import ProtectedResourceMetadata
+from authlib.oauth2.rfc9728 import ResourceMetadataExtension
 
 from .models import Client
 from .models import OAuth2Token
 
 require_oauth = ResourceProtector()
 require_oauth.register_token_validator(BearerTokenValidator(OAuth2Token))
+
+RESOURCE_METADATA_URL = "https://resource.test/.well-known/oauth-protected-resource"
+require_oauth_with_metadata = ResourceProtector()
+require_oauth_with_metadata.register_token_validator(BearerTokenValidator(OAuth2Token))
+require_oauth_with_metadata.register_extension(
+    ResourceMetadataExtension(
+        ProtectedResourceMetadata({"resource": "https://resource.test"})
+    )
+)
 
 
 @pytest.fixture(autouse=True)
@@ -153,3 +164,19 @@ def test_decorator_without_parentheses(factory, token):
     assert resp.status_code == 200
     data = json.loads(resp.content)
     assert data["username"] == "foo"
+
+
+def test_resource_metadata_in_error_response(factory):
+    """The 401 response has the resource_metadata URL and a single Content-Type."""
+
+    @require_oauth_with_metadata("profile")
+    def get_user_profile(request):
+        return JsonResponse({})
+
+    request = factory.get("/user", HTTP_AUTHORIZATION="bearer invalid")
+    resp = get_user_profile(request)
+    assert resp.status_code == 401
+    assert resp["Content-Type"] == "application/json"
+    www_authenticate = resp["WWW-Authenticate"]
+    assert f'resource_metadata="{RESOURCE_METADATA_URL}"' in www_authenticate
+    assert 'error="invalid_token"' in www_authenticate
