@@ -4,7 +4,7 @@
 This module represents a direct implementation of
 OAuth 2.0 Protected Resource Metadata.
 
-https://tools.ietf.org/html/rfc9728
+https://www.rfc-editor.org/rfc/rfc9728
 """
 
 from .discovery import AuthorizationServerMetadata

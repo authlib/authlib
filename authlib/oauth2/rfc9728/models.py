@@ -72,7 +72,7 @@ class ProtectedResourceMetadata(dict):
             raise ValueError('"resource" MUST use "https" scheme')
 
         if parsed.fragment:
-            raise ValueError('"resource" has no fragment')
+            raise ValueError('"resource" MUST NOT contain a fragment')
 
     def validate_authorization_servers(self):
         """OPTIONAL. JSON array containing a list of OAuth authorization server
@@ -117,7 +117,7 @@ class ProtectedResourceMetadata(dict):
             if method not in ["header", "body", "query"]:
                 raise ValueError(
                     f'"{method}" is not a valid bearer method, valid methods are: '
-                    "" + ", ".join(["header", "body", "query"])
+                    "header, body, query"
                 )
 
     def validate_resource_signing_alg_values_supported(self):
@@ -263,18 +263,18 @@ class ProtectedResourceMetadata(dict):
 
     @property
     def tls_client_certificate_bound_access_tokens(self):
-        """Set default value for "tls_client_certificate_bound_access_tokens" to False."""
+        """Return the value of this field, or ``False`` if it is missing."""
         # rfc9728 §2: "If omitted, the default value is false."
         return self.get("tls_client_certificate_bound_access_tokens", False)
 
     @property
     def dpop_bound_access_tokens_required(self):
-        """Set default value for "dpop_bound_access_tokens_required" to False."""
+        """Return the value of this field, or ``False`` if it is missing."""
         # rfc9728 §2: "If omitted, the default value is false."
         return self.get("dpop_bound_access_tokens_required", False)
 
     def validate(self):
-        """Validate all server metadata value."""
+        """Validate all the protected resource metadata values."""
         for key in self.REGISTRY_KEYS:
             object.__getattribute__(self, f"validate_{key}")()
 
