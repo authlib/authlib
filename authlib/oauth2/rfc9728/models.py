@@ -60,18 +60,16 @@ class ProtectedResourceMetadata(dict):
         Section 1.2 of RFC9728.
         """
         resource = self.get("resource")
-
-        #: 1. REQUIRED
         if not resource:
             raise ValueError('"resource" is required')
 
+        # rfc9728 §1.2: "Resource Identifier: The protected resource's
+        # resource identifier, which is a URL that uses the https scheme and
+        # has no fragment component."
         parsed = urlparse.urlparse(resource)
-
-        #: 2. uses the "https" scheme
         if not is_secure_transport(resource):
             raise ValueError('"resource" MUST use "https" scheme')
 
-        #: 3. has no fragment
         if parsed.fragment:
             raise ValueError('"resource" has no fragment')
 
@@ -146,14 +144,13 @@ class ProtectedResourceMetadata(dict):
         include this field. The value of this field MAY be internationalized,
         as described in Section 2.1.
         """
-        # in the case of internationalized URL, the language tag
-        # is added to the metadata parameter name
-        # e.g resource_name#en
         value = self.get("resource_name")
         if value and not isinstance(value, str):
             raise ValueError('"resource_name" MUST be a string')
 
-        # check internationalized resource_name
+        # rfc9728 §2.1: "To specify the languages and scripts, language tags
+        # [BCP47] are added to resource metadata parameter names, delimited
+        # by a # character."
         for key in self.keys():
             if key.startswith("resource_name#"):
                 value = self.get(key)
@@ -166,15 +163,10 @@ class ProtectedResourceMetadata(dict):
         resource. The value of this field MAY be internationalized, as
         described in Section 2.1.
         """
-        # in the case of internationalized URL, the language tag
-        # is added to the metadata parameter name
-        # e.g resource_documentation#en
-
         value = self.get("resource_documentation")
         if value and not is_valid_url(value):
             raise ValueError('"resource_documentation" MUST be a URL')
 
-        # check internationalized resource_documentation
         for key in self.keys():
             if key.startswith("resource_documentation#"):
                 value = self.get(key)
@@ -192,7 +184,6 @@ class ProtectedResourceMetadata(dict):
         if value and not is_valid_url(value):
             raise ValueError('"resource_policy_uri" MUST be a URL')
 
-        # check internationalized resource_policy_uri
         for key in self.keys():
             if key.startswith("resource_policy_uri#"):
                 value = self.get(key)
@@ -208,7 +199,6 @@ class ProtectedResourceMetadata(dict):
         if value and not is_valid_url(value):
             raise ValueError('"resource_tos_uri" MUST be a URL')
 
-        # check internationalized resource_tos_uri
         for key in self.keys():
             if key.startswith("resource_tos_uri#"):
                 value = self.get(key)
@@ -305,13 +295,13 @@ class ProtectedResourceMetadata(dict):
     @property
     def tls_client_certificate_bound_access_tokens(self):
         """Set default value for "tls_client_certificate_bound_access_tokens" to False."""
-        #: If omitted, the default value is false.
+        # rfc9728 §2: "If omitted, the default value is false."
         return self.get("tls_client_certificate_bound_access_tokens", False)
 
     @property
     def dpop_bound_access_tokens_required(self):
         """Set default value for "dpop_bound_access_tokens_required" to False."""
-        #: If omitted, the default value is false.
+        # rfc9728 §2: "If omitted, the default value is false."
         return self.get("dpop_bound_access_tokens_required", False)
 
     def validate(self):
