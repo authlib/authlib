@@ -170,9 +170,6 @@ class ResourceProtector(Hookable):
 
     def _get_body_token(self, request):
         """Return the access token sent in the request body, or None."""
-        if not hasattr(request, "form"):
-            return None
-
         # https://www.rfc-editor.org/rfc/rfc6750#section-2.2
         # The HTTP request entity-header includes the "Content-Type" header
         # field set to "application/x-www-form-urlencoded".
@@ -187,7 +184,11 @@ class ResourceProtector(Hookable):
         if request.method.upper() == "GET":
             return None
 
-        return request.form.get("access_token")
+        try:
+            form = request.form
+        except (AttributeError, NotImplementedError):
+            return None
+        return form.get("access_token")
 
     @hooked
     def validate_request(self, scopes, request, **kwargs):

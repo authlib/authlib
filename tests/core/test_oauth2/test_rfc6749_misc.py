@@ -3,12 +3,16 @@ import time
 
 import pytest
 
+from authlib.oauth2.rfc6749 import JsonRequest
+from authlib.oauth2.rfc6749 import OAuth2Request
 from authlib.oauth2.rfc6749 import OAuth2Token
+from authlib.oauth2.rfc6749 import ResourceProtector
 from authlib.oauth2.rfc6749 import errors
 from authlib.oauth2.rfc6749 import parameters
 from authlib.oauth2.rfc6749 import util
 from authlib.oauth2.rfc6749.hooks import Hookable
 from authlib.oauth2.rfc6749.hooks import hooked
+from authlib.oauth2.rfc6750 import BearerTokenValidator
 
 
 def test_parse_authorization_code_response():
@@ -145,3 +149,20 @@ def test_hooked_with_explicit_parameters():
 
     assert svc.work() == 42
     assert calls == ["before"]
+
+
+@pytest.mark.parametrize("request_class", [OAuth2Request, JsonRequest])
+def test_parse_request_authorization_without_form(request_class):
+    """Requests without a form only use the Authorization header."""
+    protector = ResourceProtector()
+    protector.register_token_validator(BearerTokenValidator())
+    request = request_class(
+        "POST",
+        "https://resource.test/",
+        headers={
+            "Authorization": "Bearer a1",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+    )
+    _, token_string = protector.parse_request_authorization(request)
+    assert token_string == "a1"
