@@ -92,7 +92,13 @@ class ProtectedResourceMetadata(dict):
 
         """
         url = self.get("jwks_uri")
-        if url and not is_secure_transport(url, allow_loopback=False):
+        if url is None:
+            return
+
+        if not isinstance(url, str):
+            raise ValueError('"jwks_uri" MUST be a string')
+
+        if not is_secure_transport(url, allow_loopback=False):
             raise ValueError('"jwks_uri" MUST use "https" scheme')
 
     def validate_scopes_supported(self):
@@ -371,8 +377,12 @@ def _validate_non_empty_array(metadata, key):
     validate_array_value(metadata, key)
     # rfc9728 §3.2: "Parameters with multiple values are represented as JSON
     # arrays. Parameters with zero values MUST be omitted from the response."
-    if metadata.get(key) == []:
+    values = metadata.get(key)
+    if values == []:
         raise ValueError(f'"{key}" MUST be omitted when empty')
+
+    if values is not None and not all(isinstance(v, str) for v in values):
+        raise ValueError(f'"{key}" MUST contain strings')
 
 
 def _localized_keys(metadata, key):
@@ -382,12 +392,15 @@ def _localized_keys(metadata, key):
 def _validate_localized_string(metadata, key):
     for k in _localized_keys(metadata, key):
         value = metadata[k]
-        if value and not isinstance(value, str):
+        if value is not None and not isinstance(value, str):
             raise ValueError(f'"{k}" MUST be a string')
 
 
 def _validate_localized_url(metadata, key):
     for k in _localized_keys(metadata, key):
         value = metadata[k]
-        if value and not is_valid_url(value):
+        if value is None:
+            continue
+
+        if not isinstance(value, str) or not is_valid_url(value):
             raise ValueError(f'"{k}" MUST be a URL')

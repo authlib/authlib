@@ -176,6 +176,43 @@ def test_validate_empty_array(key):
         metadata.validate()
 
 
+@pytest.mark.parametrize(
+    "key",
+    [
+        "authorization_servers",
+        "scopes_supported",
+        "resource_signing_alg_values_supported",
+        "authorization_details_types_supported",
+        "dpop_signing_alg_values_supported",
+    ],
+)
+def test_validate_array_of_strings(key):
+    """Arrays must only contain strings."""
+    metadata = ProtectedResourceMetadata(
+        {"resource": "https://resource.test", key: [1, None]}
+    )
+    with pytest.raises(ValueError, match="MUST contain strings"):
+        metadata.validate()
+
+
+@pytest.mark.parametrize(
+    "key,message",
+    [
+        ("jwks_uri", "MUST be a string"),
+        ("resource_name", "MUST be a string"),
+        ("resource_name#fr", "MUST be a string"),
+        ("resource_documentation", "MUST be a URL"),
+        ("resource_policy_uri#fr", "MUST be a URL"),
+        ("resource_tos_uri", "MUST be a URL"),
+    ],
+)
+def test_validate_falsy_non_string(key, message):
+    """Falsy values that are not strings are rejected."""
+    metadata = ProtectedResourceMetadata({"resource": "https://resource.test", key: 0})
+    with pytest.raises(ValueError, match=message):
+        metadata.validate()
+
+
 def test_validate_bearer_methods_supported():
     """bearer_methods_supported only accepts header, body and query, and may be empty."""
     metadata = ProtectedResourceMetadata()
