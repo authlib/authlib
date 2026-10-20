@@ -7,11 +7,12 @@ Access Token per :rfc:`6749#section-6`.
 
 import logging
 
+from authlib.common.hooks import hooked
+
 from ..errors import InvalidGrantError
 from ..errors import InvalidRequestError
 from ..errors import InvalidScopeError
 from ..errors import UnauthorizedClientError
-from ..hooks import hooked
 from ..util import scope_to_list
 from .base import BaseGrant
 from .base import TokenEndpointMixin

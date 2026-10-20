@@ -3,13 +3,13 @@ import logging
 from joserfc import jwt
 
 from authlib._joserfc_helpers import import_any_key
+from authlib.common.hooks import hooked
 from authlib.deprecate import deprecate
 from authlib.oauth2.rfc6749 import AccessDeniedError
 from authlib.oauth2.rfc6749 import ImplicitGrant
 from authlib.oauth2.rfc6749 import InvalidScopeError
 from authlib.oauth2.rfc6749 import OAuth2Error
 from authlib.oauth2.rfc6749.errors import InvalidRequestError
-from authlib.oauth2.rfc6749.hooks import hooked
 
 from ._legacy import LegacyMixin
 from .util import create_half_hash

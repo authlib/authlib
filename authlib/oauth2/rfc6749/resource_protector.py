@@ -4,10 +4,11 @@
 Implementation of Accessing Protected Resources per :rfc:`6749#section-7`.
 """
 
+from authlib.common.hooks import Hookable
+from authlib.common.hooks import hooked
+
 from .errors import MissingAuthorizationError
 from .errors import UnsupportedTokenTypeError
-from .hooks import Hookable
-from .hooks import hooked
 from .util import scope_to_list
 
 

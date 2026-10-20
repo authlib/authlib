@@ -1,12 +1,12 @@
 import logging
 
+from authlib.common.hooks import hooked
 from authlib.common.urls import add_params_to_uri
 
 from ..errors import AccessDeniedError
 from ..errors import InvalidScopeError
 from ..errors import OAuth2Error
 from ..errors import UnauthorizedClientError
-from ..hooks import hooked
 from .base import AuthorizationEndpointMixin
 from .base import BaseGrant
 

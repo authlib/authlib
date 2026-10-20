@@ -1,8 +1,8 @@
+from authlib.common.hooks import Hookable
+from authlib.common.hooks import hooked
 from authlib.consts import default_json_headers
 
 from ..errors import InvalidRequestError
-from ..hooks import Hookable
-from ..hooks import hooked
 from ..requests import OAuth2Request
 
 

@@ -1,4 +1,6 @@
 from authlib.common.errors import ContinueIteration
+from authlib.common.hooks import Hookable
+from authlib.common.hooks import hooked
 from authlib.deprecate import deprecate
 
 from .authenticate_client import ClientAuthentication
@@ -8,8 +10,6 @@ from .errors import InvalidScopeError
 from .errors import OAuth2Error
 from .errors import UnsupportedGrantTypeError
 from .errors import UnsupportedResponseTypeError
-from .hooks import Hookable
-from .hooks import hooked
 from .requests import JsonRequest
 from .requests import OAuth2Request
 from .util import scope_to_list

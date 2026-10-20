@@ -1,7 +1,8 @@
 import logging
 
+from authlib.common.hooks import hooked
+
 from ..errors import UnauthorizedClientError
-from ..hooks import hooked
 from .base import BaseGrant
 from .base import TokenEndpointMixin
 

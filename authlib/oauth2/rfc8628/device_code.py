@@ -1,11 +1,12 @@
 import logging
 
+from authlib.common.hooks import hooked
+
 from ..rfc6749 import BaseGrant
 from ..rfc6749 import TokenEndpointMixin
 from ..rfc6749.errors import AccessDeniedError
 from ..rfc6749.errors import InvalidRequestError
 from ..rfc6749.errors import UnauthorizedClientError
-from ..rfc6749.hooks import hooked
 from .errors import AuthorizationPendingError
 from .errors import ExpiredTokenError
 from .errors import SlowDownError

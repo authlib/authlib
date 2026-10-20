@@ -3,12 +3,12 @@ import time
 
 import pytest
 
+from authlib.common.hooks import Hookable
+from authlib.common.hooks import hooked
 from authlib.oauth2.rfc6749 import OAuth2Token
 from authlib.oauth2.rfc6749 import errors
 from authlib.oauth2.rfc6749 import parameters
 from authlib.oauth2.rfc6749 import util
-from authlib.oauth2.rfc6749.hooks import Hookable
-from authlib.oauth2.rfc6749.hooks import hooked
 
 
 def test_parse_authorization_code_response():
