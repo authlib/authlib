@@ -166,3 +166,54 @@ def test_parse_request_authorization_without_form(request_class):
     )
     _, token_string = protector.parse_request_authorization(request)
     assert token_string == "a1"
+
+
+class FormRequest(OAuth2Request):
+    """A request with a form, for resource protector tests."""
+
+    def __init__(self, method, headers, form):
+        super().__init__(method, "https://resource.test/", headers=headers)
+        self._form = form
+
+    @property
+    def form(self):
+        return self._form
+
+
+URLENCODED = "application/x-www-form-urlencoded"
+
+
+@pytest.mark.parametrize(
+    "content_type",
+    [URLENCODED, "Application/X-WWW-Form-Urlencoded", URLENCODED + "; charset=utf-8"],
+)
+def test_parse_request_authorization_body_token(content_type):
+    """The access token is read from a form-encoded body."""
+    protector = ResourceProtector()
+    protector.register_token_validator(BearerTokenValidator())
+    request = FormRequest(
+        "POST", {"Content-Type": content_type}, {"access_token": "a1"}
+    )
+    _, token_string = protector.parse_request_authorization(request)
+    assert token_string == "a1"
+
+
+@pytest.mark.parametrize(
+    "method,content_type,form",
+    [
+        ("GET", URLENCODED, {"access_token": "a1"}),
+        ("POST", "multipart/form-data", {"access_token": "a1"}),
+        ("POST", "application/json", {"access_token": "a1"}),
+        ("POST", None, {"access_token": "a1"}),
+        ("POST", URLENCODED, {"access_token": ""}),
+        ("POST", URLENCODED, {}),
+    ],
+)
+def test_parse_request_authorization_ignored_body_token(method, content_type, form):
+    """The body token is ignored when the request does not follow RFC 6750 §2.2."""
+    protector = ResourceProtector()
+    protector.register_token_validator(BearerTokenValidator())
+    headers = {"Content-Type": content_type} if content_type else {}
+    request = FormRequest(method, headers, form)
+    with pytest.raises(errors.MissingAuthorizationError):
+        protector.parse_request_authorization(request)
