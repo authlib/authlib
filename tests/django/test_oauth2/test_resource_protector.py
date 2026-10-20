@@ -145,6 +145,25 @@ def test_access_resource_with_token_in_body(factory, token):
     assert data["username"] == "foo"
 
 
+def test_token_in_header_and_body(factory, token):
+    """Sending the access token both in the header and in the body is refused."""
+
+    @require_oauth("profile")
+    def get_user_profile(request):
+        return JsonResponse({})
+
+    request = factory.post(
+        "/user",
+        data="access_token=a1",
+        content_type="application/x-www-form-urlencoded",
+        HTTP_AUTHORIZATION="bearer a1",
+    )
+    resp = get_user_profile(request)
+    assert resp.status_code == 400
+    data = json.loads(resp.content)
+    assert data["error"] == "invalid_request"
+
+
 def test_scope_operator(factory, token):
     @require_oauth(["profile email"])
     def operator_and(request):

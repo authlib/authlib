@@ -210,6 +210,18 @@ def test_missing_token_type(test_client):
     assert resp["error"] == "unsupported_token_type"
 
 
+def test_token_in_header_and_body(test_client, token):
+    """Sending the access token both in the header and in the body is refused."""
+    rv = test_client.post(
+        "/oauth/userinfo",
+        headers={"Authorization": "Bearer access-token"},
+        data={"access_token": "access-token"},
+    )
+    assert rv.status_code == 400
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_request"
+
+
 def test_bad_token(test_client):
     headers = {"Authorization": "invalid token_string"}
     rv = test_client.post("/oauth/userinfo", headers=headers)

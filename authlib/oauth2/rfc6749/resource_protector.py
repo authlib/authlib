@@ -4,6 +4,7 @@
 Implementation of Accessing Protected Resources per :rfc:`6749#section-7`.
 """
 
+from .errors import InvalidRequestError
 from .errors import MissingAuthorizationError
 from .errors import UnsupportedTokenTypeError
 from .hooks import Hookable
@@ -138,6 +139,14 @@ class ResourceProtector(Hookable):
         """
         token_type = token_string = None
         auth = request.headers.get("Authorization")
+        if auth and hasattr(request, "form") and "access_token" in request.form:
+            # https://www.rfc-editor.org/rfc/rfc6750#section-2
+            # Clients MUST NOT use more than one method to transmit the token
+            # in each request.
+            raise InvalidRequestError(
+                "The access token must be sent with only one method."
+            )
+
         if auth:
             # https://tools.ietf.org/html/rfc6749#section-7.1
             token_parts = auth.split(None, 1)
