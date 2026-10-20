@@ -101,6 +101,11 @@ def test_validate_resource():
     with pytest.raises(ValueError, match="MUST be a string"):
         metadata.validate_resource()
 
+    for uri in ["http://localhost/api", "http://127.0.0.1/api"]:
+        metadata = ProtectedResourceMetadata({"resource": uri})
+        with pytest.raises(ValueError, match="https"):
+            metadata.validate_resource()
+
     metadata = ProtectedResourceMetadata({"resource": "https://resource.test/api"})
     metadata.validate_resource()
 
@@ -128,6 +133,10 @@ def test_validate_jwks_uri():
     metadata.validate_jwks_uri()
 
     metadata = ProtectedResourceMetadata({"jwks_uri": "http://resource.test/jwks.json"})
+    with pytest.raises(ValueError, match="https"):
+        metadata.validate_jwks_uri()
+
+    metadata = ProtectedResourceMetadata({"jwks_uri": "http://localhost/jwks.json"})
     with pytest.raises(ValueError, match="https"):
         metadata.validate_jwks_uri()
 

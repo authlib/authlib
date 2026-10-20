@@ -69,7 +69,7 @@ class ProtectedResourceMetadata(dict):
         # rfc9728 §1.2: "Resource Identifier: The protected resource's
         # resource identifier, which is a URL that uses the https scheme and
         # has no fragment component."
-        if not is_secure_transport(resource):
+        if not is_secure_transport(resource, allow_loopback=False):
             raise ValueError('"resource" MUST use "https" scheme')
 
         if "#" in resource:
@@ -92,7 +92,7 @@ class ProtectedResourceMetadata(dict):
 
         """
         url = self.get("jwks_uri")
-        if url and not is_secure_transport(url):
+        if url and not is_secure_transport(url, allow_loopback=False):
             raise ValueError('"jwks_uri" MUST use "https" scheme')
 
     def validate_scopes_supported(self):
