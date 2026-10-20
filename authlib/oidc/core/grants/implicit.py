@@ -3,7 +3,6 @@ import logging
 from joserfc import jwt
 
 from authlib._joserfc_helpers import import_any_key
-from authlib.common.hooks import hooked
 from authlib.deprecate import deprecate
 from authlib.oauth2.rfc6749 import AccessDeniedError
 from authlib.oauth2.rfc6749 import ImplicitGrant
@@ -83,7 +82,6 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
             raise error
         return redirect_uri
 
-    @hooked
     def validate_consent_request(self):
         redirect_uri = self.validate_authorization_request()
         validate_request_prompt(self, redirect_uri, redirect_fragment=True)

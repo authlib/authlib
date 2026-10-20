@@ -7,8 +7,6 @@ Access Token per :rfc:`6749#section-6`.
 
 import logging
 
-from authlib.common.hooks import hooked
-
 from ..errors import InvalidGrantError
 from ..errors import InvalidRequestError
 from ..errors import InvalidScopeError
@@ -107,7 +105,6 @@ class RefreshTokenGrant(BaseGrant, TokenEndpointMixin):
         self._validate_token_scope(refresh_token)
         self.request.refresh_token = refresh_token
 
-    @hooked
     def create_token_response(self):
         """If valid and authorized, the authorization server issues an access
         token as described in Section 5.1.  If the request failed

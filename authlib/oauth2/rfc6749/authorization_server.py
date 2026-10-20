@@ -1,6 +1,5 @@
 from authlib.common.errors import ContinueIteration
 from authlib.common.hooks import Hookable
-from authlib.common.hooks import hooked
 from authlib.deprecate import deprecate
 
 from .authenticate_client import ClientAuthentication
@@ -232,7 +231,6 @@ class AuthorizationServer(Hookable):
         endpoints = self._endpoints.setdefault(endpoint.ENDPOINT_NAME, [])
         endpoints.append(endpoint)
 
-    @hooked
     def get_authorization_grant(self, request):
         """Find the authorization grant for current request.
 
@@ -358,7 +356,6 @@ class AuthorizationServer(Hookable):
             except OAuth2Error as error:
                 return self.handle_error_response(request, error)
 
-    @hooked
     def create_authorization_response(self, request=None, grant_user=None, grant=None):
         """Validate authorization request and create authorization response.
 

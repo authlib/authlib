@@ -5,7 +5,6 @@ Implementation of Accessing Protected Resources per :rfc:`6749#section-7`.
 """
 
 from authlib.common.hooks import Hookable
-from authlib.common.hooks import hooked
 
 from .errors import MissingAuthorizationError
 from .errors import UnsupportedTokenTypeError
@@ -151,7 +150,6 @@ class ResourceProtector(Hookable):
         validator = self.get_token_validator(token_type)
         return validator, token_string
 
-    @hooked
     def validate_request(self, scopes, request, **kwargs):
         """Validate the request and return a token."""
         validator, token_string = self.parse_request_authorization(request)

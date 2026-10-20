@@ -1,7 +1,5 @@
 import logging
 
-from authlib.common.hooks import hooked
-
 from ..rfc6749 import BaseGrant
 from ..rfc6749 import TokenEndpointMixin
 from ..rfc6749.errors import AccessDeniedError
@@ -113,7 +111,6 @@ class DeviceCodeGrant(BaseGrant, TokenEndpointMixin):
         self.request.client = client
         self.request.credential = credential
 
-    @hooked
     def create_token_response(self):
         """If the access token request is valid and authorized, the
         authorization server issues an access token and optional refresh

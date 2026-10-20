@@ -1,6 +1,5 @@
 import logging
 
-from authlib.common.hooks import hooked
 from authlib.common.urls import add_params_to_uri
 
 from ..errors import AccessDeniedError
@@ -79,7 +78,6 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
     GRANT_TYPE = "implicit"
     ERROR_RESPONSE_FRAGMENT = True
 
-    @hooked
     def validate_authorization_request(self):
         """The client constructs the request URI by adding the following
         parameters to the query component of the authorization endpoint URI
@@ -149,7 +147,6 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
             raise error
         return redirect_uri
 
-    @hooked
     def create_authorization_response(self, redirect_uri, grant_user):
         """If the resource owner grants the access request, the authorization
         server issues an access token and delivers it to the client by adding

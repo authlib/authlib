@@ -1,6 +1,5 @@
 import logging
 
-from authlib.common.hooks import hooked
 from authlib.common.security import generate_token
 from authlib.common.urls import add_params_to_uri
 
@@ -161,7 +160,6 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
         headers = [("Location", uri)]
         return 302, "", headers
 
-    @hooked
     def validate_token_request(self):
         """The client makes a request to the token endpoint by sending the
         following parameters using the "application/x-www-form-urlencoded"
@@ -234,7 +232,6 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
         self.request.client = client
         self.request.authorization_code = authorization_code
 
-    @hooked
     def create_token_response(self):
         """If the access token request is valid and authorized, the
         authorization server issues an access token and optional refresh
