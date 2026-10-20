@@ -62,4 +62,9 @@ class DjangoJsonPayload(JsonPayload):
 class DjangoJsonRequest(JsonRequest):
     def __init__(self, request: HttpRequest):
         super().__init__(request.method, request.build_absolute_uri(), request.headers)
+        self._request = request
         self.payload = DjangoJsonPayload(request)
+
+    @property
+    def form(self):
+        return self._request.POST

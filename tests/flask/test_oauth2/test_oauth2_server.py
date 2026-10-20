@@ -21,7 +21,7 @@ def resource_server(app, db):
     BearerTokenValidator = create_bearer_token_validator(db.session, Token)
     require_oauth.register_token_validator(BearerTokenValidator())
 
-    @app.route("/user")
+    @app.route("/user", methods=["GET", "POST"])
     @require_oauth("profile")
     def user_profile():
         user = current_token.user
@@ -151,6 +151,13 @@ def test_access_resource(test_client, token):
     rv = test_client.get("/no-parens", headers=headers)
     resp = json.loads(rv.data)
     assert resp["status"] == "ok"
+
+
+def test_token_in_body_without_extension(test_client, token):
+    """Without FormEncodedBodyToken, the body token is ignored."""
+    rv = test_client.post("/user", data={"access_token": "a1"})
+    resp = json.loads(rv.data)
+    assert resp["error"] == "missing_authorization"
 
 
 def test_scope_operator(test_client, token):

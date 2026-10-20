@@ -120,6 +120,7 @@ class ResourceProtector(Hookable):
             )
         return validator
 
+    @hooked
     def parse_request_authorization(self, request):
         """Parse the token and token validator from request Authorization header.
         Here is an example of Authorization header::
