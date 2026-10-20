@@ -142,6 +142,23 @@ def test_validate_scopes_supported():
     metadata.validate_scopes_supported()
 
 
+@pytest.mark.parametrize(
+    "key",
+    [
+        "authorization_servers",
+        "scopes_supported",
+        "resource_signing_alg_values_supported",
+        "authorization_details_types_supported",
+        "dpop_signing_alg_values_supported",
+    ],
+)
+def test_validate_empty_array(key):
+    """Empty arrays are rejected, because they must be omitted (Section 3.2)."""
+    metadata = ProtectedResourceMetadata({"resource": "https://resource.test", key: []})
+    with pytest.raises(ValueError, match="MUST be omitted when empty"):
+        metadata.validate()
+
+
 def test_validate_bearer_methods_supported():
     """bearer_methods_supported only accepts header, body and query, and may be empty."""
     metadata = ProtectedResourceMetadata()

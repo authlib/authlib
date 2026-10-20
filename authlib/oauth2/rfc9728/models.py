@@ -78,7 +78,7 @@ class ProtectedResourceMetadata(dict):
         """JSON array containing a list of OAuth authorization server
         issuer identifiers, as defined in [RFC8414].
         """
-        validate_array_value(self, "authorization_servers")
+        _validate_non_empty_array(self, "authorization_servers")
 
     def validate_jwks_uri(self):
         """URL of the protected resource's JSON Web Key (JWK) Set
@@ -101,7 +101,7 @@ class ProtectedResourceMetadata(dict):
         resources MAY choose not to advertise some scope values supported
         even when this parameter is used.
         """
-        validate_array_value(self, "scopes_supported")
+        _validate_non_empty_array(self, "scopes_supported")
 
     def validate_bearer_methods_supported(self):
         """JSON array containing a list of the supported methods of
@@ -127,11 +127,8 @@ class ProtectedResourceMetadata(dict):
         [FAPI.MessageSigning]. No default algorithms are implied if this entry
         is omitted. The value none MUST NOT be used.
         """
+        _validate_non_empty_array(self, "resource_signing_alg_values_supported")
         value = self.get("resource_signing_alg_values_supported")
-        if value and not isinstance(value, list):
-            raise ValueError(
-                '"resource_signing_alg_values_supported" MUST be JSON array'
-            )
 
         if value and "none" in value:
             raise ValueError(
@@ -190,7 +187,7 @@ class ProtectedResourceMetadata(dict):
         values supported by the resource server when the authorization_details
         request parameter [RFC9396] is used.
         """
-        validate_array_value(self, "authorization_details_types_supported")
+        _validate_non_empty_array(self, "authorization_details_types_supported")
 
     def validate_dpop_signing_alg_values_supported(self):
         """JSON array containing a list of the JWS alg values (from the
@@ -199,7 +196,7 @@ class ProtectedResourceMetadata(dict):
         Demonstrating Proof of Possession (DPoP) proof JWTs [RFC9449].
 
         """
-        validate_array_value(self, "dpop_signing_alg_values_supported")
+        _validate_non_empty_array(self, "dpop_signing_alg_values_supported")
         value = self.get("dpop_signing_alg_values_supported")
         if value and "none" in value:
             raise ValueError(
@@ -367,6 +364,14 @@ class ResourceMetadataExtension:
         protector.register_hook(
             "replace_validate_request", inject_www_authenticate_header
         )
+
+
+def _validate_non_empty_array(metadata, key):
+    validate_array_value(metadata, key)
+    # rfc9728 §3.2: "Parameters with multiple values are represented as JSON
+    # arrays. Parameters with zero values MUST be omitted from the response."
+    if metadata.get(key) == []:
+        raise ValueError(f'"{key}" MUST be omitted when empty')
 
 
 def _localized_keys(metadata, key):
