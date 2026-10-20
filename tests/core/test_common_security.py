@@ -85,3 +85,27 @@ def test_surrounding_whitespace_is_ignored():
 def test_insecure_transport_environment_variable(monkeypatch):
     monkeypatch.setenv("AUTHLIB_INSECURE_TRANSPORT", "true")
     assert is_secure_transport("http://provider.test/cb") is True
+
+
+@pytest.mark.parametrize(
+    "uri",
+    [
+        "http://localhost/cb",
+        "http://127.0.0.1/cb",
+        "http://[::1]/cb",
+    ],
+)
+def test_loopback_disallowed(uri):
+    """With allow_loopback=False, http is rejected even for loopback hosts."""
+    assert is_secure_transport(uri, allow_loopback=False) is False
+
+
+def test_loopback_disallowed_https():
+    """With allow_loopback=False, https is still accepted."""
+    assert is_secure_transport("https://localhost/cb", allow_loopback=False) is True
+
+
+def test_loopback_disallowed_environment_variable(monkeypatch):
+    """AUTHLIB_INSECURE_TRANSPORT also applies with allow_loopback=False."""
+    monkeypatch.setenv("AUTHLIB_INSECURE_TRANSPORT", "true")
+    assert is_secure_transport("http://localhost/cb", allow_loopback=False) is True
