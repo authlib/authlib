@@ -30,6 +30,9 @@ If the resource is not protected by a scope, omit the argument::
 The decorator ``require_oauth`` will add an ``oauth_token`` property on ``request``,
 which is the instance of current in-use Token.
 
+The access token is read from the ``Authorization`` header. To also accept it
+in a form-encoded request body, see :ref:`rfc6750_form_body`.
+
 Multiple Scopes
 ---------------
 

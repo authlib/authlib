@@ -16,6 +16,41 @@ Bearer token is used in OAuth 2.0 framework to protect resources. You need
 to implement the missing methods of :class:`BearerTokenValidator` before
 using it. Learn how to use it in :ref:`flask_oauth2_resource_protector`.
 
+.. _rfc6750_form_body:
+
+Token in the Request Body
+-------------------------
+
+By default, resource protectors only read the access token from the
+``Authorization`` header. :rfc:`6750#section-2.2` also allows clients to send
+it in a form-encoded request body::
+
+    POST /resource HTTP/1.1
+    Host: server.example.com
+    Content-Type: application/x-www-form-urlencoded
+
+    access_token=mF_9.B5f-4.1JqM
+
+Register the :class:`FormEncodedBodyToken` extension to accept this method::
+
+    from authlib.oauth2.rfc6750 import FormEncodedBodyToken
+
+    require_oauth.register_extension(FormEncodedBodyToken())
+
+The token is read from the body only if all these conditions are met:
+
+- the ``Content-Type`` is ``application/x-www-form-urlencoded``;
+- the HTTP method is not ``GET``;
+- the request has no ``Authorization`` header.
+
+A request that sends the token both in the header and in the body gets an
+``invalid_request`` error.
+
+The RFC says that clients should not use this method unless the header
+cannot be used. Only enable it when your clients need it. For instance, the
+OpenID Connect certification tests send the token in the body of userinfo
+requests.
+
 API Reference
 -------------
 
@@ -26,3 +61,5 @@ API Reference
 
 .. autoclass:: BearerToken
     :members:
+
+.. autoclass:: FormEncodedBodyToken
