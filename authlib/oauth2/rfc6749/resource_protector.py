@@ -4,7 +4,6 @@
 Implementation of Accessing Protected Resources per :rfc:`6749#section-7`.
 """
 
-from .errors import InvalidRequestError
 from .errors import MissingAuthorizationError
 from .errors import UnsupportedTokenTypeError
 from .hooks import Hookable
@@ -121,8 +120,9 @@ class ResourceProtector(Hookable):
             )
         return validator
 
+    @hooked
     def parse_request_authorization(self, request):
-        """Parse the token and token validator from request Authorization header or payload.
+        """Parse the token and token validator from request Authorization header.
         Here is an example of Authorization header::
 
             Authorization: Bearer a-token-string
@@ -130,65 +130,26 @@ class ResourceProtector(Hookable):
         This method will parse this header, if it can find the validator for
         ``Bearer``, it will return the validator and ``a-token-string``.
 
-        If it cannot find an Authorization header, it will also search for the
-        ``access_token`` in the request payload.
-
         :return: validator, token_string
         :raise: MissingAuthorizationError
         :raise: UnsupportedTokenTypeError
         """
-        token_type = token_string = None
         auth = request.headers.get("Authorization")
-        body_token = self._get_body_token(request)
-        if auth and body_token is not None:
-            # https://www.rfc-editor.org/rfc/rfc6750#section-2
-            # Clients MUST NOT use more than one method to transmit the token
-            # in each request.
-            raise InvalidRequestError(
-                "The access token must be sent with only one method."
-            )
-
-        if auth:
-            # https://tools.ietf.org/html/rfc6749#section-7.1
-            token_parts = auth.split(None, 1)
-            if len(token_parts) != 2:
-                raise UnsupportedTokenTypeError(
-                    self._default_auth_type, self._default_realm
-                )
-            token_type, token_string = token_parts
-        elif body_token is not None:
-            token_type = "Bearer"
-            token_string = body_token
-
-        if not token_string or not token_type:
+        if not auth:
             raise MissingAuthorizationError(
                 self._default_auth_type, self._default_realm
             )
 
+        # https://tools.ietf.org/html/rfc6749#section-7.1
+        token_parts = auth.split(None, 1)
+        if len(token_parts) != 2:
+            raise UnsupportedTokenTypeError(
+                self._default_auth_type, self._default_realm
+            )
+
+        token_type, token_string = token_parts
         validator = self.get_token_validator(token_type)
         return validator, token_string
-
-    def _get_body_token(self, request):
-        """Return the access token sent in the request body, or None."""
-        # https://www.rfc-editor.org/rfc/rfc6750#section-2.2
-        # The HTTP request entity-header includes the "Content-Type" header
-        # field set to "application/x-www-form-urlencoded".
-        content_type = request.headers.get("Content-Type", "")
-        if content_type.split(";")[0].strip().lower() != (
-            "application/x-www-form-urlencoded"
-        ):
-            return None
-
-        # https://www.rfc-editor.org/rfc/rfc6750#section-2.2
-        # In particular, this means that the "GET" method MUST NOT be used.
-        if request.method.upper() == "GET":
-            return None
-
-        try:
-            form = request.form
-        except (AttributeError, NotImplementedError):
-            return None
-        return form.get("access_token")
 
     @hooked
     def validate_request(self, scopes, request, **kwargs):

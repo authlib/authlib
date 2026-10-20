@@ -3,16 +3,12 @@ import time
 
 import pytest
 
-from authlib.oauth2.rfc6749 import JsonRequest
-from authlib.oauth2.rfc6749 import OAuth2Request
 from authlib.oauth2.rfc6749 import OAuth2Token
-from authlib.oauth2.rfc6749 import ResourceProtector
 from authlib.oauth2.rfc6749 import errors
 from authlib.oauth2.rfc6749 import parameters
 from authlib.oauth2.rfc6749 import util
 from authlib.oauth2.rfc6749.hooks import Hookable
 from authlib.oauth2.rfc6749.hooks import hooked
-from authlib.oauth2.rfc6750 import BearerTokenValidator
 
 
 def test_parse_authorization_code_response():
@@ -149,71 +145,3 @@ def test_hooked_with_explicit_parameters():
 
     assert svc.work() == 42
     assert calls == ["before"]
-
-
-@pytest.mark.parametrize("request_class", [OAuth2Request, JsonRequest])
-def test_parse_request_authorization_without_form(request_class):
-    """Requests without a form only use the Authorization header."""
-    protector = ResourceProtector()
-    protector.register_token_validator(BearerTokenValidator())
-    request = request_class(
-        "POST",
-        "https://resource.test/",
-        headers={
-            "Authorization": "Bearer a1",
-            "Content-Type": "application/x-www-form-urlencoded",
-        },
-    )
-    _, token_string = protector.parse_request_authorization(request)
-    assert token_string == "a1"
-
-
-class FormRequest(OAuth2Request):
-    """A request with a form, for resource protector tests."""
-
-    def __init__(self, method, headers, form):
-        super().__init__(method, "https://resource.test/", headers=headers)
-        self._form = form
-
-    @property
-    def form(self):
-        return self._form
-
-
-URLENCODED = "application/x-www-form-urlencoded"
-
-
-@pytest.mark.parametrize(
-    "content_type",
-    [URLENCODED, "Application/X-WWW-Form-Urlencoded", URLENCODED + "; charset=utf-8"],
-)
-def test_parse_request_authorization_body_token(content_type):
-    """The access token is read from a form-encoded body."""
-    protector = ResourceProtector()
-    protector.register_token_validator(BearerTokenValidator())
-    request = FormRequest(
-        "POST", {"Content-Type": content_type}, {"access_token": "a1"}
-    )
-    _, token_string = protector.parse_request_authorization(request)
-    assert token_string == "a1"
-
-
-@pytest.mark.parametrize(
-    "method,content_type,form",
-    [
-        ("GET", URLENCODED, {"access_token": "a1"}),
-        ("POST", "multipart/form-data", {"access_token": "a1"}),
-        ("POST", "application/json", {"access_token": "a1"}),
-        ("POST", None, {"access_token": "a1"}),
-        ("POST", URLENCODED, {"access_token": ""}),
-        ("POST", URLENCODED, {}),
-    ],
-)
-def test_parse_request_authorization_ignored_body_token(method, content_type, form):
-    """The body token is ignored when the request does not follow RFC 6750 §2.2."""
-    protector = ResourceProtector()
-    protector.register_token_validator(BearerTokenValidator())
-    headers = {"Content-Type": content_type} if content_type else {}
-    request = FormRequest(method, headers, form)
-    with pytest.raises(errors.MissingAuthorizationError):
-        protector.parse_request_authorization(request)

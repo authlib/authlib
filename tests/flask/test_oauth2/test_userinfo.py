@@ -7,6 +7,7 @@ import authlib.oidc.core as oidc_core
 from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.integrations.flask_oauth2 import ResourceProtector
 from authlib.integrations.sqla_oauth2 import create_bearer_token_validator
+from authlib.oauth2.rfc6750 import FormEncodedBodyToken
 from tests.util import read_file_path
 
 from .models import Token
@@ -27,6 +28,7 @@ def server(server, app, db):
     BearerTokenValidator = create_bearer_token_validator(db.session, Token)
     resource_protector = ResourceProtector()
     resource_protector.register_token_validator(BearerTokenValidator())
+    resource_protector.register_extension(FormEncodedBodyToken())
     server.register_endpoint(UserInfoEndpoint(resource_protector=resource_protector))
 
     @app.route("/oauth/userinfo", methods=["GET", "POST"])
@@ -240,6 +242,13 @@ def test_token_in_multipart_body(test_client, token):
         data={"access_token": "access-token"},
         content_type="multipart/form-data",
     )
+    resp = json.loads(rv.data)
+    assert resp["error"] == "missing_authorization"
+
+
+def test_token_in_json_body(test_client, token):
+    """The access token cannot be sent in a JSON body."""
+    rv = test_client.post("/oauth/userinfo", json={"access_token": "access-token"})
     resp = json.loads(rv.data)
     assert resp["error"] == "missing_authorization"
 

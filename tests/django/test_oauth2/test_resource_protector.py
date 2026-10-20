@@ -6,6 +6,7 @@ from django.http import JsonResponse
 from authlib.integrations.django_oauth2 import BearerTokenValidator
 from authlib.integrations.django_oauth2 import ResourceProtector
 from authlib.integrations.django_oauth2.requests import DjangoJsonRequest
+from authlib.oauth2.rfc6750 import FormEncodedBodyToken
 from authlib.oauth2.rfc9728 import ProtectedResourceMetadata
 from authlib.oauth2.rfc9728 import ResourceMetadataExtension
 
@@ -14,6 +15,10 @@ from .models import OAuth2Token
 
 require_oauth = ResourceProtector()
 require_oauth.register_token_validator(BearerTokenValidator(OAuth2Token))
+
+require_oauth_with_body = ResourceProtector()
+require_oauth_with_body.register_token_validator(BearerTokenValidator(OAuth2Token))
+require_oauth_with_body.register_extension(FormEncodedBodyToken())
 
 RESOURCE_METADATA_URL = "https://resource.test/.well-known/oauth-protected-resource"
 require_oauth_with_metadata = ResourceProtector()
@@ -130,7 +135,7 @@ def test_access_resource(factory, token):
 def test_access_resource_with_token_in_body(factory, token):
     """The access token can be sent in a form-encoded body."""
 
-    @require_oauth("profile")
+    @require_oauth_with_body("profile")
     def get_user_profile(request):
         user = request.oauth_token.user
         return JsonResponse(dict(sub=user.pk, username=user.username))
@@ -149,7 +154,7 @@ def test_access_resource_with_token_in_body(factory, token):
 def test_token_in_header_and_body(factory, token):
     """Sending the access token both in the header and in the body is refused."""
 
-    @require_oauth("profile")
+    @require_oauth_with_body("profile")
     def get_user_profile(request):
         return JsonResponse({})
 
@@ -168,7 +173,7 @@ def test_token_in_header_and_body(factory, token):
 def test_token_in_multipart_body(factory, token):
     """The access token cannot be sent in a multipart body."""
 
-    @require_oauth("profile")
+    @require_oauth_with_body("profile")
     def get_user_profile(request):
         return JsonResponse({})
 
@@ -189,6 +194,7 @@ def test_form_body_keeps_json_request(factory, token):
 
     protector = ResourceProtector()
     protector.register_token_validator(RecordingValidator(OAuth2Token))
+    protector.register_extension(FormEncodedBodyToken())
 
     @protector("profile")
     def get_user_profile(request):

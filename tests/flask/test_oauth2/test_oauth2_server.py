@@ -153,20 +153,9 @@ def test_access_resource(test_client, token):
     assert resp["status"] == "ok"
 
 
-def test_access_resource_with_token_in_body(test_client, token):
-    """The access token can be sent in a form-encoded body."""
-    rv = test_client.post(
-        "/user",
-        data="access_token=a1",
-        content_type="application/x-www-form-urlencoded; charset=utf-8",
-    )
-    resp = json.loads(rv.data)
-    assert resp["username"] == "foo"
-
-
-def test_token_in_json_body(test_client, token):
-    """The access token cannot be sent in a JSON body."""
-    rv = test_client.post("/user", json={"access_token": "a1"})
+def test_token_in_body_without_extension(test_client, token):
+    """Without FormEncodedBodyToken, the body token is ignored."""
+    rv = test_client.post("/user", data={"access_token": "a1"})
     resp = json.loads(rv.data)
     assert resp["error"] == "missing_authorization"
 
