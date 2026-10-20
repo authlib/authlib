@@ -431,7 +431,8 @@ Providers may return the UserInfo Claims as a signed JWT instead of a JSON
 object, as defined in `Section 5.3.2`_ of the OpenID Connect Core
 specification. Authlib handles this automatically: when the response has a
 ``Content-Type: application/jwt``, ``.userinfo()`` verifies the JWT with the
-provider's JWK Set and validates the ``iss`` and ``aud`` claims, the same
+provider's JWK Set and validates the ``sub``, ``iss`` and ``aud`` claims
+required by Section 5.3.2, the same
 trust path used for ``id_token``. A JWK Set refresh is forced when the
 signing key is not in the cached key set, so key rotation works out of the
 box::

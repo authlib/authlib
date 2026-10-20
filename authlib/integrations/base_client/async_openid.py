@@ -38,8 +38,8 @@ class AsyncOpenIDMixin:
         When the provider returns the UserInfo Claims as a signed JWT
         (``Content-Type: application/jwt``, as allowed by `Section 5.3.2`_),
         the JWT is decoded with the provider's JWK Set, the same trust
-        path as :meth:`parse_id_token`, and its ``iss`` and ``aud``
-        claims are validated.
+        path as :meth:`parse_id_token`, and its ``sub``, ``iss`` and
+        ``aud`` claims are validated per `Section 5.3.2`_.
 
         .. _`Section 5.3.2`: https://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse
         """
@@ -74,11 +74,18 @@ class AsyncOpenIDMixin:
             )
 
         claims = SignedUserInfo(token.claims, token.header)
-        claims_options = {}
+        # Section 5.3.2: the sub Claim MUST always be returned in the
+        # UserInfo Response, and a signed response MUST contain the
+        # iss and aud Claims as members.
+        claims_options = {
+            "sub": {"essential": True},
+            "iss": {"essential": True},
+            "aud": {"essential": True},
+        }
         if "issuer" in metadata:
-            claims_options["iss"] = {"values": [metadata["issuer"]]}
+            claims_options["iss"]["values"] = [metadata["issuer"]]
         if self.client_id:
-            claims_options["aud"] = {"essential": True, "values": [self.client_id]}
+            claims_options["aud"]["values"] = [self.client_id]
         claims.options = claims_options
         claims.validate(leeway=leeway)
         return claims

@@ -203,7 +203,7 @@ def encode_signed_userinfo(claims):
     return jwt.encode({"alg": "HS256", "kid": "f"}, claims, secret_key)
 
 
-async def run_fetch_signed_userinfo(payload, jwks=None, jwks_uri=None):
+async def run_fetch_signed_userinfo(payload, jwks=None, jwks_uri=None, client_id="dev"):
 
     oauth = OAuth()
 
@@ -225,7 +225,7 @@ async def run_fetch_signed_userinfo(payload, jwks=None, jwks_uri=None):
 
     client = oauth.register(
         "dev",
-        client_id="dev",
+        client_id=client_id,
         client_secret="dev",
         fetch_token=fetch_token,
         userinfo_endpoint="https://provider.test/userinfo",
@@ -321,6 +321,72 @@ async def test_fetch_userinfo_signed_jwt_rejects_bad_signature():
         await run_fetch_signed_userinfo(
             id_token,
             jwks={"keys": [secret_key.as_dict()]},
+        )
+
+
+@pytest.mark.asyncio
+async def test_fetch_userinfo_signed_jwt_rejects_missing_sub():
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "name": "John Doe",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    with pytest.raises(MissingClaimError):
+        await run_fetch_signed_userinfo(
+            encode_signed_userinfo(claims),
+            jwks={"keys": [secret_key.as_dict()]},
+        )
+
+
+@pytest.mark.asyncio
+async def test_fetch_userinfo_signed_jwt_rejects_missing_iss():
+    now = int(time.time())
+    claims = {
+        "aud": "dev",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    with pytest.raises(MissingClaimError):
+        await run_fetch_signed_userinfo(
+            encode_signed_userinfo(claims),
+            jwks={"keys": [secret_key.as_dict()]},
+        )
+
+
+@pytest.mark.asyncio
+async def test_fetch_userinfo_signed_jwt_rejects_missing_aud():
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    with pytest.raises(MissingClaimError):
+        await run_fetch_signed_userinfo(
+            encode_signed_userinfo(claims),
+            jwks={"keys": [secret_key.as_dict()]},
+        )
+
+
+@pytest.mark.asyncio
+async def test_fetch_userinfo_signed_jwt_requires_aud_without_client_id():
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    with pytest.raises(MissingClaimError):
+        await run_fetch_signed_userinfo(
+            encode_signed_userinfo(claims),
+            jwks={"keys": [secret_key.as_dict()]},
+            client_id=None,
         )
 
 

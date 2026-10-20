@@ -277,9 +277,10 @@ class UserInfo(dict):
 class SignedUserInfo(JWTClaims):
     """Claims of a signed UserInfo Response.
 
-    Defined per `Section 5.3.2`_: when the UserInfo Claims are returned
-    as a JWT, the response MUST contain the Claims ``iss`` (issuer) and
-    ``aud`` (audience) as members. The ``iss`` value MUST be the OP's
+    Defined per `Section 5.3.2`_: the ``sub`` (subject) Claim MUST
+    always be returned in the UserInfo Response, and when the UserInfo
+    Claims are returned as a JWT, the response MUST contain the Claims
+    ``iss`` (issuer) and ``aud`` (audience) as members. The ``iss`` value MUST be the OP's
     Issuer Identifier URL. The ``aud`` value MUST be or include the
     RP's Client ID value.
 
