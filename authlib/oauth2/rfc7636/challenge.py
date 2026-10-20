@@ -61,12 +61,12 @@ class CodeChallenge:
 
     def __call__(self, grant):
         grant.register_hook(
-            "after_validate_authorization_request_payload",
             self.validate_code_challenge,
+            after=grant.validate_authorization_request_payload,
         )
         grant.register_hook(
-            "after_validate_token_request",
             self.validate_code_verifier,
+            after=grant.validate_token_request,
         )
 
     def validate_code_challenge(self, grant, redirect_uri):
