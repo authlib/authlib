@@ -300,14 +300,31 @@ class ResourceMetadataExtension:
 
         metadata = ProtectedResourceMetadata({"resource": "https://api.example.com/"})
         require_oauth.register_extension(ResourceMetadataExtension(metadata))
+
+    :param metadata: The :class:`ProtectedResourceMetadata` of the resource.
     """
 
     def __init__(self, metadata):
-        self._metadata_url = get_well_known_url(metadata["resource"], external=True)
+        self.metadata = metadata
 
-    def _patch_error(self, exc, instance):
+    def get_resource_metadata_url(self, request):
+        """Return the ``resource_metadata`` URL for this request.
+
+        By default, it is the well-known URL of the ``resource`` metadata, for
+        all the requests. Override it to send a different URL for each route.
+        You then have to serve a metadata document at each of these URLs::
+
+            class MyResourceMetadataExtension(ResourceMetadataExtension):
+                def get_resource_metadata_url(self, request):
+                    return get_well_known_url(request.uri, external=True)
+
+        :param request: The OAuth2 request being validated.
+        :returns: The URL of the protected resource metadata.
+        """
+        return get_well_known_url(self.metadata["resource"], external=True)
+
+    def _patch_error(self, exc, instance, url):
         """Patch ``exc.get_headers`` to inject ``resource_metadata`` into WWW-Authenticate."""
-        url = self._metadata_url
         original_get_headers = exc.get_headers
 
         def patched_get_headers():
@@ -336,12 +353,15 @@ class ResourceMetadataExtension:
         exc.get_headers = patched_get_headers
 
     def __call__(self, protector):
-        def inject_www_authenticate_header(instance, original, *args, **kwargs):
+        def inject_www_authenticate_header(
+            instance, original, scopes, request, **kwargs
+        ):
             try:
-                return original(*args, **kwargs)
+                return original(scopes, request, **kwargs)
             except Exception as exc:
                 if getattr(exc, "status_code", 0) in (401, 403):
-                    self._patch_error(exc, instance)
+                    url = self.get_resource_metadata_url(request)
+                    self._patch_error(exc, instance, url)
                 raise
 
         protector.register_hook(

@@ -161,6 +161,17 @@ For a different resource, use another protector.
     client, the discovery only works for a request to the ``resource`` URL
     itself.
 
+To send a different URL for each route, override
+:meth:`~ResourceMetadataExtension.get_resource_metadata_url`. You then have to
+serve a metadata document at each of these URLs, with the matching
+``resource`` value::
+
+    from authlib.oauth2.rfc9728 import ResourceMetadataExtension, get_well_known_url
+
+    class MyResourceMetadataExtension(ResourceMetadataExtension):
+        def get_resource_metadata_url(self, request):
+            return get_well_known_url(request.uri, external=True)
+
 
 Authorization Server
 --------------------
