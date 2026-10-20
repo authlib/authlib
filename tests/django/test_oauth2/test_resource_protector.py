@@ -5,6 +5,7 @@ from django.http import JsonResponse
 
 from authlib.integrations.django_oauth2 import BearerTokenValidator
 from authlib.integrations.django_oauth2 import ResourceProtector
+from authlib.integrations.django_oauth2.requests import DjangoJsonRequest
 from authlib.oauth2.rfc9728 import ProtectedResourceMetadata
 from authlib.oauth2.rfc9728 import ResourceMetadataExtension
 
@@ -176,6 +177,31 @@ def test_token_in_multipart_body(factory, token):
     assert resp.status_code == 401
     data = json.loads(resp.content)
     assert data["error"] == "missing_authorization"
+
+
+def test_form_body_keeps_json_request(factory, token):
+    """Validators get a JSON request even when the body is form-encoded."""
+    requests = []
+
+    class RecordingValidator(BearerTokenValidator):
+        def validate_request(self, request):
+            requests.append(request)
+
+    protector = ResourceProtector()
+    protector.register_token_validator(RecordingValidator(OAuth2Token))
+
+    @protector("profile")
+    def get_user_profile(request):
+        return JsonResponse({})
+
+    request = factory.post(
+        "/user",
+        data="access_token=a1",
+        content_type="application/x-www-form-urlencoded",
+    )
+    resp = get_user_profile(request)
+    assert resp.status_code == 200
+    assert isinstance(requests[0], DjangoJsonRequest)
 
 
 def test_scope_operator(factory, token):
