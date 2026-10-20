@@ -430,3 +430,33 @@ def test_missing_scope_rejected(test_client, client, monkeypatch):
 
     rv = test_client.post(authorize_url, data={"user_id": "1"})
     assert "error=invalid_scope" in rv.location
+
+
+def test_authorize_code_form_post(test_client):
+    rv = test_client.post(
+        authorize_url + "&response_mode=form_post",
+        data={"user_id": "1"},
+    )
+    assert rv.status_code == 200
+    assert rv.headers["Content-Type"].startswith("text/html")
+    assert b'method="post"' in rv.data
+    assert b"https://client.test" in rv.data
+    assert b'name="code"' in rv.data
+
+
+def test_authorize_code_response_mode_query(test_client):
+    rv = test_client.post(
+        authorize_url + "&response_mode=query",
+        data={"user_id": "1"},
+    )
+    assert rv.status_code == 302
+    assert "code=" in rv.location
+
+
+def test_authorize_code_invalid_response_mode(test_client):
+    rv = test_client.post(
+        authorize_url + "&response_mode=invalid",
+        data={"user_id": "1"},
+    )
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_request"
