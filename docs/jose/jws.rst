@@ -211,7 +211,7 @@ Header Parameter Names
 
 :class:`JsonWebSignature` has a validation on header parameter names. It will
 first check if the parameter name is in "Registered Header Parameter Names"
-defined by RFC7515 `Section 4.1`_. Then it will check if the parameter name is
+defined by :rfc:`7515#section-4.1`. Then it will check if the parameter name is
 in your defined private headers.
 
 In this case, if there are header parameter names out of the registered header
@@ -219,5 +219,3 @@ parameter names scope, you can pass the names::
 
     private_headers = ['h1', 'h2']
     jws = JsonWebSignature(private_headers=private_headers)
-
-.. _`Section 4.1`: https://tools.ietf.org/html/rfc7515#section-4.1

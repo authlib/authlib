@@ -1,13 +1,13 @@
 """authlib.oauth2.rfc6749.resource_protector.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Implementation of Accessing Protected Resources per `Section 7`_.
-
-.. _`Section 7`: https://tools.ietf.org/html/rfc6749#section-7
+Implementation of Accessing Protected Resources per :rfc:`6749#section-7`.
 """
 
 from .errors import MissingAuthorizationError
 from .errors import UnsupportedTokenTypeError
+from .hooks import Hookable
+from .hooks import hooked
 from .util import scope_to_list
 
 
@@ -83,11 +83,22 @@ class TokenValidator:
         raise NotImplementedError()
 
 
-class ResourceProtector:
+class ResourceProtector(Hookable):
     def __init__(self):
+        super().__init__()
         self._token_validators = {}
         self._default_realm = None
         self._default_auth_type = None
+        self._extensions = []
+
+    def register_extension(self, extension):
+        """Register an extension that can configure this protector.
+
+        An extension is a callable that receives the protector instance::
+
+            resource_protector.register_extension(my_extension)
+        """
+        self._extensions.append(extension(self))
 
     def register_token_validator(self, validator: TokenValidator):
         """Register a token validator for a given Authorization type.
@@ -148,6 +159,7 @@ class ResourceProtector:
         validator = self.get_token_validator(token_type)
         return validator, token_string
 
+    @hooked
     def validate_request(self, scopes, request, **kwargs):
         """Validate the request and return a token."""
         validator, token_string = self.parse_request_authorization(request)

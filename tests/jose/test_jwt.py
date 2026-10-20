@@ -1,10 +1,15 @@
 import datetime
+import hashlib
+import hmac
 
 import pytest
 
+from authlib.common.encoding import json_b64encode
+from authlib.common.encoding import urlsafe_b64encode
 from authlib.jose import JsonWebKey
 from authlib.jose import JsonWebToken
 from authlib.jose import JWTClaims
+from authlib.jose import OctKey
 from authlib.jose import errors
 from authlib.jose import jwt
 from authlib.jose.errors import UnsupportedAlgorithmError
@@ -19,6 +24,58 @@ def test_init_algorithms():
     _jwt = JsonWebToken("RS256")
     with pytest.raises(UnsupportedAlgorithmError):
         _jwt.encode({"alg": "HS256"}, {}, "k")
+
+
+@pytest.mark.parametrize("prefix", ["", "\n", " \t\r\n", "# public key\n", "\ufeff"])
+@pytest.mark.parametrize("key_format", ["raw", "jwk", "key"])
+def test_reject_pem_key_as_hmac_secret(prefix, key_format):
+    public_key = prefix + read_file_path("rsa_public.pem")
+    private_key = read_file_path("rsa_private.pem")
+    signed = jwt.encode({"alg": "RS256"}, {"sub": "alice"}, private_key)
+    assert jwt.decode(signed, public_key)["sub"] == "alice"
+
+    raw_key = public_key.encode()
+    signing_input = (
+        json_b64encode({"alg": "HS256"}) + b"." + json_b64encode({"sub": "attacker"})
+    )
+    signature = hmac.new(raw_key, signing_input, hashlib.sha256).digest()
+    forged = signing_input + b"." + urlsafe_b64encode(signature)
+
+    key = public_key
+    if key_format != "raw":
+        key = {"kty": "oct", "k": urlsafe_b64encode(raw_key).decode()}
+        if key_format == "key":
+            key = OctKey.import_key(key)
+
+    with pytest.raises(ValueError, match="This key may not be safe to import"):
+        jwt.decode(forged, key)
+
+
+@pytest.mark.parametrize("alg", ["HS256", "HS384", "HS512"])
+@pytest.mark.parametrize(
+    "key",
+    [
+        b"",
+        "",
+        {"kty": "oct", "k": ""},
+        OctKey.import_key({"kty": "oct", "k": ""}),
+        lambda header, payload: "",
+    ],
+    ids=["bytes", "str", "jwk", "key", "callable"],
+)
+def test_reject_empty_hmac_key(alg, key):
+    hash_alg = getattr(hashlib, f"sha{alg[2:]}")
+    signing_input = (
+        json_b64encode({"alg": alg}) + b"." + json_b64encode({"sub": "attacker"})
+    )
+    signature = hmac.new(b"", signing_input, hash_alg).digest()
+    forged = signing_input + b"." + urlsafe_b64encode(signature)
+
+    with pytest.raises(ValueError, match="must not be empty"):
+        jwt.decode(forged, key)
+
+    with pytest.raises(ValueError, match="must not be empty"):
+        jwt.encode({"alg": alg}, {"sub": "alice"}, key)
 
 
 def test_encode_sensitive_data():
@@ -176,6 +233,15 @@ def test_validate_iat():
     claims = jwt.decode(id_token, "k")
     with pytest.raises(errors.InvalidClaimError):
         claims.validate()
+
+
+def test_validate_numeric_date_rejects_bool():
+    for name in ("exp", "nbf", "iat"):
+        for value in (True, False):
+            id_token = jwt.encode({"alg": "HS256"}, {name: value}, "k")
+            claims = jwt.decode(id_token, "k")
+            with pytest.raises(errors.InvalidClaimError):
+                claims.validate()
 
 
 def test_validate_jti():

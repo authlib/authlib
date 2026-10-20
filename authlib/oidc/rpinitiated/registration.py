@@ -15,12 +15,16 @@ class ClientMetadataClaims(BaseClaims):
 
     This can be used with :ref:`specs/rfc7591` and :ref:`specs/rfc7592` endpoints::
 
+        from authlib.oauth2 import rfc7591
+        from authlib.oidc import registration
+        from authlib.oidc import rpinitiated
+
         server.register_endpoint(
-            ClientRegistrationEndpoint(
+            MyClientRegistrationEndpoint(
                 claims_classes=[
                     rfc7591.ClientMetadataClaims,
-                    oidc.registration.ClientMetadataClaims,
-                    oidc.rpinitiated.ClientMetadataClaims,
+                    registration.ClientMetadataClaims,
+                    rpinitiated.ClientMetadataClaims,
                 ]
             )
         )

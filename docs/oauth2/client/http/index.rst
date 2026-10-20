@@ -5,7 +5,7 @@ HTTP Clients
 
 .. meta::
     :description: An OAuth 2.0 Client implementation for Python requests,
-        and httpx, powered by Authlib.
+        and httpx2, powered by Authlib.
 
 .. module:: authlib.integrations
     :noindex:
@@ -17,7 +17,7 @@ Authlib provides three implementations of OAuth 2.0 client:
 1. :class:`requests_client.OAuth2Session` implementation of :ref:`requests_client`,
    which is a replacement for **requests-oauthlib**.
 2. :class:`httpx_client.AsyncOAuth2Client` implementation of :ref:`httpx_client`,
-   which is **async** OAuth 2.0 client powered by **HTTPX**.
+   which is **async** OAuth 2.0 client powered by **HTTPX2**.
 
 :class:`requests_client.OAuth2Session` and :class:`httpx_client.AsyncOAuth2Client`
 shares the same API.
@@ -46,7 +46,7 @@ code grant type. Initialize the session for reuse::
     >>> from authlib.integrations.requests_client import OAuth2Session
     >>> client = OAuth2Session(client_id, client_secret, scope=scope)
     >>>
-    >>> # using httpx implementation
+    >>> # using httpx2 implementation
     >>> from authlib.integrations.httpx_client import AsyncOAuth2Client
     >>> client = AsyncOAuth2Client(client_id, client_secret, scope=scope)
 
@@ -103,7 +103,7 @@ another website. You need to create another session yourself::
     >>> from authlib.integrations.requests_client import OAuth2Session
     >>> client = OAuth2Session(client_id, client_secret, state=state)
     >>>
-    >>> # using httpx
+    >>> # using httpx2
     >>> from authlib.integrations.httpx_client import AsyncOAuth2Client
     >>> client = AsyncOAuth2Client(client_id, client_secret, state=state)
     >>>
@@ -393,7 +393,7 @@ the authorization server will return a value of ``id_token`` in response::
     >>> scope = 'openid email profile'
     >>> # using requests
     >>> client = OAuth2Session(client_id, client_secret, scope=scope)
-    >>> # using httpx
+    >>> # using httpx2
     >>> client = AsyncOAuth2Client(client_id, client_secret, scope=scope)
 
 The remote server may require other parameters for OpenID Connect requests, for

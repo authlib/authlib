@@ -1,8 +1,8 @@
 .. _httpx_client:
 
 
-OAuth 2.0 for HTTPX
-===================
+OAuth 2.0 for HTTPX2
+====================
 
 .. meta::
     :description: An OAuth 2.0 Client implementation for a next
@@ -12,18 +12,16 @@ OAuth 2.0 for HTTPX
 .. module:: authlib.integrations.httpx_client
     :noindex:
 
-HTTPX is a next-generation HTTP client for Python. Authlib enables OAuth 2.0
-for HTTPX with its async versions:
+HTTPX2 is a next-generation HTTP client for Python. Authlib enables OAuth 2.0
+for HTTPX2 with its async versions:
 
 * :class:`OAuth2Client`
 * :class:`AssertionClient`
 * :class:`AsyncOAuth2Client`
 * :class:`AsyncAssertionClient`
 
-.. note:: HTTPX is still in its "alpha" stage, use it with caution.
-
-HTTPX OAuth 2.0
----------------
+HTTPX2 OAuth 2.0
+----------------
 
 In :ref:`OAuth 2 Session <oauth_2_session>`, there are many grant types, including:
 
@@ -37,11 +35,11 @@ And also, Authlib supports non Standard OAuth 2.0 providers via Compliance Fix.
 Read the common guide of :ref:`OAuth 2 Session <oauth_2_session>` to understand the whole OAuth
 2.0 flow.
 
-Using ``client_secret_jwt`` in HTTPX
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Using ``client_secret_jwt`` in HTTPX2
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Here is how you could register and use ``client_secret_jwt`` client
-authentication method for HTTPX::
+authentication method for HTTPX2::
 
     from authlib.integrations.httpx_client import AsyncOAuth2Client
     from authlib.oauth2.rfc7523 import ClientSecretJWT
@@ -57,11 +55,11 @@ authentication method for HTTPX::
 The ``ClientSecretJWT`` is provided by :ref:`specs/rfc7523`.
 
 
-Using ``private_key_jwt`` in HTTPX
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Using ``private_key_jwt`` in HTTPX2
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Here is how you could register and use ``private_key_jwt`` client
-authentication method for HTTPX::
+authentication method for HTTPX2::
 
     from authlib.integrations.httpx_client import AsyncOAuth2Client
     from authlib.oauth2.rfc7523 import PrivateKeyJWT
@@ -163,7 +161,7 @@ service account JSON configure file::
 Close Client Hint
 -----------------
 
-Developers SHOULD **close** a HTTPX Session when the jobs are done. You
+Developers SHOULD **close** a HTTPX2 Session when the jobs are done. You
 can call ``.close()`` manually, or use a ``with`` context to automatically
 close the session::
 

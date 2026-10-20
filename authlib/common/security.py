@@ -1,6 +1,8 @@
+import ipaddress
 import os
 import random
 import string
+from urllib.parse import urlsplit
 
 UNICODE_ASCII_CHARACTER_SET = string.ascii_letters + string.digits
 
@@ -10,12 +12,42 @@ def generate_token(length=30, chars=UNICODE_ASCII_CHARACTER_SET):
     return "".join(rand.choice(chars) for _ in range(length))
 
 
-def is_secure_transport(uri):
-    """Check if the uri is over ssl."""
+def is_secure_transport(uri, allow_loopback=True):
+    """Check if the uri is over ssl.
+
+    :param uri: The URI to check.
+    :param allow_loopback: Accept ``http`` for loopback hosts. Disable it for
+        URIs that the server calls itself.
+    """
     if os.getenv("AUTHLIB_INSECURE_TRANSPORT"):
         return True
 
-    uri = uri.lower()
-    return uri.startswith(
-        ("https://", "http://localhost:", "http://127.0.0.1:", "http://[::1]:")
-    )
+    try:
+        parts = urlsplit(uri)
+    except ValueError:
+        return False
+
+    if not parts.hostname:
+        return False
+
+    if parts.scheme == "https":
+        return True
+
+    if parts.scheme != "http" or not allow_loopback:
+        return False
+
+    # rfc8252 §7.3: native apps may use http for loopback redirection URIs.
+    if parts.hostname == "localhost":
+        return True
+
+    try:
+        address = ipaddress.ip_address(parts.hostname)
+    except ValueError:
+        return False
+
+    # IPv6Address.is_loopback only accounts for the mapped IPv4 address since
+    # CPython 3.10.16, 3.11.11 and 3.12.4.
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
+        address = address.ipv4_mapped
+
+    return address.is_loopback

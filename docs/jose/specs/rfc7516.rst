@@ -7,10 +7,8 @@ RFC7516: JSON Web Encryption
     :description: API references on RFC7516 JSON Web Encryption (JWE) Python
         implementation. Guide on JWE serialization and deserialization.
 
-This section contains the generic implementation of RFC7516_. Find how to use
+This section contains the generic implementation of :rfc:`7516`. Find how to use
 it in :ref:`JWE Guide <jwe_guide>`.
-
-.. _RFC7516: https://tools.ietf.org/html/rfc7516
 
 
 API Reference

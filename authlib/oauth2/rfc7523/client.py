@@ -46,7 +46,15 @@ class JWTBearerClientAssertion:
         assertion = data.get("client_assertion")
         if assertion_type == ASSERTION_TYPE and assertion:
             headers, claims = self.extract_assertion(assertion)
+            # "sub" is read before the signature and the claims are verified,
+            # so it cannot be assumed to be present nor to be a string.
+            if "sub" not in claims:
+                raise InvalidClientError(description="Missing claim: 'sub'")
+
             client_id = claims["sub"]
+            if not isinstance(client_id, str):
+                raise InvalidClientError(description="Invalid claim: 'sub'")
+
             client = query_client(client_id)
             if not client:
                 raise InvalidClientError(
@@ -55,7 +63,7 @@ class JWTBearerClientAssertion:
 
             try:
                 key = import_any_key(self.resolve_client_public_key(client))
-            except TypeError:  # pragma: no cover
+            except TypeError:
                 key = import_any_key(self.resolve_client_public_key(client, headers))
                 deprecate(
                     "resolve_client_public_key takes only 'client' parameter.",
@@ -111,14 +119,12 @@ class JWTBearerClientAssertion:
 
     def process_assertion_claims(self, assertion, resolve_key):
         """Extract JWT payload claims from request "assertion", per
-        `Section 3.1`_.
+        :rfc:`7523#section-3.1`.
 
         :param assertion: assertion string value in the request
         :param resolve_key: function to resolve the sign key
         :return: JWTClaims
         :raise: InvalidClientError
-
-        .. _`Section 3.1`: https://tools.ietf.org/html/rfc7523#section-3.1
         """
         try:
             token = jwt.decode(assertion, resolve_key)
@@ -137,11 +143,20 @@ class JWTBearerClientAssertion:
         )
 
     def extract_assertion(self, assertion: str):
-        obj = jws.extract_compact(to_bytes(assertion))
+        try:
+            obj = jws.extract_compact(to_bytes(assertion))
+        except JoseError as e:
+            log.debug("Assertion Error: %r", e)
+            raise InvalidClientError(description="Invalid JWT assertion.") from e
+
         try:
             claims = json_loads(obj.payload)
         except ValueError:
             raise InvalidClientError(description="Invalid JWT payload.") from None
+
+        if not isinstance(claims, dict):
+            raise InvalidClientError(description="Invalid JWT payload.")
+
         return obj.headers(), claims
 
     def validate_jti(self, claims, jti):

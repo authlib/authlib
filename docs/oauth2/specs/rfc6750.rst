@@ -7,9 +7,7 @@ RFC6750: The OAuth 2.0 Authorization Framework: Bearer Token Usage
     :description: API references of RFC6750 in Python implementation.
         Guide on how to use Bearer Token and its validator.
 
-This section contains the generic implementation of RFC6750_.
-
-.. _RFC6750: https://tools.ietf.org/html/rfc6750
+This section contains the generic implementation of :rfc:`6750`.
 
 Guide on Bearer Token
 ---------------------

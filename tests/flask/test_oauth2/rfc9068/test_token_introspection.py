@@ -2,9 +2,10 @@ import time
 
 import pytest
 from flask import json
+from joserfc import jwt
+from joserfc.jwk import KeySet
 
 from authlib.common.security import generate_token
-from authlib.jose import jwt
 from authlib.oauth2.rfc6749.grants import (
     AuthorizationCodeGrant as _AuthorizationCodeGrant,
 )
@@ -24,7 +25,7 @@ resource_server = "resource-server-id"
 
 @pytest.fixture
 def jwks():
-    return read_file_path("jwks_private.json")
+    return KeySet.import_key_set(read_file_path("jwks_private.json"))
 
 
 @pytest.fixture(autouse=True)
@@ -96,7 +97,7 @@ def create_access_token_claims(client, user):
         "iss": issuer,
         "exp": expires_in,
         "aud": [resource_server],
-        "sub": user.get_user_id(),
+        "sub": str(user.get_user_id()),
         "client_id": client.client_id,
         "iat": now,
         "jti": generate_token(16),
@@ -114,14 +115,11 @@ def claims(client, user):
 
 
 def create_access_token(claims, jwks, alg="RS256", typ="at+jwt"):
-    header = {"alg": alg, "typ": typ}
-    access_token = jwt.encode(
-        header,
+    return jwt.encode(
+        {"alg": alg, "typ": typ},
         claims,
         key=jwks,
-        check=False,
     )
-    return access_token.decode()
 
 
 @pytest.fixture
@@ -140,7 +138,7 @@ def test_introspection(test_client, client, user, access_token):
     assert resp["client_id"] == client.client_id
     assert resp["token_type"] == "Bearer"
     assert resp["scope"] == client.scope
-    assert resp["sub"] == user.id
+    assert resp["sub"] == str(user.id)
     assert resp["aud"] == [resource_server]
     assert resp["iss"] == issuer
 

@@ -6,11 +6,102 @@ Changelog
 
 Here you can see the full list of changes between each Authlib release.
 
+.. scriv-insert-here
+
+.. _changelog-1.9.1:
+
+Version 1.9.1 — 2026-10-14
+--------------------------
+
+Breaking changes
+~~~~~~~~~~~~~~~~
+
+- The RFC 7592 client configuration endpoint calls ``check_client()`` on the
+  registration access token. Tokens must implement
+  ``TokenMixin.check_client``.
+
+Security
+~~~~~~~~
+
+- ``authlib.jose`` rejects empty HMAC keys with a ``ValueError``. An empty key
+  used to let anyone forge HS256, HS384 and HS512 signatures. The minimum
+  ``joserfc`` version is now 1.6.8, which has the same check.
+  `GHSA-8m4g-j4wp-wgcg <https://github.com/authlib/authlib/security/advisories/GHSA-8m4g-j4wp-wgcg>`_
+- The RFC 7592 client configuration endpoint rejects registration access
+  tokens issued to another client, with an ``access_denied`` error. A client
+  could read, update or delete the registration of any other client.
+  `GHSA-c73q-w75p-j82v <https://github.com/authlib/authlib/security/advisories/GHSA-c73q-w75p-j82v>`_
+
+Version 1.9.0
+-------------
+
+**Released on Oct 14, 2026**
+
+- **Breaking change**: ID Tokens with ``nonce_supported=false`` no longer
+  bypass validation of the nonce saved by the client. Missing or mismatched
+  nonces are rejected in both synchronous and asynchronous integrations.
+  Provider compatibility exceptions must be explicitly configured by the
+  application, rather than enabled by an ID Token claim. :pr:`949`
+- Enforce JAR ``require_signed_request_object`` independently of the signing
+  algorithm configuration. An explicit algorithm list or a customized
+  ``get_request_object_signing_algorithms()`` cannot allow ``alg=none`` when
+  either the server or the client requires signed request objects. :pr:`949`
+- **Breaking change**: JAR ``request_uri`` is validated before retrieval and
+  rejected by default. Applications must implement ``validate_request_uri()``
+  with an explicit secure retrieval policy. See :ref:`specs/rfc9101` for
+  retrieval safeguards. :pr:`949`
+- Add ``authlib.oidc.core.OpenIDJWTAuthenticationRequest`` to enforce OIDC
+  ``require_request_uri_registration`` separately from the generic JAR
+  retrieval policy. Registered URIs must also pass the application's
+  validation policy. See :ref:`oidc_request_objects`. :pr:`949`
+- Reject PEM and SSH key material used as symmetric JOSE keys, including
+  PEM keys with leading whitespace, comments, or a byte-order mark and
+  keys supplied through an oct JWK or an ``OctKey`` instance. :pr:`945`
+- Use the client's allowed scope when validating and issuing OIDC implicit
+  and hybrid responses. Clients without the ``openid`` scope can no longer
+  obtain an ID Token by including it in the raw request, and custom token
+  generators receive only the allowed scope. :pr:`945`
+- **Breaking change**: ``JWTBearerGrant.get_audiences()`` must return a
+  non-empty list of audience identifiers for the authorization server.
+  Assertions are rejected with ``invalid_grant`` when audiences are not
+  configured, instead of issuing a deprecation warning and skipping
+  audience value validation. :pr:`945`
+- Require client authentication for ID-JAG token requests and bind the
+  assertion's ``client_id`` to the authenticated client. Missing or invalid
+  credentials and client mismatches no longer allow token issuance. Rejected
+  authentication and mismatches do not consume the assertion's replay identifier.
+  :pr:`955`
+- Add support for the Identity Assertion JWT Authorization Grant (ID-JAG),
+  a draft extension to :rfc:`7523` for cross-application access using identity
+  assertions issued by an external enterprise IdP.
+  See :ref:`specs/rfc7523-id-jag` for details. :pr:`898`
+- The async OpenID Connect client returns ``None`` from ``parse_id_token()``
+  when the token has no ``id_token``, like the sync client. It used to raise
+  a ``KeyError``. :pr:`924`
+- OAuth 2 and assertion clients raise the HTTP error of the token endpoint
+  response when its body is not a JSON object, such as a plain-text 429 page
+  from a gateway. They used to raise a ``JSONDecodeError`` or a ``TypeError``.
+  A success response with such a body raises a ``ValueError``.
+  :issue:`928` :pr:`929`
+- ``JsonWebSignature.deserialize_json()`` rejects a JWS JSON Serialization
+  with an empty ``signatures`` list. It used to accept it as valid. :pr:`938`
+- ``JWTClaims.validate()`` rejects boolean ``exp``, ``nbf`` and ``iat`` values
+  with an ``InvalidClaimError``. :issue:`641` :pr:`942`
+- OAuth 1.0 clients send each OAuth parameter once when the signature is
+  placed in the query string or the form body. Duplicated parameters used to
+  produce an invalid signature. :issue:`542` :pr:`943`
+
 Version 1.8.0
 -------------
 
-**Unreleased**
+**Released on Aug 30, 2026**
 
+- **Breaking change**: ``authlib.integrations.httpx_client`` is now powered by
+  ``httpx2`` instead of ``httpx``. Install ``httpx2`` to keep using this
+  integration; the public import path and class names are unchanged. When
+  ``httpx2`` is not installed, the integration falls back to ``httpx`` and emits
+  an ``AuthlibDeprecationWarning``. This fallback will be removed in a future
+  release. :issue:`904`
 - **Breaking change**: the client metadata ``id_token_signed_response_alg``
   now takes precedence over ``get_jwt_config()["alg"]`` when signing OIDC
   ``id_token``, in line with `OpenID Connect Registration 1.0 Section 2
@@ -19,6 +110,51 @@ Version 1.8.0
   client did not configure an algorithm. Override
   ``get_client_algorithm(client)`` if you need the previous behaviour.
   :issue:`806`
+- Fix ``is_secure_transport()`` accepting cleartext URIs whose ``userinfo``
+  component looks like a loopback host, such as
+  ``http://localhost:80@attacker.test/cb``. The loopback exemption is now
+  matched on the parsed host, and no longer requires an explicit port.
+- Reject URIs with a ``userinfo`` component during client and server metadata
+  validation, as in ``https://client.test@attacker.test/cb``. URIs that
+  ``urlparse`` refuses to parse, such as ``http://[not-an-ip]/``, are also
+  rejected instead of raising an unhandled ``ValueError``.
+- Cast the ``sub`` claim to a string in the RFC 9068 and RFC 7523
+  ``JWTBearerTokenGenerator``, as required by RFC 7519 Section 4.1.2.
+  ``joserfc`` 1.7.3 started validating this claim and rejected the previously
+  emitted non-string values (e.g. an integer ``get_user_id()``).
+  :issue:`910` :pr:`911`
+- Require ``joserfc>=1.6.1`` and ``cryptography>=45.0.1``. The RFC 9068 ``amr``
+  validation uses ``InvalidClaimError``'s ``description`` argument, added in
+  ``joserfc`` 1.6.1.
+- Declare lower bounds for the optional integration dependencies and test them
+  in CI against their minimum versions with uv's ``lowest-direct`` resolution.
+- The token endpoint answers malformed RFC 7523 assertions with an
+  ``invalid_client`` or ``invalid_grant`` error instead of raising an unhandled
+  exception. ``JWTBearerGrant.resolve_issuer_client()`` may return ``None`` for
+  an unknown issuer.
+- The RFC 9068 ``JWTBearerTokenValidator`` answers with an ``invalid_token``
+  error for any ``JoseError`` raised while decoding an access token, instead of
+  only ``DecodeError``. An unknown ``kid`` used to raise an unhandled
+  ``InvalidKeyIdError``. :pr:`891`
+- Add a ``leeway`` parameter to the RFC 7523 ``JWTBearerTokenValidator``, which
+  used to be hardcoded to 60 seconds. :pr:`903`
+- ``sign_jwt_bearer_assertion()`` generates a default ``jti`` claim when the
+  caller did not provide one, as :rfc:`7523` §3 recommends against replay
+  attacks. This matches what ``OAuth2Session`` already did for client
+  assertions. :pr:`897`
+- Add optional ``client_id`` parameter to ``AssertionClient`` (and its
+  ``AssertionSession`` / httpx wrappers) so it can be sent in the token
+  endpoint request body per :rfc:`7521` §4.1 and :rfc:`6749` §3.2.1. :pr:`476`
+- The OpenID Connect client no longer rejects an ``id_token`` whose JWS header
+  carries unregistered parameters. :issue:`902`
+- Omit the ``nonce`` and ``auth_time`` claims from the ``id_token`` instead of
+  emitting them with a ``null`` value. :issue:`921`
+- ``DeviceAuthorizationEndpoint`` saves the device credential with the
+  authenticated client id. It used to read ``request.payload.client_id``, which
+  is ``None`` when the client authenticates with ``client_secret_basic``.
+  :issue:`798` :pr:`908`
+- Fix the OAuth 1.0a ``InsecureTransportError`` description telling users that
+  OAuth 2 must use HTTPS. :pr:`919`
 
 Version 1.7.2
 -------------
@@ -362,6 +498,8 @@ Added ``ES256K`` algorithm for JWS and JWT.
 
 **Breaking Changes**: find how to solve the deprecate issues via https://git.io/JkY4f
 
+
+.. scriv-end-here
 
 Old Versions
 ------------

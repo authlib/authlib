@@ -7,9 +7,7 @@ from ..rfc6749 import UnsupportedTokenTypeError
 
 class IntrospectionEndpoint(TokenEndpoint):
     """Implementation of introspection endpoint which is described in
-    `RFC7662`_.
-
-    .. _RFC7662: https://tools.ietf.org/html/rfc7662
+    :rfc:`7662`.
     """
 
     #: Endpoint name to be registered
@@ -111,7 +109,7 @@ class IntrospectionEndpoint(TokenEndpoint):
 
     def introspect_token(self, token):
         """Read given token and return its introspection metadata as a
-        dictionary following `Section 2.2`_::
+        dictionary following :rfc:`7662#section-2.2`::
 
             def introspect_token(self, token):
                 return {
@@ -126,7 +124,5 @@ class IntrospectionEndpoint(TokenEndpoint):
                     "exp": token.expires_at,
                     "iat": token.issued_at,
                 }
-
-        .. _`Section 2.2`: https://tools.ietf.org/html/rfc7662#section-2.2
         """
         raise NotImplementedError()

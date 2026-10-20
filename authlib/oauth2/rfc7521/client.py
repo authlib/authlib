@@ -1,12 +1,11 @@
 from authlib.common.encoding import to_native
 from authlib.oauth2.base import OAuth2Error
+from authlib.oauth2.client import _load_token_response
 
 
 class AssertionClient:
     """Constructs a new Assertion Framework for OAuth 2.0 Authorization Grants
-    per RFC7521_.
-
-    .. _RFC7521: https://tools.ietf.org/html/rfc7521
+    per :rfc:`7521`.
     """
 
     DEFAULT_GRANT_TYPE = None
@@ -25,6 +24,7 @@ class AssertionClient:
         claims=None,
         token_placement="header",
         scope=None,
+        client_id=None,
         leeway=60,
         **kwargs,
     ):
@@ -46,6 +46,7 @@ class AssertionClient:
         self.audience = audience
         self.claims = claims
         self.scope = scope
+        self.client_id = client_id
         if self.token_auth_class is not None:
             self.token_auth = self.token_auth_class(None, token_placement, self)
         self._kwargs = kwargs
@@ -61,9 +62,7 @@ class AssertionClient:
 
     def refresh_token(self):
         """Using Assertions as Authorization Grants to refresh token as
-        described in `Section 4.1`_.
-
-        .. _`Section 4.1`: https://tools.ietf.org/html/rfc7521#section-4.1
+        described in :rfc:`7521#section-4.1`.
         """
         generate_assertion = self.ASSERTION_METHODS[self.grant_type]
         assertion = generate_assertion(
@@ -79,14 +78,13 @@ class AssertionClient:
         }
         if self.scope:
             data["scope"] = self.scope
+        if self.client_id:
+            data["client_id"] = self.client_id
 
         return self._refresh_token(data)
 
     def parse_response_token(self, resp):
-        if resp.status_code >= 500:
-            resp.raise_for_status()
-
-        token = resp.json()
+        token = _load_token_response(resp)
         if "error" in token:
             raise self.oauth_error_class(
                 error=token["error"], description=token.get("error_description")

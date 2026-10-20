@@ -1,11 +1,16 @@
 import time
 
+import httpx2
 import pytest
-from httpx import WSGITransport
+from httpx2 import WSGITransport
+from joserfc.jwk import OctKey
 
 from authlib.integrations.httpx_client import AssertionClient
+from tests.util import HMAC_SECRET
 
 from ..wsgi_helper import MockDispatch
+
+hmac_key = OctKey.import_key(HMAC_SECRET)
 
 default_token = {
     "token_type": "Bearer",
@@ -28,7 +33,7 @@ def test_refresh_token():
         subject="foo",
         audience="foo",
         alg="HS256",
-        key="secret",
+        key=hmac_key,
         transport=WSGITransport(MockDispatch(default_token, assert_func=verifier)),
     ) as client:
         client.get("https://provider.test")
@@ -43,12 +48,34 @@ def test_refresh_token():
         issued_at=now,
         expires_at=now + 3600,
         header={"alg": "HS256"},
-        key="secret",
+        key=hmac_key,
         scope="email",
         claims={"test_mode": "true"},
         transport=WSGITransport(MockDispatch(default_token, assert_func=verifier)),
     ) as client:
         client.get("https://provider.test")
+        client.get("https://provider.test")
+
+
+def test_client_id():
+    """client_id is included in the token request body when provided."""
+
+    def verifier(request):
+        if str(request.url) == "https://provider.test/token":
+            content = request.form
+            assert "assertion" in content
+            assert content["client_id"] == "my-client"
+
+    with AssertionClient(
+        "https://provider.test/token",
+        issuer="foo",
+        subject="foo",
+        audience="foo",
+        alg="HS256",
+        key=hmac_key,
+        client_id="my-client",
+        transport=WSGITransport(MockDispatch(default_token, assert_func=verifier)),
+    ) as client:
         client.get("https://provider.test")
 
 
@@ -58,8 +85,24 @@ def test_without_alg():
         issuer="foo",
         subject="foo",
         audience="foo",
-        key="secret",
+        key=hmac_key,
         transport=WSGITransport(MockDispatch(default_token)),
     ) as client:
         with pytest.raises(ValueError):
             client.get("https://provider.test")
+
+
+def test_refresh_token_non_json_error_response():
+    with AssertionClient(
+        "https://provider.test/token",
+        issuer="foo",
+        subject="foo",
+        audience="foo",
+        alg="HS256",
+        key=hmac_key,
+        transport=WSGITransport(
+            MockDispatch(body="429 Too Many Requests", status_code=429)
+        ),
+    ) as client:
+        with pytest.raises(httpx2.HTTPStatusError):
+            client.refresh_token()

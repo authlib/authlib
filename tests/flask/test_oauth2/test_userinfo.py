@@ -4,6 +4,7 @@ from joserfc import jwt
 from joserfc.jwk import KeySet
 
 import authlib.oidc.core as oidc_core
+from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.integrations.flask_oauth2 import ResourceProtector
 from authlib.integrations.sqla_oauth2 import create_bearer_token_validator
 from tests.util import read_file_path
@@ -21,7 +22,7 @@ def server(server, app, db):
             return user.generate_user_info().filter(scope)
 
         def resolve_private_key(self):
-            return read_file_path("jwks_private.json")
+            return KeySet.import_key_set(read_file_path("jwks_private.json"))
 
     BearerTokenValidator = create_bearer_token_validator(db.session, Token)
     resource_protector = ResourceProtector()
@@ -377,3 +378,28 @@ def test_scope_signed_secured(test_client, client, token, db):
         "email": "janedoe@example.com",
         "email_verified": True,
     }
+
+
+def test_scope_signed_jwks_dict(test_client, client, token, db, server, monkeypatch):
+    """A JWKS dict is still accepted by 'resolve_private_key' but deprecated."""
+    endpoint = server._endpoints[oidc_core.UserInfoEndpoint.ENDPOINT_NAME][0]
+    monkeypatch.setattr(
+        endpoint, "resolve_private_key", lambda: read_file_path("jwks_private.json")
+    )
+    client.set_client_metadata(
+        {
+            "scope": "profile",
+            "redirect_uris": ["https://client.test/authorized"],
+            "userinfo_signed_response_alg": "RS256",
+        }
+    )
+    db.session.add(client)
+    db.session.commit()
+
+    headers = {"Authorization": "Bearer access-token"}
+    with pytest.warns(AuthlibDeprecationWarning, match="KeySet.import_key_set"):
+        rv = test_client.get("/oauth/userinfo", headers=headers)
+
+    pub_key = KeySet.import_key_set(read_file_path("jwks_public.json"))
+    token = jwt.decode(rv.data, pub_key)
+    assert token.claims["sub"] == "1"

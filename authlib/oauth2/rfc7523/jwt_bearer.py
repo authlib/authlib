@@ -55,14 +55,11 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
     def verify_claims(self, claims: jwt.Claims):
         options = dict(self.CLAIMS_OPTIONS)
         audiences = self.get_audiences()
-        if audiences:
-            options["aud"] = {"essential": True, "values": audiences}
-        else:
-            deprecate(
-                "'get_audiences' must return a non-empty list. "
-                "Audience validation will become mandatory.",
-                version="1.8",
+        if not audiences:
+            raise InvalidGrantError(
+                description="No audience identifiers configured for this authorization server."
             )
+        options["aud"] = {"essential": True, "values": audiences}
 
         claims_requests = jwt.JWTClaimsRegistry(leeway=self.LEEWAY, **options)
         try:
@@ -73,16 +70,27 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
 
     def process_assertion_claims(self, assertion):
         """Extract JWT payload claims from request "assertion", per
-        `Section 3.1`_.
+        :rfc:`7523#section-3.1`.
 
         :param assertion: assertion string value in the request
         :return: JWTClaims
         :raise: InvalidGrantError
-
-        .. _`Section 3.1`: https://tools.ietf.org/html/rfc7523#section-3.1
         """
         headers, claims = self.extract_assertion(assertion)
-        client = self.resolve_issuer_client(claims["iss"])
+        # "iss" is read before the signature and the claims are verified, so it
+        # cannot be assumed to be present nor to be a string.
+        if "iss" not in claims:
+            raise InvalidGrantError(description="Missing claim: 'iss'")
+
+        issuer = claims["iss"]
+        if not isinstance(issuer, str):
+            raise InvalidGrantError(description="Invalid claim: 'iss'")
+
+        client = self.resolve_issuer_client(issuer)
+        if not client:
+            raise InvalidGrantError(
+                description="The client does not exist on this server."
+            )
 
         if hasattr(self, "resolve_client_key"):  # pragma: no cover
             key = import_any_key(self.resolve_client_key(client, headers, claims))
@@ -106,17 +114,26 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
         return token.claims
 
     def extract_assertion(self, assertion: str):
-        obj = jws.extract_compact(to_bytes(assertion))
+        try:
+            obj = jws.extract_compact(to_bytes(assertion))
+        except JoseError as e:
+            log.debug("Assertion Error: %r", e)
+            raise InvalidGrantError(description="Invalid JWT assertion.") from e
+
         try:
             claims = json_loads(obj.payload)
         except ValueError:
             raise InvalidGrantError(description="Invalid JWT payload.") from None
+
+        if not isinstance(claims, dict):
+            raise InvalidGrantError(description="Invalid JWT payload.")
+
         return obj.headers(), claims
 
     def validate_token_request(self):
         """The client makes a request to the token endpoint by sending the
         following parameters using the "application/x-www-form-urlencoded"
-        format per `Section 2.1`_:
+        format per :rfc:`7523#section-2.1`:
 
         grant_type
              REQUIRED.  Value MUST be set to
@@ -141,8 +158,6 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
             &assertion=eyJhbGciOiJFUzI1NiIsImtpZCI6IjE2In0.
             eyJpc3Mi[...omitted for brevity...].
             J9l-ZhwP[...omitted for brevity...]
-
-        .. _`Section 2.1`: https://tools.ietf.org/html/rfc7523#section-2.1
         """
         assertion = self.request.form.get("assertion")
         if not assertion:
@@ -194,7 +209,8 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
                 return Client.query_by_iss(issuer)
 
         :param issuer: "iss" value in assertion
-        :return: Client instance
+        :return: Client instance, or ``None`` when no client matches the
+            issuer. In that case an ``invalid_grant`` error is returned.
         """
         raise NotImplementedError()
 
@@ -233,15 +249,15 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
             The authorization server MUST reject any JWT that does not
             contain its own identity as the intended audience.
 
-        Developers SHOULD implement this method to return the list of valid
+        Developers MUST implement this method to return a non-empty list of valid
         audience values, typically including the token endpoint URL and/or
         the issuer identifier. For example::
 
             def get_audiences(self):
                 return ["https://example.com/oauth/token", "https://example.com"]
 
-        If this method returns an empty list, audience value validation is
-        skipped (only presence is checked).
+        If this method returns an empty list, the assertion is rejected with
+        an ``invalid_grant`` error.
 
         :return: list of valid audience strings
         """

@@ -12,11 +12,13 @@ from joserfc.jwk import RSAKey
 from authlib.common.urls import url_decode
 from authlib.common.urls import url_encode
 from authlib.common.urls import urlparse
+from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.oauth2.rfc6749.grants import (
     AuthorizationCodeGrant as _AuthorizationCodeGrant,
 )
 from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core.grants import OpenIDCode as _OpenIDCode
+from tests.util import HMAC_SECRET
 from tests.util import read_file_path
 
 from .models import Client
@@ -34,6 +36,7 @@ def client(client, db):
             "scope": "openid profile address",
             "response_types": ["code"],
             "grant_types": ["authorization_code"],
+            "id_token_signed_response_alg": "HS256",
         }
     )
     db.session.add(client)
@@ -46,33 +49,49 @@ def server(server, app):
     app.config.update(
         {
             "OAUTH2_JWT_ISS": "Authlib",
-            "OAUTH2_JWT_KEY": "secret",
+            "OAUTH2_JWT_KEY": OctKey.import_key(HMAC_SECRET),
             "OAUTH2_JWT_ALG": "HS256",
         }
     )
     return server
 
 
-def register_oidc_code_grant(server, require_nonce=False):
-    class AuthorizationCodeGrant(CodeGrantMixin, _AuthorizationCodeGrant):
-        def save_authorization_code(self, code, request):
-            return save_authorization_code(code, request)
+class AuthorizationCodeGrant(CodeGrantMixin, _AuthorizationCodeGrant):
+    def save_authorization_code(self, code, request):
+        return save_authorization_code(code, request)
 
-    class OpenIDCode(_OpenIDCode):
-        def get_jwt_config(self, grant, client):
-            key = current_app.config.get("OAUTH2_JWT_KEY")
-            alg = current_app.config.get("OAUTH2_JWT_ALG")
-            iss = current_app.config.get("OAUTH2_JWT_ISS")
-            return dict(key=key, alg=alg, iss=iss, exp=3600)
 
-        def exists_nonce(self, nonce, request):
-            return exists_nonce(nonce, request)
+class OpenIDCode(_OpenIDCode):
+    def resolve_client_private_key(self, client):
+        return current_app.config["OAUTH2_JWT_KEY"]
 
-        def generate_user_info(self, user, scopes):
-            return user.generate_user_info(scopes)
+    def get_client_claims(self, client):
+        return {"iss": current_app.config["OAUTH2_JWT_ISS"]}
 
+    def exists_nonce(self, nonce, request):
+        return exists_nonce(nonce, request)
+
+    def generate_user_info(self, user, scopes):
+        return user.generate_user_info(scopes)
+
+
+class LegacyOpenIDCode(_OpenIDCode):
+    def get_jwt_config(self, grant, client):
+        key = current_app.config.get("OAUTH2_JWT_KEY")
+        alg = current_app.config.get("OAUTH2_JWT_ALG")
+        iss = current_app.config.get("OAUTH2_JWT_ISS")
+        return dict(key=key, alg=alg, iss=iss, exp=3600)
+
+    def exists_nonce(self, nonce, request):
+        return exists_nonce(nonce, request)
+
+    def generate_user_info(self, user, scopes):
+        return user.generate_user_info(scopes)
+
+
+def register_oidc_code_grant(server, require_nonce=False, extension=OpenIDCode):
     server.register_grant(
-        AuthorizationCodeGrant, [OpenIDCode(require_nonce=require_nonce)]
+        AuthorizationCodeGrant, [extension(require_nonce=require_nonce)]
     )
 
 
@@ -112,7 +131,7 @@ def test_authorize_token(test_client, server):
     assert "access_token" in resp
     assert "id_token" in resp
 
-    token = jwt.decode(resp["id_token"], key=OctKey.import_key("secret"))
+    token = jwt.decode(resp["id_token"], key=OctKey.import_key(HMAC_SECRET))
     claims = CodeIDToken(
         token.claims,
         token.header,
@@ -248,12 +267,10 @@ def test_prompt_none_not_logged(test_client, server):
     assert params["state"] == "bar"
 
 
-def test_client_metadata_custom_alg(test_client, server, client, db, app):
+def test_deprecated_client_metadata_custom_alg(test_client, server, client, db, app):
     """The client metadata 'id_token_signed_response_alg' must take
     precedence over the server-wide ``get_jwt_config()`` ``alg``."""
-    register_oidc_code_grant(
-        server,
-    )
+    register_oidc_code_grant(server, extension=LegacyOpenIDCode)
     client.set_client_metadata(
         {
             "redirect_uris": ["https://client.test"],
@@ -281,19 +298,20 @@ def test_client_metadata_custom_alg(test_client, server, client, db, app):
     params = dict(url_decode(urlparse.urlparse(rv.location).query))
     code = params["code"]
     headers = create_basic_header("client-id", "client-secret")
-    rv = test_client.post(
-        "/oauth/token",
-        data={
-            "grant_type": "authorization_code",
-            "redirect_uri": "https://client.test",
-            "code": code,
-        },
-        headers=headers,
-    )
+    with pytest.warns(AuthlibDeprecationWarning, match="get_jwt_config"):
+        rv = test_client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "redirect_uri": "https://client.test",
+                "code": code,
+            },
+            headers=headers,
+        )
     resp = json.loads(rv.data)
     token = jwt.decode(
         resp["id_token"],
-        key=OctKey.import_key("secret"),
+        key=OctKey.import_key(HMAC_SECRET),
         algorithms=["HS384"],
     )
     claims = CodeIDToken(
@@ -305,10 +323,10 @@ def test_client_metadata_custom_alg(test_client, server, client, db, app):
     assert claims.header["alg"] == "HS384"
 
 
-def test_jwt_config_alg_fallback(test_client, server, client, db, app):
+def test_deprecated_jwt_config_alg_fallback(test_client, server, client, db, app):
     """When the client has no ``id_token_signed_response_alg`` defined,
     ``get_jwt_config()["alg"]`` is used as the server-wide default."""
-    register_oidc_code_grant(server)
+    register_oidc_code_grant(server, extension=LegacyOpenIDCode)
     client.set_client_metadata(
         {
             "redirect_uris": ["https://client.test"],
@@ -335,25 +353,29 @@ def test_jwt_config_alg_fallback(test_client, server, client, db, app):
     params = dict(url_decode(urlparse.urlparse(rv.location).query))
     code = params["code"]
     headers = create_basic_header("client-id", "client-secret")
-    rv = test_client.post(
-        "/oauth/token",
-        data={
-            "grant_type": "authorization_code",
-            "redirect_uri": "https://client.test",
-            "code": code,
-        },
-        headers=headers,
-    )
+    with pytest.warns(AuthlibDeprecationWarning, match="get_jwt_config"):
+        rv = test_client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "redirect_uri": "https://client.test",
+                "code": code,
+            },
+            headers=headers,
+        )
     resp = json.loads(rv.data)
     token = jwt.decode(
         resp["id_token"],
-        key=OctKey.import_key("secret"),
+        key=OctKey.import_key(HMAC_SECRET),
         algorithms=["HS384"],
     )
     assert token.header["alg"] == "HS384"
 
 
-def test_client_metadata_alg_none(test_client, server, app, db, client):
+@pytest.mark.filterwarnings(
+    'ignore:JWS algorithm "none" is deprecated:joserfc.errors.SecurityWarning'
+)
+def test_client_metadata_alg_none(test_client, server, db, client):
     """The 'none' 'id_token_signed_response_alg' alg should be
     supported in non implicit flows."""
     register_oidc_code_grant(
@@ -371,7 +393,6 @@ def test_client_metadata_alg_none(test_client, server, app, db, client):
     db.session.add(client)
     db.session.commit()
 
-    del app.config["OAUTH2_JWT_ALG"]
     rv = test_client.post(
         "/oauth/authorize",
         data={
@@ -398,7 +419,7 @@ def test_client_metadata_alg_none(test_client, server, app, db, client):
     resp = json.loads(rv.data)
     token = jwt.decode(
         resp["id_token"],
-        key=OctKey.import_key("secret"),
+        key=OctKey.import_key(HMAC_SECRET),
         algorithms=["none"],
     )
     claims = CodeIDToken(
@@ -435,10 +456,14 @@ def test_client_metadata_alg_none(test_client, server, app, db, client):
         ),
     ],
 )
-def test_authorize_token_algs(test_client, server, app, alg, private_key, public_key):
-    # generate refresh token
+def test_authorize_token_algs(
+    test_client, server, app, db, client, alg, private_key, public_key
+):
     app.config["OAUTH2_JWT_KEY"] = private_key
-    app.config["OAUTH2_JWT_ALG"] = alg
+    client.set_client_metadata(
+        {**client.client_metadata, "id_token_signed_response_alg": alg}
+    )
+    db.session.commit()
     register_oidc_code_grant(
         server,
     )
@@ -486,22 +511,62 @@ def test_authorize_token_algs(test_client, server, app, alg, private_key, public
     claims.validate()
 
 
+def test_default_alg_rs256(test_client, server, app, db, client):
+    """Without 'id_token_signed_response_alg', the id_token is signed with RS256."""
+    app.config["OAUTH2_JWT_KEY"] = RSAKey.import_key(read_file_path("jwk_private.json"))
+    metadata = dict(client.client_metadata)
+    del metadata["id_token_signed_response_alg"]
+    client.set_client_metadata(metadata)
+    db.session.commit()
+    register_oidc_code_grant(server)
+
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "code",
+            "client_id": "client-id",
+            "state": "bar",
+            "scope": "openid profile",
+            "redirect_uri": "https://client.test",
+            "user_id": "1",
+        },
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    rv = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "redirect_uri": "https://client.test",
+            "code": params["code"],
+        },
+        headers=create_basic_header("client-id", "client-secret"),
+    )
+    resp = json.loads(rv.data)
+    token = jwt.decode(
+        resp["id_token"],
+        key=RSAKey.import_key(read_file_path("jwk_public.json")),
+        algorithms=["RS256"],
+    )
+    assert token.header["alg"] == "RS256"
+
+
 def test_deprecated_get_jwt_config_signature(test_client, server, db, user):
     """Using the old get_jwt_config(self, grant) signature should emit a DeprecationWarning."""
 
     class DeprecatedOpenIDCode(_OpenIDCode):
         def get_jwt_config(self, grant):
-            return {"key": "secret", "alg": "HS256", "iss": "Authlib", "exp": 3600}
+            return {
+                "key": OctKey.import_key(HMAC_SECRET),
+                "alg": "HS256",
+                "iss": "Authlib",
+                "exp": 3600,
+            }
 
         def exists_nonce(self, nonce, request):
             return exists_nonce(nonce, request)
 
         def generate_user_info(self, user, scopes):
             return user.generate_user_info(scopes)
-
-    class AuthorizationCodeGrant(CodeGrantMixin, _AuthorizationCodeGrant):
-        def save_authorization_code(self, code, request):
-            return save_authorization_code(code, request)
 
     server.register_grant(AuthorizationCodeGrant, [DeprecatedOpenIDCode()])
 
@@ -535,7 +600,7 @@ def test_deprecated_get_jwt_config_signature(test_client, server, db, user):
     params = dict(url_decode(urlparse.urlparse(rv.location).query))
     code = params["code"]
 
-    with pytest.warns(DeprecationWarning, match="get_jwt_config.*version 1.8"):
+    with pytest.warns(AuthlibDeprecationWarning, match="get_jwt_config.*version 1.8"):
         test_client.post(
             "/oauth/token",
             data={

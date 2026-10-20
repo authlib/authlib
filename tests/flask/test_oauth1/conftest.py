@@ -45,4 +45,6 @@ def db(app):
     db.init_app(app)
     db.create_all()
     yield db
+    db.session.remove()
     db.drop_all()
+    db.engine.dispose()

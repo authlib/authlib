@@ -3,17 +3,20 @@ from copy import deepcopy
 from unittest import mock
 
 import pytest
+import requests
 from joserfc.jwk import OctKey
 from joserfc.jwk import RSAKey
 
 from authlib.common.security import generate_token
 from authlib.common.urls import add_params_to_uri
 from authlib.common.urls import url_encode
+from authlib.integrations.base_client import MissingTokenError
 from authlib.integrations.requests_client import OAuth2Session
 from authlib.integrations.requests_client import OAuthError
 from authlib.oauth2.rfc6749 import MismatchingStateException
 from authlib.oauth2.rfc7523 import ClientSecretJWT
 from authlib.oauth2.rfc7523 import PrivateKeyJWT
+from tests.util import HMAC_SECRET
 
 from ..util import read_key_file
 
@@ -23,6 +26,17 @@ def mock_json_response(payload):
         resp = mock.MagicMock()
         resp.status_code = 200
         resp.json = lambda: payload
+        return resp
+
+    return fake_send
+
+
+def mock_raw_response(body, status_code):
+    def fake_send(r, **kwargs):
+        resp = requests.Response()
+        resp.status_code = status_code
+        resp._content = body
+        resp.url = r.url
         return resp
 
     return fake_send
@@ -168,6 +182,36 @@ def test_fetch_token_post(token):
     sess.send = mock_json_response(error)
     with pytest.raises(OAuthError):
         sess.fetch_access_token(url)
+
+
+@pytest.mark.parametrize("body", [b"429 Too Many Requests", b"429", b"null"])
+def test_fetch_token_non_json_object_error_response(body):
+    sess = OAuth2Session("foo")
+    sess.send = mock_raw_response(body, 429)
+    with pytest.raises(requests.HTTPError):
+        sess.fetch_token("https://provider.test/token")
+
+
+@pytest.mark.parametrize("status_code", [200, 302])
+def test_fetch_token_non_json_object_success_response(status_code):
+    sess = OAuth2Session("foo")
+    sess.send = mock_raw_response(b"<html></html>", status_code)
+    with pytest.raises(ValueError, match="not a JSON object"):
+        sess.fetch_token("https://provider.test/token")
+
+
+def test_fetch_token_json_error_response():
+    sess = OAuth2Session("foo")
+    sess.send = mock_raw_response(b'{"error": "invalid_grant"}', 400)
+    with pytest.raises(OAuthError, match="invalid_grant"):
+        sess.fetch_token("https://provider.test/token")
+
+
+def test_fetch_token_server_error_json_response():
+    sess = OAuth2Session("foo")
+    sess.send = mock_raw_response(b'{"message": "upstream timeout"}', 500)
+    with pytest.raises(requests.HTTPError):
+        sess.fetch_token("https://provider.test/token")
 
 
 def test_fetch_token_get(token):
@@ -492,7 +536,9 @@ def test_introspect_token():
 
 
 def test_client_secret_jwt(token):
-    sess = OAuth2Session("id", "secret", token_endpoint_auth_method="client_secret_jwt")
+    sess = OAuth2Session(
+        "id", HMAC_SECRET, token_endpoint_auth_method="client_secret_jwt"
+    )
     sess.register_client_auth_method(ClientSecretJWT())
 
     mock_assertion_response(token, sess)
@@ -503,7 +549,7 @@ def test_client_secret_jwt(token):
 def test_client_secret_jwt2(token):
     sess = OAuth2Session(
         "id",
-        OctKey.import_key("secret"),
+        OctKey.import_key(HMAC_SECRET),
         token_endpoint_auth_method=ClientSecretJWT(),
     )
     mock_assertion_response(token, sess)
@@ -620,3 +666,56 @@ def test_override_default_request_timeout(token):
     client.request(
         "GET", "https://provider.test", withhold_token=False, timeout=expected_timeout
     )
+
+
+def test_initial_client_credentials_auto_fetch(token):
+    """Fetch a token before the first protected request."""
+    requests_sent = []
+    token_url = "https://provider.test/token"
+    resource_url = "https://resource.test/user"
+
+    def fake_send(request, **kwargs):
+        requests_sent.append(request.url)
+
+        response = mock.MagicMock()
+        response.status_code = 200
+
+        if request.url == token_url:
+            assert request.method == "POST"
+            assert "grant_type=client_credentials" in request.body
+            response.json.return_value = token
+
+        elif request.url == resource_url:
+            assert request.headers.get("Authorization") == "Bearer a"
+
+        else:
+            raise AssertionError(f"Unexpected request: {request.url}")
+
+        return response
+
+    with OAuth2Session(
+        client_id="foo",
+        client_secret="bar",
+        token_endpoint=token_url,
+        grant_type="client_credentials",
+    ) as client:
+        client.send = fake_send
+        response = client.get(resource_url)
+        assert response.status_code == 200
+
+    assert requests_sent == [token_url, resource_url]
+
+
+def test_initial_client_credentials_missing_endpoint():
+    """Missing endpoint must raise before any HTTP request."""
+    with OAuth2Session(
+        client_id="foo",
+        client_secret="bar",
+        grant_type="client_credentials",
+    ) as client:
+        client.send = mock.Mock()
+
+        with pytest.raises(MissingTokenError):
+            client.get("https://resource.test/user")
+
+        client.send.assert_not_called()
