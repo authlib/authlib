@@ -91,8 +91,10 @@ Signed metadata
 
 The metadata can optionally be signed as a JWT so that consumers can verify its
 authenticity independently of TLS, with
-:meth:`~ProtectedResourceMetadata.sign_metadata`. Consumers use ``jwks_uri`` to
-fetch the public key and verify the signature::
+:meth:`~ProtectedResourceMetadata.sign_metadata`. The ``iss`` claim of the JWT
+is the signer. It is the ``resource`` by default, or the ``issuer`` parameter.
+Consumers verify the signature with a key of this issuer. When the resource
+signs its own metadata, it can publish its keys at ``jwks_uri``::
 
     from joserfc.jwk import KeySet, RSAKey
     from authlib.oauth2.rfc9728 import ProtectedResourceMetadata, get_well_known_url
