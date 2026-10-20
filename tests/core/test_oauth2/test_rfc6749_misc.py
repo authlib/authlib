@@ -131,6 +131,27 @@ def test_hooked_replace_and_success_path():
     assert svc.compute(3) == 16
 
 
+def test_hooks_run_in_registration_order():
+    """Hooks run in the order they are registered."""
+
+    class MyService(Hookable):
+        @hooked
+        def compute(self, x):
+            return [x]
+
+    svc = MyService()
+    calls = []
+    for i in range(10):
+        svc.register_hook("after_compute", lambda instance, r, i=i: calls.append(i))
+        svc.register_hook(
+            "replace_compute",
+            lambda instance, original, x, i=i: original(x) + [i],
+        )
+
+    assert svc.compute(0) == [0] + list(range(10))
+    assert calls == list(range(10))
+
+
 def test_hooked_with_explicit_parameters():
     """hooked accepts custom hook names."""
 

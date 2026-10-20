@@ -6,13 +6,14 @@ class Hookable:
     _hooks = None
 
     def __init__(self):
-        self._hooks = defaultdict(set)
+        self._hooks = defaultdict(dict)
 
     def register_hook(self, hook_type, hook):
-        self._hooks[hook_type].add(hook)
+        """Register a hook. Hooks run in the order they are registered."""
+        self._hooks[hook_type][hook] = None
 
     def execute_hook(self, hook_type, *args, **kwargs):
-        for hook in self._hooks[hook_type]:
+        for hook in list(self._hooks.get(hook_type, ())):
             hook(self, *args, **kwargs)
 
 
