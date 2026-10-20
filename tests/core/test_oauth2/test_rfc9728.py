@@ -67,6 +67,17 @@ def test_well_known_with_query():
     )
 
 
+def test_well_known_with_path_parameters():
+    """Path parameters are kept after the well-known path."""
+    assert (
+        get_well_known_url("https://resource.test/api;v=1")
+        == WELL_KNOWN_URL + "/api;v=1"
+    )
+    assert get_well_known_url("https://resource.test/api;v=1", external=True) == (
+        "https://resource.test" + WELL_KNOWN_URL + "/api;v=1"
+    )
+
+
 def test_well_known_with_changed_suffix():
     """The well-known suffix can be changed."""
     url = get_well_known_url("https://resource.test", suffix="openid-configuration")

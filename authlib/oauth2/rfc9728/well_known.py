@@ -21,7 +21,7 @@ def get_well_known_url(
         get_well_known_url("https://api.example.com/", external=True)
         # 'https://api.example.com/.well-known/oauth-protected-resource'
     """
-    parsed = urlparse.urlparse(resource_identifier)
+    parsed = urlparse.urlsplit(resource_identifier)
     path = parsed.path
     if path and path != "/":
         url_path = f"/.well-known/{suffix}{path}"
@@ -29,6 +29,6 @@ def get_well_known_url(
         url_path = f"/.well-known/{suffix}"
     if not external:
         return url_path
-    return urlparse.urlunparse(
-        (parsed.scheme, parsed.netloc, url_path, "", parsed.query, "")
+    return urlparse.urlunsplit(
+        (parsed.scheme, parsed.netloc, url_path, parsed.query, "")
     )
