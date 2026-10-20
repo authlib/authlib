@@ -93,6 +93,14 @@ def test_validate_resource():
     with pytest.raises(ValueError, match="fragment"):
         metadata.validate_resource()
 
+    metadata = ProtectedResourceMetadata({"resource": "https://resource.test/api#"})
+    with pytest.raises(ValueError, match="fragment"):
+        metadata.validate_resource()
+
+    metadata = ProtectedResourceMetadata({"resource": 123})
+    with pytest.raises(ValueError, match="MUST be a string"):
+        metadata.validate_resource()
+
     metadata = ProtectedResourceMetadata({"resource": "https://resource.test/api"})
     metadata.validate_resource()
 

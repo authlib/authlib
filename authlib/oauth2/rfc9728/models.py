@@ -6,7 +6,6 @@ from joserfc.jws import JWSRegistry
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.security import is_secure_transport
 from authlib.common.urls import is_valid_url
-from authlib.common.urls import urlparse
 from authlib.oauth2.rfc8414.models import validate_array_value
 
 from .well_known import get_well_known_url
@@ -64,14 +63,16 @@ class ProtectedResourceMetadata(dict):
         if not resource:
             raise ValueError('"resource" is required')
 
+        if not isinstance(resource, str):
+            raise ValueError('"resource" MUST be a string')
+
         # rfc9728 §1.2: "Resource Identifier: The protected resource's
         # resource identifier, which is a URL that uses the https scheme and
         # has no fragment component."
-        parsed = urlparse.urlparse(resource)
         if not is_secure_transport(resource):
             raise ValueError('"resource" MUST use "https" scheme')
 
-        if parsed.fragment:
+        if "#" in resource:
             raise ValueError('"resource" MUST NOT contain a fragment')
 
     def validate_authorization_servers(self):
