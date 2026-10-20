@@ -3,6 +3,7 @@ from authlib.common.hooks import hooked
 from authlib.consts import default_json_headers
 
 from ..errors import InvalidRequestError
+from ..errors import InvalidScopeError
 from ..requests import OAuth2Request
 
 
@@ -142,6 +143,15 @@ class AuthorizationEndpointMixin:
                 raise InvalidRequestError(
                     f"Multiple '{param}' in request.", state=request.payload.state
                 )
+
+    @hooked
+    def validate_authorization_request_payload(self, redirect_uri):
+        """Validate the requested scope of an authorization request."""
+        self.validate_requested_scope()
+        scope = self.request.client.get_allowed_scope(self.request.payload.scope)
+        if scope is None:
+            raise InvalidScopeError()
+        self.request.scope = scope
 
     @hooked
     def validate_consent_request(self):

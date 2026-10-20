@@ -8,7 +8,6 @@ from ..errors import AccessDeniedError
 from ..errors import InvalidClientError
 from ..errors import InvalidGrantError
 from ..errors import InvalidRequestError
-from ..errors import InvalidScopeError
 from ..errors import OAuth2Error
 from ..errors import UnauthorizedClientError
 from .base import AuthorizationEndpointMixin
@@ -376,16 +375,8 @@ def validate_code_authorization_request(grant):
 
     grant.request.client = client
 
-    @hooked
-    def validate_authorization_request_payload(grant, redirect_uri):
-        grant.validate_requested_scope()
-        scope = client.get_allowed_scope(request.payload.scope)
-        if scope is None:
-            raise InvalidScopeError()
-        request.scope = scope
-
     try:
-        validate_authorization_request_payload(grant, redirect_uri)
+        grant.validate_authorization_request_payload(redirect_uri)
     except OAuth2Error as error:
         error.redirect_uri = redirect_uri
         raise error
