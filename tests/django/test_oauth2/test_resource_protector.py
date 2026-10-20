@@ -126,6 +126,25 @@ def test_access_resource(factory, token):
     assert data["username"] == "foo"
 
 
+def test_access_resource_with_token_in_body(factory, token):
+    """The access token can be sent in a form-encoded body."""
+
+    @require_oauth("profile")
+    def get_user_profile(request):
+        user = request.oauth_token.user
+        return JsonResponse(dict(sub=user.pk, username=user.username))
+
+    request = factory.post(
+        "/user",
+        data="access_token=a1",
+        content_type="application/x-www-form-urlencoded",
+    )
+    resp = get_user_profile(request)
+    assert resp.status_code == 200
+    data = json.loads(resp.content)
+    assert data["username"] == "foo"
+
+
 def test_scope_operator(factory, token):
     @require_oauth(["profile email"])
     def operator_and(request):

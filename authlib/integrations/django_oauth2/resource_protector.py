@@ -8,6 +8,7 @@ from authlib.oauth2.rfc6749 import MissingAuthorizationError
 from authlib.oauth2.rfc6750 import BearerTokenValidator as _BearerTokenValidator
 
 from .requests import DjangoJsonRequest
+from .requests import DjangoOAuth2Request
 from .signals import token_authenticated
 
 
@@ -19,7 +20,10 @@ class ResourceProtector(_ResourceProtector):
         :param scopes: a list of scope values
         :return: token object
         """
-        req = DjangoJsonRequest(request)
+        if request.POST:
+            req = DjangoOAuth2Request(request)
+        else:
+            req = DjangoJsonRequest(request)
         # backward compatibility
         kwargs["scopes"] = scopes
         for claim in kwargs:
