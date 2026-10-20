@@ -164,6 +164,20 @@ def test_token_in_header_and_body(factory, token):
     assert data["error"] == "invalid_request"
 
 
+def test_token_in_multipart_body(factory, token):
+    """The access token cannot be sent in a multipart body."""
+
+    @require_oauth("profile")
+    def get_user_profile(request):
+        return JsonResponse({})
+
+    request = factory.post("/user", data={"access_token": "a1"})
+    resp = get_user_profile(request)
+    assert resp.status_code == 401
+    data = json.loads(resp.content)
+    assert data["error"] == "missing_authorization"
+
+
 def test_scope_operator(factory, token):
     @require_oauth(["profile email"])
     def operator_and(request):

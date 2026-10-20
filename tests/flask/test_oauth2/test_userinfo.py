@@ -222,6 +222,28 @@ def test_token_in_header_and_body(test_client, token):
     assert resp["error"] == "invalid_request"
 
 
+def test_token_in_body_with_get(test_client, token):
+    """The access token cannot be sent in the body of a GET request."""
+    rv = test_client.get(
+        "/oauth/userinfo",
+        data="access_token=access-token",
+        content_type="application/x-www-form-urlencoded",
+    )
+    resp = json.loads(rv.data)
+    assert resp["error"] == "missing_authorization"
+
+
+def test_token_in_multipart_body(test_client, token):
+    """The access token cannot be sent in a multipart body."""
+    rv = test_client.post(
+        "/oauth/userinfo",
+        data={"access_token": "access-token"},
+        content_type="multipart/form-data",
+    )
+    resp = json.loads(rv.data)
+    assert resp["error"] == "missing_authorization"
+
+
 def test_bad_token(test_client):
     headers = {"Authorization": "invalid token_string"}
     rv = test_client.post("/oauth/userinfo", headers=headers)

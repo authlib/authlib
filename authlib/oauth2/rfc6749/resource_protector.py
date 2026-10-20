@@ -139,7 +139,8 @@ class ResourceProtector(Hookable):
         """
         token_type = token_string = None
         auth = request.headers.get("Authorization")
-        if auth and hasattr(request, "form") and "access_token" in request.form:
+        body_token = self._get_body_token(request)
+        if auth and body_token is not None:
             # https://www.rfc-editor.org/rfc/rfc6750#section-2
             # Clients MUST NOT use more than one method to transmit the token
             # in each request.
@@ -155,10 +156,9 @@ class ResourceProtector(Hookable):
                     self._default_auth_type, self._default_realm
                 )
             token_type, token_string = token_parts
-        elif hasattr(request, "form"):
-            # https://www.rfc-editor.org/info/rfc6750/#section-2.2
+        elif body_token is not None:
             token_type = "Bearer"
-            token_string = request.form.get("access_token")
+            token_string = body_token
 
         if not token_string or not token_type:
             raise MissingAuthorizationError(
@@ -167,6 +167,27 @@ class ResourceProtector(Hookable):
 
         validator = self.get_token_validator(token_type)
         return validator, token_string
+
+    def _get_body_token(self, request):
+        """Return the access token sent in the request body, or None."""
+        if not hasattr(request, "form"):
+            return None
+
+        # https://www.rfc-editor.org/rfc/rfc6750#section-2.2
+        # The HTTP request entity-header includes the "Content-Type" header
+        # field set to "application/x-www-form-urlencoded".
+        content_type = request.headers.get("Content-Type", "")
+        if content_type.split(";")[0].strip().lower() != (
+            "application/x-www-form-urlencoded"
+        ):
+            return None
+
+        # https://www.rfc-editor.org/rfc/rfc6750#section-2.2
+        # In particular, this means that the "GET" method MUST NOT be used.
+        if request.method.upper() == "GET":
+            return None
+
+        return request.form.get("access_token")
 
     @hooked
     def validate_request(self, scopes, request, **kwargs):
