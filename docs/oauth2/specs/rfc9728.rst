@@ -20,9 +20,8 @@ header parameter.
 It introduces the concept of **resource identifier**, that is an HTTPS URL (with
 no fragment) that identifies a protected resource — for instance
 ``https://api.example.com/`` or ``https://api.example.com/v2``. It plays the same
-role as ``issuer`` in :ref:`RFC 8414 <specs/rfc8414>` for authorization servers. A single resource
-identifier can cover multiple API endpoints, and the well-known metadata URL is
-derived from it.
+role as ``issuer`` in :ref:`RFC 8414 <specs/rfc8414>` for authorization servers. The
+well-known metadata URL is derived from it.
 
 A client calls an API without knowing which Authorization Server to use. It
 finds out from the metadata of the Protected Resource:
@@ -149,6 +148,18 @@ An unauthenticated request to ``/api/userinfo`` will receive::
 
     HTTP/1.1 401 Unauthorized
     WWW-Authenticate: Bearer resource_metadata="https://api.example.com/.well-known/oauth-protected-resource", error="missing_authorization", ...
+
+The extension sends the same ``resource_metadata`` URL for all the routes of
+the protector. The ``resource`` value must be a prefix of all these routes.
+For a different resource, use another protector.
+
+.. note::
+
+    Per :rfc:`9728#section-3.3`, the client must check that ``resource`` is
+    identical to the URL of its request. Many clients, such as the MCP SDKs,
+    only check that ``resource`` is a prefix of this URL. With a strict
+    client, the discovery only works for a request to the ``resource`` URL
+    itself.
 
 
 Authorization Server
