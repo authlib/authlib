@@ -3,6 +3,7 @@ from joserfc import jwt
 from joserfc.jwk import OctKey
 
 from authlib.deprecate import AuthlibDeprecationWarning
+from authlib.oauth2.rfc7523.assertion import client_secret_jwt_sign
 from authlib.oauth2.rfc7523.assertion import sign_jwt_bearer_assertion
 from tests.util import HMAC_SECRET
 
@@ -63,6 +64,32 @@ def test_claims_with_other_fields_still_gets_jti():
     claims = decode(token)
     assert claims["jti"]
     assert claims["custom_field"] == "value"
+
+
+@pytest.mark.parametrize(
+    "sign",
+    [
+        lambda claims: sign_jwt_bearer_assertion(
+            key=hmac_key,
+            issuer="client1",
+            audience="https://auth.example/token",
+            alg="HS256",
+            claims=claims,
+        ),
+        lambda claims: client_secret_jwt_sign(
+            hmac_key,
+            client_id="client1",
+            token_endpoint="https://auth.example/token",
+            claims=claims,
+        ),
+    ],
+    ids=["jwt_bearer_assertion", "client_secret_jwt"],
+)
+def test_reused_claims_get_a_new_jti_each_call(sign):
+    claims = {"custom_field": "value"}
+    jtis = {decode(sign(claims))["jti"] for _ in range(2)}
+    assert len(jtis) == 2
+    assert claims == {"custom_field": "value"}
 
 
 @pytest.mark.filterwarnings(
