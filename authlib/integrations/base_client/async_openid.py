@@ -1,5 +1,6 @@
 from joserfc import jwt
 from joserfc.errors import InvalidKeyIdError
+from joserfc.errors import JoseError
 from joserfc.jwk import KeySet
 from joserfc.jws import JWSRegistry
 
@@ -8,6 +9,8 @@ from authlib.common.urls import add_params_to_uri
 from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core import UserInfo
+
+from .errors import wrap_id_token_error
 
 __all__ = ["AsyncOpenIDMixin"]
 
@@ -68,22 +71,32 @@ class AsyncOpenIDMixin:
         jwks = await self.fetch_jwk_set()
         key_set = KeySet.import_key_set(jwks)
         try:
-            token = jwt.decode(
-                token["id_token"],
-                key=key_set,
-                registry=JWSRegistry(algorithms=alg_values, strict_check_header=False),
-            )
-        except InvalidKeyIdError:
-            jwks = await self.fetch_jwk_set(force=True)
-            key_set = KeySet.import_key_set(jwks)
-            token = jwt.decode(
-                token["id_token"],
-                key=key_set,
-                registry=JWSRegistry(algorithms=alg_values, strict_check_header=False),
-            )
+            try:
+                token = jwt.decode(
+                    token["id_token"],
+                    key=key_set,
+                    registry=JWSRegistry(
+                        algorithms=alg_values, strict_check_header=False
+                    ),
+                )
+            except InvalidKeyIdError:
+                jwks = await self.fetch_jwk_set(force=True)
+                key_set = KeySet.import_key_set(jwks)
+                token = jwt.decode(
+                    token["id_token"],
+                    key=key_set,
+                    registry=JWSRegistry(
+                        algorithms=alg_values, strict_check_header=False
+                    ),
+                )
 
-        claims = claims_cls(token.claims, token.header, claims_options, claims_params)
-        claims.validate(leeway=leeway)
+            claims = claims_cls(
+                token.claims, token.header, claims_options, claims_params
+            )
+            claims.validate(leeway=leeway)
+        except JoseError as error:
+            raise wrap_id_token_error(error) from error
+
         return UserInfo(claims)
 
     async def create_logout_url(

@@ -41,6 +41,22 @@ update it to catch the corresponding exceptions from ``joserfc`` instead.
      except JoseError:
          pass
 
+The client integrations (``authlib.integrations``) validate ID tokens with
+``joserfc`` too. ``parse_id_token`` and ``authorize_access_token`` raise
+:class:`~authlib.integrations.base_client.InvalidIDTokenError` when an ID token
+is invalid. It is an ``OAuthError``, so ``except AuthlibBaseError`` handles
+it, and it is also an instance of the original ``joserfc`` exception:
+
+.. code-block:: python
+
+    from authlib.integrations.base_client import OAuthError
+
+    try:
+        token = oauth.provider.authorize_access_token()
+    except OAuthError as error:
+        # expired token, bad signature, nonce or issuer mismatch...
+        print(error.error, error.description)
+
 JWTAuthenticationRequest
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
