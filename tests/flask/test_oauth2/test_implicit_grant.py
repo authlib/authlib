@@ -32,7 +32,9 @@ def test_get_authorize(test_client):
     assert rv.data == b"ok"
 
 
-def test_confidential_client(test_client, db, client):
+def test_implicit_only_client_ignores_token_endpoint_auth_method(
+    test_client, db, client
+):
     client.client_secret = "client-secret"
     client.set_client_metadata(
         {
@@ -40,6 +42,23 @@ def test_confidential_client(test_client, db, client):
             "scope": "profile",
             "response_types": ["token"],
             "grant_types": ["implicit"],
+            "token_endpoint_auth_method": "client_secret_basic",
+        }
+    )
+    db.session.add(client)
+    db.session.commit()
+
+    rv = test_client.get(authorize_url)
+    assert rv.data == b"ok"
+
+
+def test_confidential_client(test_client, db, client):
+    client.set_client_metadata(
+        {
+            "redirect_uris": ["https://client.test/authorized"],
+            "scope": "profile",
+            "response_types": ["token"],
+            "grant_types": ["implicit", "authorization_code"],
             "token_endpoint_auth_method": "client_secret_basic",
         }
     )

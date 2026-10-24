@@ -2,6 +2,7 @@ import logging
 
 from authlib.common.urls import add_params_to_uri
 
+from ..authenticate_client import authenticate_none
 from ..errors import AccessDeniedError
 from ..errors import InvalidScopeError
 from ..errors import OAuth2Error
@@ -11,6 +12,13 @@ from .base import AuthorizationEndpointMixin
 from .base import BaseGrant
 
 log = logging.getLogger(__name__)
+
+OTHER_GRANT_TYPES = (
+    "authorization_code",
+    "client_credentials",
+    "password",
+    "refresh_token",
+)
 
 
 class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
@@ -78,6 +86,19 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
     RESPONSE_TYPES = {"token"}
     GRANT_TYPE = "implicit"
     ERROR_RESPONSE_FRAGMENT = True
+
+    def authenticate_token_endpoint_client(self):
+        # An implicit-only client never calls the token endpoint, so its
+        # registered token_endpoint_auth_method does not matter.
+        client = authenticate_none(self.server.query_client, self.request)
+        if client and not any(
+            client.check_grant_type(grant_type) for grant_type in OTHER_GRANT_TYPES
+        ):
+            self.server.send_signal(
+                "after_authenticate_client", client=client, grant=self
+            )
+            return client
+        return super().authenticate_token_endpoint_client()
 
     @hooked
     def validate_authorization_request(self):
