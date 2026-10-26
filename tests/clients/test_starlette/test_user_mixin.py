@@ -197,3 +197,219 @@ async def test_force_fetch_jwks_uri():
     )
     user = await client.parse_id_token(token, nonce="n")
     assert user.sub == "123"
+
+
+def encode_signed_userinfo(claims):
+    return jwt.encode({"alg": "HS256", "kid": "f"}, claims, secret_key)
+
+
+async def run_fetch_signed_userinfo(payload, jwks=None, jwks_uri=None, client_id="dev"):
+
+    oauth = OAuth()
+
+    async def fetch_token(request):
+        return get_bearer_token()
+
+    path_maps = {
+        "/userinfo": {
+            "body": payload,
+            "headers": [(b"content-type", b"application/jwt")],
+        }
+    }
+    if jwks_uri:
+        path_maps["/jwks"] = {
+            "body": read_key_file("jwks_public.json"),
+            "headers": [(b"content-type", b"application/json")],
+        }
+    transport = ASGITransport(AsyncPathMapDispatch(path_maps))
+
+    client = oauth.register(
+        "dev",
+        client_id=client_id,
+        client_secret="dev",
+        fetch_token=fetch_token,
+        userinfo_endpoint="https://provider.test/userinfo",
+        issuer="https://provider.test",
+        jwks=jwks,
+        jwks_uri=jwks_uri,
+        client_kwargs={
+            "transport": transport,
+        },
+    )
+
+    req_scope = {"type": "http", "session": {}}
+    req = Request(req_scope)
+    return await client.userinfo(request=req)
+
+
+@pytest.mark.asyncio
+async def test_fetch_userinfo_signed_jwt_response():
+    import time
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "123",
+        "name": "John Doe",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    user = await run_fetch_signed_userinfo(
+        encode_signed_userinfo(claims),
+        jwks={"keys": [secret_key.as_dict()]},
+    )
+    assert user.sub == "123"
+    assert user["name"] == "John Doe"
+
+
+@pytest.mark.asyncio
+async def test_fetch_userinfo_signed_jwt_rejects_wrong_issuer():
+    import time
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://evil.test",
+        "aud": "dev",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    with pytest.raises(InvalidClaimError):
+        await run_fetch_signed_userinfo(
+            encode_signed_userinfo(claims),
+            jwks={"keys": [secret_key.as_dict()]},
+        )
+
+
+@pytest.mark.asyncio
+async def test_fetch_userinfo_signed_jwt_rejects_wrong_audience():
+    import time
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "another-client",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    with pytest.raises(InvalidClaimError):
+        await run_fetch_signed_userinfo(
+            encode_signed_userinfo(claims),
+            jwks={"keys": [secret_key.as_dict()]},
+        )
+
+
+@pytest.mark.asyncio
+async def test_fetch_userinfo_signed_jwt_rejects_bad_signature():
+    import time
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    attacker_key = jwk.import_key("attacker-oct-secret", "oct", {"kid": "f"})
+    id_token = jwt.encode({"alg": "HS256", "kid": "f"}, claims, attacker_key)
+    from joserfc.errors import BadSignatureError
+
+    with pytest.raises(BadSignatureError):
+        await run_fetch_signed_userinfo(
+            id_token,
+            jwks={"keys": [secret_key.as_dict()]},
+        )
+
+
+@pytest.mark.asyncio
+async def test_fetch_userinfo_signed_jwt_rejects_missing_sub():
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "name": "John Doe",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    with pytest.raises(MissingClaimError):
+        await run_fetch_signed_userinfo(
+            encode_signed_userinfo(claims),
+            jwks={"keys": [secret_key.as_dict()]},
+        )
+
+
+@pytest.mark.asyncio
+async def test_fetch_userinfo_signed_jwt_rejects_missing_iss():
+    now = int(time.time())
+    claims = {
+        "aud": "dev",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    with pytest.raises(MissingClaimError):
+        await run_fetch_signed_userinfo(
+            encode_signed_userinfo(claims),
+            jwks={"keys": [secret_key.as_dict()]},
+        )
+
+
+@pytest.mark.asyncio
+async def test_fetch_userinfo_signed_jwt_rejects_missing_aud():
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    with pytest.raises(MissingClaimError):
+        await run_fetch_signed_userinfo(
+            encode_signed_userinfo(claims),
+            jwks={"keys": [secret_key.as_dict()]},
+        )
+
+
+@pytest.mark.asyncio
+async def test_fetch_userinfo_signed_jwt_requires_aud_without_client_id():
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    with pytest.raises(MissingClaimError):
+        await run_fetch_signed_userinfo(
+            encode_signed_userinfo(claims),
+            jwks={"keys": [secret_key.as_dict()]},
+            client_id=None,
+        )
+
+
+@pytest.mark.asyncio
+async def test_fetch_userinfo_signed_jwt_via_jwks_uri_key_rotation():
+    import time
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    # sign with a key NOT in the initial cached jwks dict; the client must
+    # force a refresh from jwks_uri (InvalidKeyIdError -> fetch force=True)
+    secret_keys = KeySet.import_key_set(read_key_file("jwks_private.json"))
+    id_token = jwt.encode({"alg": "RS256"}, claims, secret_keys)
+
+    user = await run_fetch_signed_userinfo(
+        id_token,
+        jwks={"keys": [secret_key.as_dict()]},
+        jwks_uri="https://provider.test/jwks",
+    )
+    assert user.sub == "123"
