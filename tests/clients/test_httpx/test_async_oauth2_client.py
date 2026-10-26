@@ -399,6 +399,73 @@ async def test_auto_refresh_token3():
 
 
 @pytest.mark.asyncio
+async def test_ensure_active_token_uses_live_token_after_lock():
+    refresh_bodies = []
+
+    async def assert_func(request):
+        content = (await request.body()).decode()
+        if "grant_type=refresh_token" in content:
+            refresh_bodies.append(content)
+
+    live = dict(
+        access_token="live",
+        refresh_token="live-rt",
+        token_type="bearer",
+        expires_at=100,
+    )
+    stale = dict(
+        access_token="stale",
+        refresh_token="stale-rt",
+        token_type="bearer",
+        expires_at=100,
+    )
+    transport = ASGITransport(AsyncMockDispatch(default_token, assert_func=assert_func))
+    async with AsyncOAuth2Client(
+        "foo",
+        token=live,
+        token_endpoint="https://provider.test/token",
+        transport=transport,
+    ) as client:
+        await client.ensure_active_token(stale)
+
+    assert refresh_bodies, "expected a refresh_token grant"
+    assert any("refresh_token=live-rt" in body for body in refresh_bodies), (
+        refresh_bodies
+    )
+    assert all("stale-rt" not in body for body in refresh_bodies), refresh_bodies
+
+
+@pytest.mark.asyncio
+async def test_ensure_active_token_accepts_token_none():
+    refresh_bodies = []
+
+    async def assert_func(request):
+        content = (await request.body()).decode()
+        if "grant_type=refresh_token" in content:
+            refresh_bodies.append(content)
+
+    live = dict(
+        access_token="live",
+        refresh_token="live-rt",
+        token_type="bearer",
+        expires_at=100,
+    )
+    transport = ASGITransport(AsyncMockDispatch(default_token, assert_func=assert_func))
+    async with AsyncOAuth2Client(
+        "foo",
+        token=live,
+        token_endpoint="https://provider.test/token",
+        transport=transport,
+    ) as client:
+        await client.ensure_active_token()
+
+    assert refresh_bodies, "expected a refresh_token grant"
+    assert any("refresh_token=live-rt" in body for body in refresh_bodies), (
+        refresh_bodies
+    )
+
+
+@pytest.mark.asyncio
 async def test_auto_refresh_token4():
     async def _update_token(token, refresh_token=None, access_token=None):
         # This test only makes sense if the expired token is refreshed
