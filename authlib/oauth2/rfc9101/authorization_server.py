@@ -56,6 +56,17 @@ class JWTAuthenticationRequest:
         client_id={"essential": True},
     )
 
+    #: Expected JSON types of the authorization parameters in the request object
+    parameter_types = {
+        "client_id": str,
+        "response_type": str,
+        "redirect_uri": str,
+        "scope": str,
+        "state": str,
+        "code_challenge": str,
+        "code_challenge_method": str,
+    }
+
     def __init__(self, support_request: bool = True, support_request_uri: bool = True):
         self.support_request = support_request
         self.support_request_uri = support_request_uri
@@ -202,6 +213,18 @@ class JWTAuthenticationRequest:
                 description=error.description or InvalidRequestObjectError.description,
                 state=request.payload.state,
             ) from error
+
+        # Parameter names and string values MUST be included as JSON strings.
+        # Numerical values MUST be included as JSON numbers.
+        for name, expected_type in self.parameter_types.items():
+            if name not in request_object.claims:
+                continue
+            value = request_object.claims[name]
+            if isinstance(value, bool) or not isinstance(value, expected_type):
+                raise InvalidRequestObjectError(
+                    description=f"The '{name}' parameter has an invalid type.",
+                    state=request.payload.state,
+                )
 
         # The client ID values in the client_id request parameter and in
         # the Request Object client_id claim MUST be identical.
