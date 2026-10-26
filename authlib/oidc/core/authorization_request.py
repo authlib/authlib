@@ -13,6 +13,20 @@ class OpenIDJWTAuthenticationRequest(JWTAuthenticationRequest):
     permit retrieval; a secure validation policy must also accept the URI.
     """
 
+    parameter_types = {
+        **JWTAuthenticationRequest.parameter_types,
+        "response_mode": str,
+        "nonce": str,
+        "display": str,
+        "prompt": str,
+        "max_age": (int, float),
+        "ui_locales": str,
+        "claims_locales": str,
+        "id_token_hint": str,
+        "login_hint": str,
+        "acr_values": str,
+    }
+
     def _get_raw_request_object(
         self, request: OAuth2Request, client: ClientMixin
     ) -> str:

@@ -798,3 +798,50 @@ def test_empty_request_uri_rejected_before_policy(test_client, server, extension
     assert response.json["error"] == "invalid_request_uri"
     extension.validate_request_uri.assert_not_called()
     extension.get_request_object.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "extension_cls,claims",
+    [
+        (rfc9101.JWTAuthenticationRequest, {"response_type": ["code"]}),
+        (rfc9101.JWTAuthenticationRequest, {"redirect_uri": 1}),
+        (rfc9101.JWTAuthenticationRequest, {"scope": ["profile"]}),
+        (rfc9101.JWTAuthenticationRequest, {"state": {}}),
+        (rfc9101.JWTAuthenticationRequest, {"code_challenge": True}),
+        (OpenIDJWTAuthenticationRequest, {"prompt": ["login"]}),
+        (OpenIDJWTAuthenticationRequest, {"ui_locales": ["fr"]}),
+        (OpenIDJWTAuthenticationRequest, {"nonce": 1}),
+        (OpenIDJWTAuthenticationRequest, {"max_age": []}),
+        (OpenIDJWTAuthenticationRequest, {"max_age": "60"}),
+        (OpenIDJWTAuthenticationRequest, {"max_age": True}),
+    ],
+)
+def test_request_object_parameter_types(test_client, server, extension_cls, claims):
+    """Request object parameters with an invalid JSON type are rejected."""
+    register_request_object_extension(server, extension_cls=extension_cls)
+    payload = {"response_type": "code", "client_id": "client-id", **claims}
+    request_obj = jwt.encode(
+        {"alg": "RS256"}, payload, jwk.import_key(read_file_path("jwk_private.json"))
+    )
+    url = add_params_to_uri(
+        authorize_url, {"client_id": "client-id", "request": request_obj}
+    )
+    rv = test_client.get(url)
+    assert rv.status_code == 400
+    assert rv.json["error"] == "invalid_request_object"
+
+
+def test_request_object_parameter_numbers(test_client, server):
+    """Numerical request object parameters are accepted as JSON numbers."""
+    register_request_object_extension(
+        server, extension_cls=OpenIDJWTAuthenticationRequest
+    )
+    payload = {"response_type": "code", "client_id": "client-id", "max_age": 60}
+    request_obj = jwt.encode(
+        {"alg": "RS256"}, payload, jwk.import_key(read_file_path("jwk_private.json"))
+    )
+    url = add_params_to_uri(
+        authorize_url, {"client_id": "client-id", "request": request_obj}
+    )
+    rv = test_client.get(url)
+    assert rv.data == b"ok"
