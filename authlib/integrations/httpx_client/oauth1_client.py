@@ -49,7 +49,7 @@ class AsyncOAuth1Client(_OAuth1Client, httpx2.AsyncClient):
         **kwargs,
     ):
         _client_kwargs = extract_client_kwargs(kwargs)
-        httpx2.AsyncClient.__init__(self, **_client_kwargs)
+        super(_OAuth1Client, self).__init__(**_client_kwargs)
 
         _OAuth1Client.__init__(
             self,
@@ -117,7 +117,7 @@ class OAuth1Client(_OAuth1Client, httpx2.Client):
         **kwargs,
     ):
         _client_kwargs = extract_client_kwargs(kwargs)
-        httpx2.Client.__init__(self, **_client_kwargs)
+        super(_OAuth1Client, self).__init__(**_client_kwargs)
 
         _OAuth1Client.__init__(
             self,
