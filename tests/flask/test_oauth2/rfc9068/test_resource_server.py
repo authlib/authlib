@@ -188,7 +188,8 @@ def test_missing_authorization(test_client):
     rv = test_client.get("/protected")
     assert rv.status_code == 401
     resp = json.loads(rv.data)
-    assert resp["error"] == "missing_authorization"
+    assert "error" not in resp
+    assert rv.headers["WWW-Authenticate"].startswith("Bearer")
 
 
 def test_unsupported_token_type(test_client):
@@ -196,7 +197,8 @@ def test_unsupported_token_type(test_client):
     rv = test_client.get("/protected", headers=headers)
     assert rv.status_code == 401
     resp = json.loads(rv.data)
-    assert resp["error"] == "unsupported_token_type"
+    assert "error" not in resp
+    assert rv.headers["WWW-Authenticate"].startswith("Bearer")
 
 
 def test_invalid_token(test_client):
