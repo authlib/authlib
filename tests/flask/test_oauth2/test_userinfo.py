@@ -7,6 +7,7 @@ import authlib.oidc.core as oidc_core
 from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.integrations.flask_oauth2 import ResourceProtector
 from authlib.integrations.sqla_oauth2 import create_bearer_token_validator
+from authlib.oauth2.rfc6750 import FormEncodedBodyToken
 from tests.util import read_file_path
 
 from .models import Token
@@ -27,6 +28,7 @@ def server(server, app, db):
     BearerTokenValidator = create_bearer_token_validator(db.session, Token)
     resource_protector = ResourceProtector()
     resource_protector.register_token_validator(BearerTokenValidator())
+    resource_protector.register_extension(FormEncodedBodyToken())
     server.register_endpoint(UserInfoEndpoint(resource_protector=resource_protector))
 
     @app.route("/oauth/userinfo", methods=["GET", "POST"])
@@ -154,8 +156,99 @@ def test_post(test_client, db, token):
     }
 
 
+def test_post_token_in_body(test_client, db, token):
+    token.scope = "openid profile email address phone"
+    db.session.add(token)
+    db.session.commit()
+
+    rv = test_client.post(
+        "/oauth/userinfo",
+        data={"access_token": "access-token"},
+    )
+    assert rv.headers["Content-Type"] == "application/json"
+
+    resp = json.loads(rv.data)
+    assert resp == {
+        "sub": "1",
+        "address": {
+            "country": "USA",
+            "formatted": "742 Evergreen Terrace, Springfield",
+            "locality": "Springfield",
+            "postal_code": "1245",
+            "region": "Unknown",
+            "street_address": "742 Evergreen Terrace",
+        },
+        "birthdate": "2000-12-01",
+        "email": "janedoe@example.com",
+        "email_verified": True,
+        "family_name": "Doe",
+        "gender": "female",
+        "given_name": "Jane",
+        "locale": "fr-FR",
+        "middle_name": "Middle",
+        "name": "foo",
+        "nickname": "Jany",
+        "phone_number": "+1 (425) 555-1212",
+        "phone_number_verified": False,
+        "picture": "https://resource.test/janedoe/me.jpg",
+        "preferred_username": "j.doe",
+        "profile": "https://resource.test/janedoe",
+        "updated_at": 1745315119,
+        "website": "https://resource.test",
+        "zoneinfo": "Europe/Paris",
+    }
+
+
 def test_no_token(test_client):
     rv = test_client.post("/oauth/userinfo")
+    resp = json.loads(rv.data)
+    assert resp["error"] == "missing_authorization"
+
+
+def test_missing_token_type(test_client):
+    headers = {"Authorization": "token_string"}
+    rv = test_client.post("/oauth/userinfo", headers=headers)
+    resp = json.loads(rv.data)
+    assert resp["error"] == "unsupported_token_type"
+
+
+def test_token_in_header_and_body(test_client, token):
+    """Sending the access token both in the header and in the body is refused."""
+    rv = test_client.post(
+        "/oauth/userinfo",
+        headers={"Authorization": "Bearer access-token"},
+        data={"access_token": "access-token"},
+    )
+    assert rv.status_code == 400
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_request"
+
+
+def test_token_in_body_with_get(test_client, token):
+    """The access token cannot be sent in the body of a GET request."""
+    rv = test_client.get(
+        "/oauth/userinfo",
+        data="access_token=access-token",
+        content_type="application/x-www-form-urlencoded",
+    )
+    resp = json.loads(rv.data)
+    assert resp["error"] == "missing_authorization"
+
+
+def test_token_in_multipart_body(test_client, token):
+    """The access token cannot be sent in a multipart body."""
+    rv = test_client.post(
+        "/oauth/userinfo",
+        data={"access_token": "access-token"},
+        content_type="multipart/form-data",
+    )
+    resp = json.loads(rv.data)
+    assert resp["error"] == "missing_authorization"
+
+
+def test_token_in_json_body(test_client, token):
+    """The access token cannot be sent in a JSON body."""
+    rv = test_client.post("/oauth/userinfo", json={"access_token": "access-token"})
     resp = json.loads(rv.data)
     assert resp["error"] == "missing_authorization"
 

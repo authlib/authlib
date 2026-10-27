@@ -46,6 +46,13 @@ class UserInfoEndpoint:
         def userinfo():
             return server.create_endpoint_response("userinfo")
 
+    Some clients send the access token in the request body instead of the
+    ``Authorization`` header. To accept them, register
+    :class:`~authlib.oauth2.rfc6750.FormEncodedBodyToken` on the resource
+    protector::
+
+        resource_protector.register_extension(FormEncodedBodyToken())
+
     """
 
     ENDPOINT_NAME = "userinfo"

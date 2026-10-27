@@ -54,4 +54,9 @@ class FlaskJsonPayload(JsonPayload):
 class FlaskJsonRequest(JsonRequest):
     def __init__(self, request: Request):
         super().__init__(request.method, request.url, request.headers)
+        self._request = request
         self.payload = FlaskJsonPayload(request)
+
+    @property
+    def form(self):
+        return self._request.form
