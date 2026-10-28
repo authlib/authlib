@@ -270,6 +270,13 @@ class JWTAuthenticationRequest:
         Do not follow redirects. Limit response size and retrieval time, and
         check the response media type, as described in :rfc:`9101` Section 10.4.1.
 
+        An interactive consent flow may call this method on both GET and POST.
+        The same URI can return different content on the second call. Bind the
+        request object used to display consent to the application's user and
+        session transaction, and retain that content for approval. Authlib does
+        not provide this transaction storage. A shared cache keyed only by URI
+        does not establish consent binding. See :ref:`jar-consent-retention`.
+
         The following example adds HTTP response safeguards. The application's
         HTTP transport or network policy must also block private destinations
         and prevent DNS rebinding::
