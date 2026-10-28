@@ -105,6 +105,27 @@ below includes an example of HTTP response limits. These safeguards apply even
 to registered URIs, whose DNS records can change. JWT signature validation occurs
 after retrieval and cannot prevent SSRF from the retrieval itself.
 
+.. _jar-consent-retention:
+
+Request objects during consent
+------------------------------
+
+Applications that call ``get_consent_grant`` separately for the consent GET and
+approval POST resolve ``request_uri`` on each call. The referenced content can
+change between those requests. A valid JWT signature on each response does not
+establish that the user approved the second document's parameters.
+
+Retain the original request object in a server-side transaction bound to the
+authenticated user and browser session. On approval, use that retained content
+with the original authorization parameters. Continue to enforce URI policy,
+signature and claims validation, and grant validation. Apply CSRF protection,
+transaction expiry and one-time consumption; do not accept a replacement claims
+dictionary from the browser or use a shared URI-only cache as the consent record.
+
+Authlib does not provide this transaction storage. If the retained JWT has
+expired or current client policy rejects it, restart authorization instead of
+fetching a new document and applying the earlier approval to it.
+
 API Reference
 -------------
 
