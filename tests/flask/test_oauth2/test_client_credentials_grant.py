@@ -197,3 +197,14 @@ def test_missing_scope_rejected(test_client, client, monkeypatch):
     )
     resp = json.loads(rv.data)
     assert resp["error"] == "invalid_scope"
+
+
+def test_insecure_transport(test_client, monkeypatch):
+    monkeypatch.setenv("AUTHLIB_INSECURE_TRANSPORT", "")
+    rv = test_client.post(
+        "/oauth/token",
+        data={"grant_type": "client_credentials"},
+        base_url="http://client.test",
+    )
+    assert rv.status_code == 400
+    assert json.loads(rv.data)["error"] == "insecure_transport"
