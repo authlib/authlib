@@ -2,11 +2,14 @@
 
 import time
 from unittest.mock import Mock
+from unittest.mock import patch
 
 import pytest
+from joserfc import jws
 from joserfc import jwt
 from joserfc.jwk import RSAKey
 
+from authlib.common.encoding import json_dumps
 from authlib.oauth2.drafts import IDJAGGrant
 from authlib.oauth2.rfc6749 import InvalidGrantError
 from authlib.oauth2.rfc6749 import InvalidRequestError
@@ -533,6 +536,29 @@ def test_extract_assertion_rejects_malformed_compact():
     g = _grant({"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": "not.a.jwt"})
     with pytest.raises(InvalidGrantError, match="Invalid JWT assertion"):
         g.validate_token_request()
+
+
+@pytest.mark.parametrize("payload", [b'["a"]', b"123", b'"str"', b"null", b"true"])
+def test_extract_assertion_rejects_non_object_payload(rsa_private, payload):
+    """A JSON payload that is not an object cannot hold claims."""
+    header = {"alg": "RS256", "typ": "oauth-id-jag+jwt"}
+    compact = jws.serialize_compact(header, payload, rsa_private)
+    g = _grant({"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": compact})
+    with pytest.raises(InvalidGrantError, match="Invalid JWT payload"):
+        g.validate_token_request()
+
+
+@pytest.mark.parametrize("issuer", [["https://idp.example.com"], {"id": 1}, 42, True])
+def test_non_string_iss_claim(rsa_private, issuer):
+    """A non-string iss claim is rejected before the issuer key lookup."""
+    header = {"alg": "RS256", "typ": "oauth-id-jag+jwt"}
+    payload = json_dumps({"iss": issuer})
+    compact = jws.serialize_compact(header, payload, rsa_private)
+    g = _grant({"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": compact})
+    with patch.object(_TestIDJAGGrant, "resolve_issuer_key") as resolve_issuer_key:
+        with pytest.raises(InvalidGrantError, match="iss"):
+            g.validate_token_request()
+    resolve_issuer_key.assert_not_called()
 
 
 def test_authenticated_client_controls_token_permissions(rsa_private):

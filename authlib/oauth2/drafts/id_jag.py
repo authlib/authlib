@@ -228,6 +228,9 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
                 description="Missing required 'iss' claim in assertion"
             )
 
+        if not isinstance(issuer, str):
+            raise InvalidGrantError(description="Invalid 'iss' claim in assertion")
+
         key = import_any_key(self.resolve_issuer_key(issuer, headers))
 
         try:
@@ -278,6 +281,10 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
             claims = json_loads(obj.payload)
         except ValueError:
             raise InvalidGrantError(description="Invalid JWT payload.") from None
+
+        if not isinstance(claims, dict):
+            raise InvalidGrantError(description="Invalid JWT payload.")
+
         return obj.headers(), claims
 
     def _validate_typ_header(self, headers):
