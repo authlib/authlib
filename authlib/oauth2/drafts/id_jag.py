@@ -32,6 +32,7 @@ from authlib.common.security import generate_token
 from ..rfc6749 import BaseGrant
 from ..rfc6749 import InvalidGrantError
 from ..rfc6749 import InvalidRequestError
+from ..rfc6749 import InvalidScopeError
 from ..rfc6749 import TokenEndpointMixin
 from ..rfc6749 import UnauthorizedClientError
 from ..rfc6749 import scope_to_list
@@ -182,6 +183,7 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
         self.request.client = client
         log.debug("Validate token request of %s", client)
         self.validate_requested_scope()
+        self.request.scope = self._resolve_scope(claims)
 
         # Authenticate user from sub claim (required by ID-JAG).
         user = self.authenticate_user(claims["sub"])
@@ -189,7 +191,7 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
             raise InvalidGrantError(description="Invalid 'sub' value in assertion")
 
         # Application policy check.
-        scopes = scope_to_list(self.request.payload.scope) or []
+        scopes = scope_to_list(self.request.scope) or []
         if not self.check_id_jag_permission(client, user, scopes):
             raise InvalidGrantError(
                 description=(
@@ -203,7 +205,7 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
     def create_token_response(self):
         """Issue an access token (no refresh token per the ID-JAG draft)."""
         token = self.generate_token(
-            scope=self.request.payload.scope,
+            scope=self.request.scope,
             user=self.request.user,
             include_refresh_token=False,
         )
@@ -240,6 +242,31 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
         self._verify_claims(token.claims)
 
         return token.claims
+
+    def _resolve_scope(self, claims):
+        """Return the scope of the access token.
+
+        The scope is bounded by the scope claim of the assertion, and
+        defaults to it. Without that claim, the requested scope is used.
+        """
+        requested = self.request.payload.scope
+        if "scope" not in claims:
+            return requested
+
+        granted = claims["scope"]
+        if not isinstance(granted, str):
+            raise InvalidGrantError(description="Invalid 'scope' claim in assertion")
+
+        if not requested:
+            return granted
+
+        # RFC 7521 §4.1: "the requested scope MUST be equal to or less than
+        # the scope originally granted to the authorized accessor."
+        if not set(scope_to_list(requested)).issubset(scope_to_list(granted)):
+            raise InvalidScopeError(
+                description="The requested scope exceeds the 'scope' claim in assertion"
+            )
+        return requested
 
     def _extract_assertion(self, assertion: str):
         try:

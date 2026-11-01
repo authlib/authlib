@@ -1,0 +1,9 @@
+Security
+~~~~~~~~
+
+- ``IDJAGGrant`` limits the access token to the scopes in the ``scope`` claim
+  of the ID-JAG. A client used to get any scope allowed by its registration,
+  even when the IdP granted fewer scopes. Without a ``scope`` request
+  parameter, the access token now gets the scopes of the claim instead of no
+  scope.
+  `GHSA-f3fg-34g9-v7jx <https://github.com/authlib/authlib/security/advisories/GHSA-f3fg-34g9-v7jx>`_
