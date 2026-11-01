@@ -561,6 +561,15 @@ def test_non_string_iss_claim(rsa_private, issuer):
     resolve_issuer_key.assert_not_called()
 
 
+def test_empty_audiences(rsa_private):
+    """An empty audience list does not disable the aud check."""
+    assertion = _sign(rsa_private, audience="https://other-as.example.com/token")
+    g = _grant({"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": assertion})
+    with patch.object(_TestIDJAGGrant, "get_audiences", return_value=[]):
+        with pytest.raises(InvalidGrantError, match="No audience identifiers"):
+            g.validate_token_request()
+
+
 def test_authenticated_client_controls_token_permissions(rsa_private):
     assertion = _sign(rsa_private)
     grant = _grant({"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": assertion})

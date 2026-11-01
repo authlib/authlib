@@ -206,7 +206,8 @@ using :class:`JWTBearerClientAssertion` to create a new client authentication::
 The ``get_audiences`` method returns the list of valid ``aud`` values
 accepted in client assertion JWTs. Per RFC 7523 Section 3,
 both the token endpoint URL and the authorization server's issuer
-identifier are valid audience values.
+identifier are valid audience values. The list must not be empty. Client
+assertions are rejected with ``invalid_client`` if it is empty.
 
 Now we have added this client auth method to authorization server, but no
 grant types support this authentication method, you need to add it to the

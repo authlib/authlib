@@ -298,7 +298,12 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
 
     def _verify_claims(self, claims: jwt.Claims):
         options = dict(self.CLAIMS_OPTIONS)
-        options["aud"] = {"essential": True, "values": self.get_audiences()}
+        audiences = self.get_audiences()
+        if not audiences:
+            raise InvalidGrantError(
+                description="No audience identifiers configured for this authorization server."
+            )
+        options["aud"] = {"essential": True, "values": audiences}
 
         claims_requests = jwt.JWTClaimsRegistry(leeway=self.LEEWAY, **options)
         try:
@@ -322,7 +327,8 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
 
         Per the ID-JAG draft, ``aud`` is the issuer identifier of the
         Resource Authorization Server. The returned list must be non-empty; ``aud`` validation is
-        mandatory for ID-JAG assertions.
+        mandatory for ID-JAG assertions. If the list is empty, the assertion is
+        rejected with an ``invalid_grant`` error.
         """
         raise NotImplementedError()
 

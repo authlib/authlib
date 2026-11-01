@@ -76,11 +76,17 @@ class JWTBearerClientAssertion:
         log.debug("Authenticate via %r failed", self.CLIENT_AUTH_METHOD)
 
     def verify_claims(self, claims: jwt.Claims):
+        audiences = self.get_audiences()
+        if not audiences:
+            raise InvalidClientError(
+                description="No audience identifiers configured for this authorization server."
+            )
+
         # iss and sub MUST be the client_id
         options = {
             "iss": {"essential": True},
             "sub": {"essential": True},
-            "aud": {"essential": True, "values": self.get_audiences()},
+            "aud": {"essential": True, "values": audiences},
             "exp": {"essential": True},
         }
         claims_requests = jwt.JWTClaimsRegistry(leeway=self.leeway, **options)
@@ -106,10 +112,13 @@ class JWTBearerClientAssertion:
         server. Per RFC 7523 Section 3, the audience identifies the
         authorization server as an intended audience.
 
-        Developers MUST implement this method::
+        Developers MUST implement this method to return a non-empty list::
 
             def get_audiences(self):
                 return ["https://example.com/oauth/token", "https://example.com"]
+
+        If this method returns an empty list, the assertion is rejected with
+        an ``invalid_client`` error.
 
         :return: list of valid audience strings
         """

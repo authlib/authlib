@@ -502,3 +502,41 @@ def test_client_secret_jwt_with_raw_keys(test_client, server):
     with pytest.warns(AuthlibDeprecationWarning, match="Please use OctKey"):
         rv = test_client.post("/oauth/token", data=data)
     assert "access_token" in json.loads(rv.data)
+
+
+def test_empty_audiences(test_client, server):
+    """An empty audience list does not disable the aud check."""
+
+    class JWTClientAuth(JWTBearerClientAssertion):
+        def get_audiences(self):
+            return []
+
+        def validate_jti(self, claims, jti):
+            return True
+
+        def resolve_client_public_key(self, client):
+            return OctKey.import_key(client.client_secret)
+
+    server.register_client_auth_method(
+        JWTClientAuth.CLIENT_AUTH_METHOD,
+        JWTClientAuth(),
+    )
+    rv = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "client_credentials",
+            "client_assertion_type": JWTBearerClientAssertion.CLIENT_ASSERTION_TYPE,
+            "client_assertion": client_secret_jwt_sign(
+                client_secret=secret_key,
+                client_id="client-id",
+                token_endpoint="https://other-as.example.com/token",
+            ),
+        },
+    )
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_client"
+    assert (
+        resp["error_description"]
+        == "No audience identifiers configured for this authorization server."
+    )
+    assert "access_token" not in resp
