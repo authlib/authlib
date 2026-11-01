@@ -412,3 +412,79 @@ def test_id_jag_client_secret_post(test_client, server, client, db, secret):
         assert response.status_code == 400
         assert response.json["error"] == "invalid_client"
         assert Token.query.count() == 0
+
+
+@pytest.fixture
+def read_write_client(client, db):
+    """Register the client for the read and write scopes."""
+    client.set_client_metadata({**client.client_metadata, "scope": "read write"})
+    db.session.commit()
+    return client
+
+
+def _request_token(test_client, assertion, scope=None):
+    """Redeem an assertion with valid client credentials."""
+    data = {"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": assertion}
+    if scope is not None:
+        data["scope"] = scope
+    return test_client.post(
+        "/oauth/token",
+        data=data,
+        headers=create_basic_header("client-id", "client-secret"),
+    )
+
+
+@pytest.mark.parametrize("scope", ["write", "read write"])
+def test_requested_scope_exceeding_scope_claim(test_client, read_write_client, scope):
+    """A client cannot get scopes that the IdP did not grant in the assertion."""
+    assertion = _sign(claims={"scope": "read"})
+    response = _request_token(test_client, assertion, scope)
+    assert response.status_code == 400
+    assert response.json["error"] == "invalid_scope"
+    assert Token.query.count() == 0
+
+
+def test_scope_claim_is_the_default_scope(test_client, server, read_write_client):
+    """Without a requested scope, the token gets the scope of the claim."""
+    received = []
+
+    class RecordingGrant(IDJAGGrant):
+        def check_id_jag_permission(self, client, user, scopes):
+            received.append(scopes)
+            return True
+
+    server._token_grants.clear()
+    server.register_grant(RecordingGrant)
+
+    response = _request_token(test_client, _sign(claims={"scope": "read"}))
+    assert response.status_code == 200
+    assert response.json["scope"] == "read"
+    assert Token.query.one().scope == "read"
+    assert received == [["read"]]
+
+
+def test_requested_scope_within_scope_claim(test_client, read_write_client):
+    """A client can request less than the scope of the claim."""
+    assertion = _sign(claims={"scope": "read write"})
+    response = _request_token(test_client, assertion, "read")
+    assert response.status_code == 200
+    assert response.json["scope"] == "read"
+    assert Token.query.one().scope == "read"
+
+
+def test_requested_scope_without_scope_claim(test_client, read_write_client):
+    """Without a scope claim, the requested scope is checked by local policy."""
+    response = _request_token(test_client, _sign(), "read write")
+    assert response.status_code == 200
+    assert response.json["scope"] == "read write"
+
+
+@pytest.mark.parametrize("claim", [["read"], 42, None])
+def test_invalid_scope_claim_type(test_client, read_write_client, claim):
+    """A scope claim that is not a string is rejected."""
+    assertion = _sign(claims={"scope": claim})
+    response = _request_token(test_client, assertion, "read")
+    assert response.status_code == 400
+    assert response.json["error"] == "invalid_grant"
+    assert "scope" in response.json["error_description"]
+    assert Token.query.count() == 0

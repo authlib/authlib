@@ -172,6 +172,22 @@ Custom methods, such as ``private_key_jwt``, must also be registered with the
 authorization server. The draft recommends confidential clients; ``none`` is
 not enabled by default.
 
+Scope
+~~~~~
+
+The ``scope`` claim of the ID-JAG holds the scopes granted by the IdP. When
+the claim is present:
+
+* Without a ``scope`` request parameter, the access token gets the scopes of
+  the claim.
+* The client can request fewer scopes than the claim. A request for a scope
+  that is not in the claim is rejected with ``invalid_scope``.
+* A ``scope`` claim that is not a string is rejected with ``invalid_grant``.
+
+Without a ``scope`` claim, the requested scope is used.
+``check_id_jag_permission()`` receives the resulting scopes. The token
+generator still limits them to the scopes allowed for the client.
+
 Creating ID-JAG Assertions
 ---------------------------
 
@@ -240,7 +256,7 @@ Required Hooks
        if it is a replay.
    * - ``check_id_jag_permission(client, user, scopes)``
      - Return ``True`` if the client may act on behalf of the user for the
-       given scopes.
+       scopes of the access token (see `Scope`_).
 
 
 Registration Constraint
