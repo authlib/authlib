@@ -18,6 +18,7 @@ from authlib.oauth2.rfc6749.grants import (
 )
 from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core.grants import OpenIDCode as _OpenIDCode
+from authlib.oidc.prompt_create import PromptCreate
 from tests.util import HMAC_SECRET
 from tests.util import read_file_path
 
@@ -245,10 +246,6 @@ def test_prompt(test_client, server):
     rv = test_client.get("/oauth/authorize?" + query)
     assert rv.data == b"login"
 
-    query = url_encode(params + [("user_id", "1"), ("prompt", "create")])
-    rv = test_client.get("/oauth/authorize?" + query)
-    assert rv.data == b"create"
-
 
 def test_prompt_none_not_logged(test_client, server):
     register_oidc_code_grant(
@@ -271,37 +268,68 @@ def test_prompt_none_not_logged(test_client, server):
     assert params["state"] == "bar"
 
 
-def test_prompt_create_is_retained(test_client, server):
+PROMPT_PARAMS = [
+    ("response_type", "code"),
+    ("client_id", "client-id"),
+    ("state", "bar"),
+    ("nonce", "abc"),
+    ("scope", "openid profile"),
+    ("redirect_uri", "https://client.test"),
+]
+
+
+@pytest.mark.parametrize("user_params", [[], [("user_id", "1")]])
+@pytest.mark.parametrize(
+    "prompt", ["create", "login create", "consent create", "select_account create"]
+)
+def test_prompt_create(test_client, server, user_params, prompt):
+    """With PromptCreate, the grant prompt is 'create'."""
     register_oidc_code_grant(server)
-    params = [
-        ("response_type", "code"),
-        ("client_id", "client-id"),
-        ("state", "bar"),
-        ("nonce", "abc"),
-        ("scope", "openid profile"),
-        ("redirect_uri", "https://client.test"),
-        ("user_id", "1"),
-        ("prompt", "create"),
-    ]
-    query = url_encode(params)
+    server.register_extension(PromptCreate())
+    query = url_encode(PROMPT_PARAMS + user_params + [("prompt", prompt)])
     rv = test_client.get("/oauth/authorize?" + query)
     assert rv.data == b"create"
 
 
-def test_prompt_multiple_values_prefers_login_without_user(test_client, server):
+def test_prompt_create_with_none(test_client, server):
+    """With PromptCreate, 'none' cannot be combined with 'create'."""
     register_oidc_code_grant(server)
-    params = [
-        ("response_type", "code"),
-        ("client_id", "client-id"),
-        ("state", "bar"),
-        ("nonce", "abc"),
-        ("scope", "openid profile"),
-        ("redirect_uri", "https://client.test"),
-        ("prompt", "login consent"),
-    ]
-    query = url_encode(params)
+    server.register_extension(PromptCreate())
+    query = url_encode(PROMPT_PARAMS + [("user_id", "1"), ("prompt", "none create")])
+    rv = test_client.get("/oauth/authorize?" + query)
+
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert params["error"] == "invalid_request"
+
+
+def test_prompt_multiple_values_prefers_login_without_user(test_client, server):
+    """Without a user, 'login consent' gives the 'login' prompt."""
+    register_oidc_code_grant(server)
+    query = url_encode(PROMPT_PARAMS + [("prompt", "login consent")])
     rv = test_client.get("/oauth/authorize?" + query)
     assert rv.data == b"login"
+
+
+def test_prompt_create_without_openid_scope(test_client, server):
+    """PromptCreate does not change requests without the openid scope."""
+    register_oidc_code_grant(server)
+    server.register_extension(PromptCreate())
+    params = [(k, "profile" if k == "scope" else v) for k, v in PROMPT_PARAMS]
+    query = url_encode(params + [("user_id", "1"), ("prompt", "create")])
+    rv = test_client.get("/oauth/authorize?" + query)
+    assert rv.data == b"ok"
+
+
+def test_prompt_create_without_extension(test_client, server):
+    """Without PromptCreate, 'create' does not change the grant prompt."""
+    register_oidc_code_grant(server)
+    query = url_encode(PROMPT_PARAMS + [("prompt", "create")])
+    rv = test_client.get("/oauth/authorize?" + query)
+    assert rv.data == b"login"
+
+    query = url_encode(PROMPT_PARAMS + [("user_id", "1"), ("prompt", "create")])
+    rv = test_client.get("/oauth/authorize?" + query)
+    assert rv.data == b"ok"
 
 
 def test_deprecated_client_metadata_custom_alg(test_client, server, client, db, app):

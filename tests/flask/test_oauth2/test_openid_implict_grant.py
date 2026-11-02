@@ -10,6 +10,7 @@ from authlib.oauth2.rfc6749.requests import BasicOAuth2Payload
 from authlib.oauth2.rfc6749.requests import OAuth2Request
 from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core.grants import OpenIDImplicitGrant as _OpenIDImplicitGrant
+from authlib.oidc.prompt_create import PromptCreate
 from tests.util import HMAC_SECRET
 
 from .models import Client
@@ -76,6 +77,26 @@ def test_consent_view(test_client):
     )
     assert "error=invalid_request" in rv.location
     assert "nonce" in rv.location
+
+
+def test_prompt_create(test_client, server):
+    """PromptCreate sets the grant prompt to 'create' in the implicit flow."""
+    server.register_extension(PromptCreate())
+    rv = test_client.get(
+        add_params_to_uri(
+            "/oauth/authorize",
+            {
+                "response_type": "id_token",
+                "client_id": "client-id",
+                "scope": "openid profile",
+                "state": "foo",
+                "nonce": "abc",
+                "redirect_uri": "https://client.test/callback",
+                "prompt": "create",
+            },
+        )
+    )
+    assert rv.data == b"create"
 
 
 def test_require_nonce(test_client):
