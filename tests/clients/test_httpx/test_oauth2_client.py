@@ -2,11 +2,13 @@ import time
 from copy import deepcopy
 from unittest import mock
 
+import httpx2
 import pytest
-from httpx import WSGITransport
+from httpx2 import WSGITransport
 
 from authlib.common.security import generate_token
 from authlib.common.urls import url_encode
+from authlib.integrations.base_client import MissingTokenError
 from authlib.integrations.httpx_client import OAuth2Client
 from authlib.integrations.httpx_client import OAuthError
 
@@ -136,6 +138,42 @@ def test_fetch_token_post():
     transport = WSGITransport(MockDispatch({"error": "invalid_request"}))
     with OAuth2Client("foo", transport=transport) as client:
         with pytest.raises(OAuthError):
+            client.fetch_token(url)
+
+
+@pytest.mark.parametrize("body", ["429 Too Many Requests", "429", "null"])
+def test_fetch_token_non_json_object_error_response(body):
+    url = "https://provider.test/token"
+    transport = WSGITransport(MockDispatch(body=body, status_code=429))
+    with OAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(httpx2.HTTPStatusError):
+            client.fetch_token(url)
+
+
+@pytest.mark.parametrize("body", ["not json", "[]"])
+def test_fetch_token_non_json_object_success_response(body):
+    url = "https://provider.test/token"
+    transport = WSGITransport(MockDispatch(body=body, status_code=200))
+    with OAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(ValueError, match="not a JSON object"):
+            client.fetch_token(url)
+
+
+def test_fetch_token_json_error_response():
+    url = "https://provider.test/token"
+    transport = WSGITransport(MockDispatch({"error": "invalid_grant"}, status_code=400))
+    with OAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(OAuthError, match="invalid_grant"):
+            client.fetch_token(url)
+
+
+def test_fetch_token_server_error_json_response():
+    url = "https://provider.test/token"
+    transport = WSGITransport(
+        MockDispatch({"message": "upstream timeout"}, status_code=500)
+    )
+    with OAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(httpx2.HTTPStatusError):
             client.fetch_token(url)
 
 
@@ -369,3 +407,195 @@ def test_request_without_token():
     with OAuth2Client("a", transport=transport) as client:
         with pytest.raises(OAuthError):
             client.get("https://provider.test/token")
+
+
+def test_client_credentials_without_token_endpoint():
+    """Missing token endpoint must prevent all HTTP requests."""
+    requests_received = []
+
+    def mock_handler(request):
+        requests_received.append(str(request.url))
+        return httpx2.Response(200)
+
+    transport = httpx2.MockTransport(mock_handler)
+
+    with OAuth2Client(
+        client_id="test-client",
+        client_secret="test-secret",
+        grant_type="client_credentials",
+        transport=transport,
+    ) as client:
+        with pytest.raises(MissingTokenError):
+            client.get("https://example.com/api/data")
+
+    assert requests_received == []
+
+
+def test_automatic_initial_token_fetch():
+    """The client should fetch an initial token automatically."""
+
+    requests_received = []
+
+    def mock_handler(request):
+        requests_received.append(str(request.url))
+
+        # Simulate OAuth server issuing an access token
+        if request.url.path == "/oauth/token":
+            return httpx2.Response(
+                200,
+                json={
+                    "access_token": "test-access-token",
+                    "token_type": "Bearer",
+                    "expires_in": 3600,
+                },
+            )
+
+        # Simulate a protected API endpoint
+        if request.url.path == "/api/data":
+            authorization = request.headers.get("Authorization")
+
+            if authorization == "Bearer test-access-token":
+                return httpx2.Response(
+                    200,
+                    json={"message": "Success"},
+                )
+
+            return httpx2.Response(
+                401,
+                json={"error": "Unauthorized"},
+            )
+
+        return httpx2.Response(404)
+
+    # Mock HTTP requests without using the internet
+    transport = httpx2.MockTransport(mock_handler)
+
+    with OAuth2Client(
+        client_id="test-client",
+        client_secret="test-secret",
+        token_endpoint="https://example.com/oauth/token",
+        grant_type="client_credentials",
+        transport=transport,
+    ) as client:
+        response = client.get("https://example.com/api/data")
+
+        assert response.status_code == 200
+        assert response.json()["message"] == "Success"
+
+        # Verify the token was requested first
+        assert requests_received == [
+            "https://example.com/oauth/token",
+            "https://example.com/api/data",
+        ]
+
+
+def test_existing_valid_token_is_reused():
+    """An existing valid token should not be fetched again."""
+
+    requests_received = []
+
+    def mock_handler(request):
+        requests_received.append(str(request.url))
+
+        if request.url.path == "/api/data":
+            auth_header = request.headers.get("Authorization")
+
+            if auth_header == "Bearer existing-token":
+                return httpx2.Response(
+                    200,
+                    json={"message": "Success"},
+                )
+
+            return httpx2.Response(401)
+
+        return httpx2.Response(404)
+
+    transport = httpx2.MockTransport(mock_handler)
+
+    with OAuth2Client(
+        client_id="test-client",
+        client_secret="test-secret",
+        token_endpoint="https://example.com/oauth/token",
+        grant_type="client_credentials",
+        token={
+            "access_token": "existing-token",
+            "token_type": "Bearer",
+            "expires_in": 3600,
+        },
+        transport=transport,
+    ) as client:
+        response = client.get("https://example.com/api/data")
+
+        assert response.status_code == 200
+        assert requests_received == ["https://example.com/api/data"]
+
+
+def test_missing_token_configuration():
+    """A client without token configuration should raise MissingTokenError."""
+
+    requests_received = []
+
+    def mock_handler(request):
+        requests_received.append(str(request.url))
+        return httpx2.Response(200)
+
+    transport = httpx2.MockTransport(mock_handler)
+
+    with OAuth2Client(
+        client_id="test-client",
+        client_secret="test-secret",
+        transport=transport,
+    ) as client:
+        with pytest.raises(MissingTokenError):
+            client.get("https://example.com/api/data")
+
+    # The request should never reach the API server.
+    assert requests_received == []
+
+
+def test_stream_automatically_fetches_initial_token():
+    """Streaming requests should fetch an initial token."""
+
+    requests_received = []
+
+    def mock_handler(request):
+        requests_received.append(str(request.url))
+
+        if request.url.path == "/oauth/token":
+            return httpx2.Response(
+                200,
+                json={
+                    "access_token": "stream-token",
+                    "token_type": "Bearer",
+                    "expires_in": 3600,
+                },
+            )
+
+        if request.url.path == "/api/data":
+            if request.headers.get("Authorization") == "Bearer stream-token":
+                return httpx2.Response(
+                    200,
+                    json={"message": "Stream success"},
+                )
+
+            return httpx2.Response(401)
+
+        return httpx2.Response(404)
+
+    transport = httpx2.MockTransport(mock_handler)
+
+    with OAuth2Client(
+        client_id="test-client",
+        client_secret="test-secret",
+        token_endpoint="https://example.com/oauth/token",
+        grant_type="client_credentials",
+        transport=transport,
+    ) as client:
+        with client.stream("GET", "https://example.com/api/data") as response:
+            assert response.status_code == 200
+            assert response.json()["message"] == "Stream success"
+
+    assert requests_received == [
+        "https://example.com/oauth/token",
+        "https://example.com/api/data",
+    ]

@@ -112,6 +112,14 @@ automatically, we can get ``userinfo`` in the ``token``::
 
     userinfo = token['userinfo']
 
+When the authorization request includes a nonce, the ID Token must contain the
+same nonce. An ID Token claim ``nonce_supported=false`` does not disable this
+check. Applications requiring a provider-specific compatibility exception must
+implement that policy explicitly for the trusted provider; do not derive it from
+claims in the received token. Passing ``nonce=None`` to ``parse_id_token()`` omits
+nonce validation and should only be used when the application has deliberately
+chosen a flow without an expected nonce.
+
 RP-Initiated Logout
 -------------------
 

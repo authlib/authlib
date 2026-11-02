@@ -1,10 +1,5 @@
 import typing
 
-import httpx
-from httpx import Auth
-from httpx import Request
-from httpx import Response
-
 from authlib.common.encoding import to_unicode
 from authlib.oauth1 import SIGNATURE_HMAC_SHA1
 from authlib.oauth1 import SIGNATURE_TYPE_HEADER
@@ -12,12 +7,17 @@ from authlib.oauth1 import ClientAuth
 from authlib.oauth1.client import OAuth1Client as _OAuth1Client
 
 from ..base_client import OAuthError
+from ._compat import httpx2
 from .utils import build_request
 from .utils import extract_client_kwargs
 
+Auth = httpx2.Auth
+Request = httpx2.Request
+Response = httpx2.Response
+
 
 class OAuth1Auth(Auth, ClientAuth):
-    """Signs the httpx request using OAuth 1 (RFC5849)."""
+    """Signs the httpx2 request using OAuth 1 (RFC5849)."""
 
     requires_request_body = True
 
@@ -31,7 +31,7 @@ class OAuth1Auth(Auth, ClientAuth):
         )
 
 
-class AsyncOAuth1Client(_OAuth1Client, httpx.AsyncClient):
+class AsyncOAuth1Client(_OAuth1Client, httpx2.AsyncClient):
     auth_class = OAuth1Auth
 
     def __init__(
@@ -49,7 +49,7 @@ class AsyncOAuth1Client(_OAuth1Client, httpx.AsyncClient):
         **kwargs,
     ):
         _client_kwargs = extract_client_kwargs(kwargs)
-        httpx.AsyncClient.__init__(self, **_client_kwargs)
+        httpx2.AsyncClient.__init__(self, **_client_kwargs)
 
         _OAuth1Client.__init__(
             self,
@@ -99,7 +99,7 @@ class AsyncOAuth1Client(_OAuth1Client, httpx.AsyncClient):
         raise OAuthError(error_type, error_description)
 
 
-class OAuth1Client(_OAuth1Client, httpx.Client):
+class OAuth1Client(_OAuth1Client, httpx2.Client):
     auth_class = OAuth1Auth
 
     def __init__(
@@ -117,12 +117,7 @@ class OAuth1Client(_OAuth1Client, httpx.Client):
         **kwargs,
     ):
         _client_kwargs = extract_client_kwargs(kwargs)
-        # app keyword was dropped!
-        app_value = _client_kwargs.pop("app", None)
-        if app_value is not None:
-            _client_kwargs["transport"] = httpx.WSGITransport(app=app_value)
-
-        httpx.Client.__init__(self, **_client_kwargs)
+        httpx2.Client.__init__(self, **_client_kwargs)
 
         _OAuth1Client.__init__(
             self,

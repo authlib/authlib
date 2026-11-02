@@ -15,6 +15,7 @@ from authlib.integrations.flask_client import OAuth
 from authlib.integrations.flask_client import OAuthError
 from authlib.oauth2.rfc6749.errors import MissingCodeException
 from authlib.oidc.core.grants.util import create_half_hash
+from tests.util import HMAC_SECRET
 
 from ..util import get_bearer_token
 from ..util import mock_send_value
@@ -443,7 +444,7 @@ def test_openid_authorize():
     app = Flask(__name__)
     app.secret_key = "!"
     oauth = OAuth(app)
-    key = jwk.import_key("secret", "oct")
+    key = jwk.import_key(HMAC_SECRET, "oct")
 
     client = oauth.register(
         "dev",

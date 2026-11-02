@@ -60,6 +60,22 @@ def test_post_logout_redirect_uris():
         claims.validate()
 
 
+@pytest.mark.parametrize(
+    "uri",
+    [
+        "https://client.test@attacker.test/logout",
+        "http://[::1]:80@attacker.test/logout",
+    ],
+)
+def test_post_logout_redirect_uris_userinfo(uri):
+    """A userinfo component must be rejected before the transport check."""
+    claims = ClientMetadataClaims(
+        {"post_logout_redirect_uris": [uri], "token_endpoint_auth_method": "none"}, {}
+    )
+    with pytest.raises(InvalidClaimError):
+        claims.validate()
+
+
 def test_post_logout_redirect_uris_empty():
     """Empty list should be valid."""
     claims = ClientMetadataClaims({"post_logout_redirect_uris": []}, {})

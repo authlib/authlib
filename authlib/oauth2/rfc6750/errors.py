@@ -6,7 +6,7 @@ the resource server responds using the appropriate HTTP
 status code and includes one of the following error codes
 in the response.
 
-https://tools.ietf.org/html/rfc6750#section-6.2
+:rfc:`6750#section-6.2`
 
 :copyright: (c) 2017 by Hsiaoming Yang.
 """
@@ -23,7 +23,7 @@ class InvalidTokenError(OAuth2Error):
     request a new access token and retry the protected resource
     request.
 
-    https://tools.ietf.org/html/rfc6750#section-3.1
+    :rfc:`6750#section-3.1`
     """
 
     error = "invalid_token"
@@ -53,7 +53,7 @@ class InvalidTokenError(OAuth2Error):
         "WWW-Authenticate" response header field; it MAY include it in
         response to other conditions as well.
 
-        https://tools.ietf.org/html/rfc6750#section-3
+        :rfc:`6750#section-3`
         """
         headers = super().get_headers()
 
@@ -78,7 +78,7 @@ class InsufficientScopeError(OAuth2Error):
     attribute with the scope necessary to access the protected
     resource.
 
-    https://tools.ietf.org/html/rfc6750#section-3.1
+    :rfc:`6750#section-3.1`
     """
 
     error = "insufficient_scope"

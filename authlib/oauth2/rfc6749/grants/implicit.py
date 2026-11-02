@@ -6,7 +6,6 @@ from ..errors import AccessDeniedError
 from ..errors import InvalidScopeError
 from ..errors import OAuth2Error
 from ..errors import UnauthorizedClientError
-from ..hooks import hooked
 from .base import AuthorizationEndpointMixin
 from .base import BaseGrant
 
@@ -79,12 +78,11 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
     GRANT_TYPE = "implicit"
     ERROR_RESPONSE_FRAGMENT = True
 
-    @hooked
     def validate_authorization_request(self):
         """The client constructs the request URI by adding the following
         parameters to the query component of the authorization endpoint URI
         using the "application/x-www-form-urlencoded" format.
-        Per `Section 4.2.1`_.
+        Per :rfc:`6749#section-4.2.1`.
 
         response_type
              REQUIRED.  Value MUST be set to "token".
@@ -118,8 +116,6 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
             GET /authorize?response_type=token&client_id=s6BhdRkqt3&state=xyz
             &redirect_uri=https%3A%2F%2Fclient%2Eexample%2Ecom%2Fcb HTTP/1.1
             Host: server.example.com
-
-        .. _`Section 4.2.1`: https://tools.ietf.org/html/rfc6749#section-4.2.1
         """
         # ignore validate for response_type, since it is validated by
         # check_authorization_endpoint
@@ -151,13 +147,12 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
             raise error
         return redirect_uri
 
-    @hooked
     def create_authorization_response(self, redirect_uri, grant_user):
         """If the resource owner grants the access request, the authorization
         server issues an access token and delivers it to the client by adding
         the following parameters to the fragment component of the redirection
         URI using the "application/x-www-form-urlencoded" format.
-        Per `Section 4.2.2`_.
+        Per :rfc:`6749#section-4.2.2`.
 
         access_token
              REQUIRED.  The access token issued by the authorization server.
@@ -200,8 +195,6 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
         redirecting the client than a 3xx redirection response -- for
         example, returning an HTML page that includes a 'continue' button
         with an action linked to the redirection URI.
-
-        .. _`Section 4.2.2`: https://tools.ietf.org/html/rfc6749#section-4.2.2
 
         :param redirect_uri: Redirect to the given URI for the authorization
         :param grant_user: if resource owner granted the request, pass this

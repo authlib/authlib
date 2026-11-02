@@ -5,7 +5,7 @@ from authlib.common.urls import add_params_to_uri
 def invalid_error_characters(text: str) -> list[str]:
     """Check whether the string only contains characters from the restricted ASCII set defined in RFC6749 for errors.
 
-    https://datatracker.ietf.org/doc/html/rfc6749#section-4.1.2.1
+    :rfc:`6749#section-4.1.2.1`
     """
     valid_ranges = [
         (0x20, 0x21),

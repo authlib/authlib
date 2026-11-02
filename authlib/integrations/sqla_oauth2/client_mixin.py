@@ -7,6 +7,7 @@ from sqlalchemy import Text
 
 from authlib.common.encoding import json_dumps
 from authlib.common.encoding import json_loads
+from authlib.common.encoding import to_bytes
 from authlib.oauth2.rfc6749 import ClientMixin
 from authlib.oauth2.rfc6749 import list_to_scope
 from authlib.oauth2.rfc6749 import scope_to_list
@@ -22,9 +23,7 @@ class OAuth2ClientMixin(ClientMixin):
     @property
     def client_info(self):
         """Implementation for Client Info in OAuth 2.0 Dynamic Client
-        Registration Protocol via `Section 3.2.1`_.
-
-        .. _`Section 3.2.1`: https://tools.ietf.org/html/rfc7591#section-3.2.1
+        Registration Protocol via :rfc:`7591#section-3.2.1`.
         """
         return dict(
             client_id=self.client_id,
@@ -132,7 +131,9 @@ class OAuth2ClientMixin(ClientMixin):
         return redirect_uri in self.redirect_uris
 
     def check_client_secret(self, client_secret):
-        return secrets.compare_digest(self.client_secret, client_secret)
+        return secrets.compare_digest(
+            to_bytes(self.client_secret), to_bytes(client_secret)
+        )
 
     def check_endpoint_auth_method(self, method, endpoint):
         if endpoint == "token":

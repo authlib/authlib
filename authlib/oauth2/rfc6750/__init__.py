@@ -4,7 +4,7 @@
 This module represents a direct implementation of
 The OAuth 2.0 Authorization Framework: Bearer Token Usage.
 
-https://tools.ietf.org/html/rfc6750
+:rfc:`6750`
 """
 
 from .errors import InsufficientScopeError

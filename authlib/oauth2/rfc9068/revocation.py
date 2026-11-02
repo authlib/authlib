@@ -7,7 +7,7 @@ from ..rfc7009 import RevocationEndpoint
 
 
 class JWTRevocationEndpoint(RevocationEndpoint):
-    r"""JWTRevocationEndpoint inherits from `RFC7009`_
+    r"""JWTRevocationEndpoint inherits from :rfc:`7009`
     :class:`~authlib.oauth2.rfc7009.RevocationEndpoint`.
 
     The JWT access tokens cannot be revoked.
@@ -35,8 +35,6 @@ class JWTRevocationEndpoint(RevocationEndpoint):
 
         # another endpoint dedicated to refresh token revokation
         authorization_server.register_endpoint(MyRefreshTokenRevocationEndpoint)
-
-    .. _RFC7009: https://tools.ietf.org/html/rfc7009
     """
 
     def __init__(self, issuer, server=None, *args, **kwargs):

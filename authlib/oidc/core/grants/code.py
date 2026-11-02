@@ -26,10 +26,12 @@ log = logging.getLogger(__name__)
 
 class OpenIDToken(LegacyMixin):
     def get_authorization_code_claims(self, authorization_code: AuthorizationCodeMixin):
-        claims = {
-            "nonce": authorization_code.get_nonce(),
-            "auth_time": authorization_code.get_auth_time(),
-        }
+        claims = {}
+        if nonce := authorization_code.get_nonce():
+            claims["nonce"] = nonce
+
+        if auth_time := authorization_code.get_auth_time():
+            claims["auth_time"] = auth_time
 
         if acr := authorization_code.get_acr():
             claims["acr"] = acr
@@ -97,7 +99,7 @@ class OpenIDToken(LegacyMixin):
         return token
 
     def __call__(self, grant):
-        grant.register_hook("after_create_token_response", self.process_token)
+        grant.register_hook(self.process_token, after=grant.create_token_response)
 
 
 class OpenIDCode(OpenIDToken):
@@ -146,12 +148,13 @@ class OpenIDCode(OpenIDToken):
         validate_nonce(grant.request, self.exists_nonce, self.require_nonce)
 
     def __call__(self, grant):
-        grant.register_hook("after_create_token_response", self.process_token)
+        grant.register_hook(self.process_token, after=grant.create_token_response)
         if is_openid_scope(grant.request.payload.scope):
             grant.register_hook(
-                "after_validate_authorization_request_payload",
                 self.validate_openid_authorization_request,
+                after=grant.validate_authorization_request_payload,
             )
             grant.register_hook(
-                "after_validate_consent_request", validate_request_prompt
+                validate_request_prompt,
+                after=grant.validate_consent_request,
             )

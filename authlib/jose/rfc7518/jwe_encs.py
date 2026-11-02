@@ -2,9 +2,7 @@
 ~~~~~~~~~~~~~~~~~~~~
 
 Cryptographic Algorithms for Cryptographic Algorithms for Content
-Encryption per `Section 5`_.
-
-.. _`Section 5`: https://tools.ietf.org/html/rfc7518#section-5
+Encryption per :rfc:`7518#section-5`.
 """
 
 import hashlib

@@ -1,4 +1,6 @@
-from httpx import Request
+from ._compat import httpx2
+
+Request = httpx2.Request
 
 HTTPX_CLIENT_KWARGS = [
     "headers",
@@ -32,7 +34,10 @@ def extract_client_kwargs(kwargs):
 def build_request(url, headers, body, initial_request: Request) -> Request:
     """Make sure that all the data from initial request is passed to the updated object."""
     updated_request = Request(
-        method=initial_request.method, url=url, headers=headers, content=body
+        method=initial_request.method,
+        url=url,
+        headers=headers,
+        content=body,
     )
 
     if hasattr(initial_request, "extensions"):

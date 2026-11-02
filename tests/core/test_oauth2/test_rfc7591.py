@@ -10,6 +10,19 @@ def test_validate_redirect_uris():
         claims.validate()
 
 
+@pytest.mark.parametrize(
+    "uri",
+    [
+        "https://client.test@attacker.test/cb",
+        "http://[::1]:80@attacker.test/cb",
+    ],
+)
+def test_validate_redirect_uris_userinfo(uri):
+    claims = ClientMetadataClaims({"redirect_uris": [uri]}, {})
+    with pytest.raises(InvalidClaimError):
+        claims.validate()
+
+
 def test_validate_client_uri():
     claims = ClientMetadataClaims({"client_uri": "foo"}, {})
     with pytest.raises(InvalidClaimError):

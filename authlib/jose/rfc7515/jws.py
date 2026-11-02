@@ -52,7 +52,7 @@ class JsonWebSignature:
     def serialize_compact(self, protected, payload, key):
         """Generate a JWS Compact Serialization. The JWS Compact Serialization
         represents digitally signed or MACed content as a compact, URL-safe
-        string, per `Section 7.1`_.
+        string, per :rfc:`7515#section-7.1`.
 
         .. code-block:: text
 
@@ -81,15 +81,13 @@ class JsonWebSignature:
     def deserialize_compact(self, s, key, decode=None):
         """Exact JWS Compact Serialization, and validate with the given key.
         If key is not provided, the returned dict will contain the signature,
-        and signing input values. Via `Section 7.1`_.
+        and signing input values. Via :rfc:`7515#section-7.1`.
 
         :param s: text of JWS Compact Serialization
         :param key: key used to verify the signature
         :param decode: a function to decode payload data
         :return: JWSObject
         :raise: BadSignatureError
-
-        .. _`Section 7.1`: https://tools.ietf.org/html/rfc7515#section-7.1
         """
         if len(s) > self.MAX_CONTENT_LENGTH:
             raise ValueError("Serialization is too long.")
@@ -119,7 +117,7 @@ class JsonWebSignature:
     def serialize_json(self, header_obj, payload, key):
         """Generate a JWS JSON Serialization. The JWS JSON Serialization
         represents digitally signed or MACed content as a JSON object,
-        per `Section 7.2`_.
+        per :rfc:`7515#section-7.2`.
 
         :param header_obj: A dict/list of header
         :param payload: A string/dict of payload
@@ -170,15 +168,13 @@ class JsonWebSignature:
     def deserialize_json(self, obj, key, decode=None):
         """Exact JWS JSON Serialization, and validate with the given key.
         If key is not provided, it will return a dict without signature
-        verification. Header will still be validated. Via `Section 7.2`_.
+        verification. Header will still be validated. Via :rfc:`7515#section-7.2`.
 
         :param obj: text of JWS JSON Serialization
         :param key: key used to verify the signature
         :param decode: a function to decode payload data
         :return: JWSObject
         :raise: BadSignatureError
-
-        .. _`Section 7.2`: https://tools.ietf.org/html/rfc7515#section-7.2
         """
         obj = ensure_dict(obj, "JWS")
 
@@ -204,6 +200,11 @@ class JsonWebSignature:
 
         headers = []
         is_valid = True
+
+        # invalidates cases like obj["signatures"] = None or obj["signatures"] = []
+        if not obj["signatures"]:
+            is_valid = False
+
         for header_obj in obj["signatures"]:
             jws_header, valid = self._validate_json_jws(
                 payload_segment, payload, header_obj, key
@@ -304,9 +305,7 @@ class JsonWebSignature:
             if self._private_headers:
                 names = names.union(self._private_headers)
             for k in crit_headers:
-                if k not in names:
-                    raise InvalidCritHeaderParameterNameError(k)
-                elif k not in header:
+                if k not in names or k not in header:
                     raise InvalidCritHeaderParameterNameError(k)
 
     def _validate_json_jws(self, payload_segment, payload, header_obj, key):

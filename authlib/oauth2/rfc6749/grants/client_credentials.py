@@ -1,7 +1,6 @@
 import logging
 
 from ..errors import UnauthorizedClientError
-from ..hooks import hooked
 from .base import BaseGrant
 from .base import TokenEndpointMixin
 
@@ -26,7 +25,7 @@ class ClientCredentialsGrant(BaseGrant, TokenEndpointMixin):
         |         |                                  |               |
         +---------+                                  +---------------+
 
-    https://tools.ietf.org/html/rfc6749#section-4.4
+    :rfc:`6749#section-4.4`
     """
 
     GRANT_TYPE = "client_credentials"
@@ -75,7 +74,6 @@ class ClientCredentialsGrant(BaseGrant, TokenEndpointMixin):
         self.request.client = client
         self.validate_requested_scope()
 
-    @hooked
     def create_token_response(self):
         """If the access token request is valid and authorized, the
         authorization server issues an access token as described in

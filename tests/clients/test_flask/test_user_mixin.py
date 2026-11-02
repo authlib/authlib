@@ -5,6 +5,7 @@ import pytest
 from flask import Flask
 from joserfc import jwt
 from joserfc.errors import InvalidClaimError
+from joserfc.errors import MissingClaimError
 from joserfc.jwk import KeySet
 from joserfc.jwk import OctKey
 
@@ -84,7 +85,8 @@ def test_parse_id_token():
             client.parse_id_token(token, "n", claims_options)
 
 
-def test_parse_id_token_nonce_supported():
+@pytest.mark.parametrize("token_nonce", [None, "wrong", "n"])
+def test_parse_id_token_nonce_supported(token_nonce):
     token = get_bearer_token()
 
     now = int(time.time())
@@ -98,6 +100,8 @@ def test_parse_id_token_nonce_supported():
         "exp": now + 3600,
         "at_hash": create_half_hash(token["access_token"], "HS256").decode("utf-8"),
     }
+    if token_nonce is not None:
+        claims["nonce"] = token_nonce
     id_token = jwt.encode({"alg": "HS256"}, claims, secret_key)
 
     app = Flask(__name__)
@@ -114,8 +118,15 @@ def test_parse_id_token_nonce_supported():
     )
     with app.test_request_context():
         token["id_token"] = id_token
-        user = client.parse_id_token(token, nonce="n")
-        assert user.sub == "123"
+        if token_nonce == "n":
+            assert client.parse_id_token(token, nonce="n").sub == "123"
+        else:
+            error = MissingClaimError if token_nonce is None else InvalidClaimError
+            with pytest.raises(error):
+                client.parse_id_token(token, nonce="n")
+
+        # Only the application can explicitly omit the expected nonce.
+        assert client.parse_id_token(token, nonce=None).sub == "123"
 
 
 def test_runtime_error_fetch_jwks_uri():

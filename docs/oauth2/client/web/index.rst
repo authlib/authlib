@@ -84,6 +84,23 @@ The ``client_kwargs`` is a dict configuration to pass extra parameters to
 There are several ``token_endpoint_auth_method``, get a deep inside the
 :ref:`client_auth_methods`.
 
+Any other keyword argument accepted by ``OAuth2Session`` can be passed the
+same way. For example, ``leeway`` is the number of seconds before the actual
+expiration of an access token at which the token is considered expired and is
+refreshed (the default is 60)::
+
+    client_kwargs = {
+        'scope': 'profile',
+        'leeway': 30,
+    }
+
+This ``leeway`` only affects access token expiration. The clock skew tolerated
+when validating the claims of an ``id_token`` (``exp``, ``iat`` and so on) is a
+separate setting. It defaults to 120 seconds and is passed to
+``authorize_access_token``::
+
+    token = oauth.github.authorize_access_token(request, leeway=30)
+
 Routes for Authorization
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -107,6 +124,54 @@ Here is the example for GitHub login::
         profile = resp.json()
         # do something with the token and profile
         return '...'
+
+The two routes take part in this flow:
+
+.. mermaid::
+
+    sequenceDiagram
+        autonumber
+        participant User as User's browser<br/>(User Agent)
+        participant App as Your website<br/>(Client)
+        participant AS as GitHub<br/>(Authorization Server)
+        participant API as GitHub API<br/>(Resource Server)
+
+        User->>App: GET /login
+        Note over App: authorize_redirect()
+        App-->>User: 302 Found → /login/oauth/authorize
+        User->>AS: GET /login/oauth/authorize?state=…
+        Note over User,AS: The user logs in and approves
+        AS-->>User: 302 Found → /authorize?code=…&state=…
+        User->>App: GET /authorize?code=…&state=…
+        Note over App: authorize_access_token()
+        App->>AS: POST /login/oauth/access_token (code)
+        AS-->>App: 200 OK + access token
+        Note over App: oauth.github.get('user')
+        App->>API: GET /user (bearer token)
+        API-->>App: 200 OK + profile
+        App-->>User: 200 OK
+
+1. The user clicks a login button. The browser calls the ``login`` route.
+2. ``authorize_redirect()`` generates a ``state`` and saves it in the session,
+   with the ``redirect_uri``. It then redirects the browser to
+   ``authorize_url``. With PKCE, it also saves a ``code_verifier``. With the
+   ``openid`` scope, it also saves a ``nonce``.
+3. The browser opens the GitHub authorization page. The user logs in and
+   approves the access.
+4. GitHub redirects the browser to ``redirect_uri``, with a ``code`` and the
+   ``state``.
+5. The browser calls the ``authorize`` route.
+6. ``authorize_access_token()`` checks the ``state`` against the session. It
+   raises ``MismatchingStateError`` if they do not match. It then sends the
+   ``code`` to ``access_token_url``, with the client credentials.
+7. GitHub returns the access token. With the ``openid`` scope,
+   ``authorize_access_token()`` also validates the ID Token.
+8. ``oauth.github.get('user', token=token)`` calls the API. The ``user`` path
+   is relative to ``api_base_url``.
+9. The GitHub API returns the user profile.
+10. The ``authorize`` route returns its response to the browser.
+
+The ``/login`` path is an example.
 
 After user confirmed on GitHub authorization page, it will redirect
 back to your website ``authorize``. In this route, you can get your
@@ -146,6 +211,21 @@ register our own authentication methods, like :ref:`oauth2_client_auth`::
             ...
             token_endpoint_auth_method=ClientSecretJWT(token_endpoint),
         )
+
+Identity providers may cap the lifetime of the client assertion. Auth0,
+for instance, rejects ``client_secret_jwt`` and ``private_key_jwt``
+assertions that live longer than 5 minutes. Both classes accept an
+``expires_in`` parameter (in seconds) for that::
+
+    from authlib.oauth2.rfc7523 import PrivateKeyJWT
+
+    oauth.register(
+        'name',
+        ...
+        token_endpoint_auth_method=PrivateKeyJWT(
+            token_endpoint, expires_in=300
+        ),
+    )
 
 Accessing OAuth Resources
 -------------------------
@@ -420,6 +500,35 @@ provide the value of ``jwks`` instead of ``jwks_uri``::
         authorize_url='https://example.com/oauth/authorize',
         jwks={"keys": [...]}
     )
+
+
+Custom claims
+~~~~~~~~~~~~~
+
+``token['userinfo']`` is a ``UserInfo`` object built from every claim in the
+validated ``id_token``, so custom claims are available like any standard
+claim::
+
+    token = oauth.google.authorize_access_token(request)
+    userinfo = token['userinfo']
+    organization = userinfo.get('organization')
+
+This only works when the provider puts the claim in the ``id_token`` itself.
+Many providers expose extra claims only through the userinfo endpoint, or only
+when the matching scope is requested. In that case, add the scope to
+``client_kwargs`` and fetch the claims with the access token::
+
+    oauth.register(
+        'organization',
+        server_metadata_url='https://example.com/.well-known/openid-configuration',
+        client_kwargs={'scope': 'openid email profile organization'},
+    )
+
+    token = oauth.organization.authorize_access_token(request)
+    userinfo = oauth.organization.userinfo(token=token)
+
+Check the provider's documentation for the scope names and the claims each
+endpoint returns.
 
 
 RP-Initiated Logout

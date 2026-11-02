@@ -33,7 +33,9 @@ class JWTBearerTokenValidator(BearerTokenValidator):
     TOKEN_TYPE = "bearer"
     token_cls = JWTBearerToken
 
-    def __init__(self, public_key, issuer=None, realm=None, leeway=60, **extra_attributes):
+    def __init__(
+        self, public_key, issuer=None, realm=None, leeway=60, **extra_attributes
+    ):
         super().__init__(realm, **extra_attributes)
         self.public_key = import_any_key(public_key)
         self.leeway = leeway
@@ -53,7 +55,9 @@ class JWTBearerTokenValidator(BearerTokenValidator):
             logger.debug("Authenticate token failed. %r", error)
             return None
 
-        claims_requests = jwt.JWTClaimsRegistry(leeway=self.leeway, **self.claims_options)
+        claims_requests = jwt.JWTClaimsRegistry(
+            leeway=self.leeway, **self.claims_options
+        )
         try:
             claims_requests.validate(token.claims)
         except JoseError as error:

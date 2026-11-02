@@ -60,12 +60,26 @@ def test_all_set():
         claims={"foo1a": "bar1a"},
         headers={"foo1b": "bar1b"},
         alg="HS512",
+        expires_in=120,
     )
 
     assert jwt_signer.token_endpoint == "https://provider.test/oauth/access_token"
     assert jwt_signer.claims == {"foo1a": "bar1a"}
     assert jwt_signer.headers == {"foo1b": "bar1b"}
     assert jwt_signer.alg == "HS512"
+    assert jwt_signer.expires_in == 120
+
+
+def test_expires_in_set():
+    jwt_signer = ClientSecretJWT(expires_in=60)
+
+    assert jwt_signer.expires_in == 60
+
+
+def test_expires_in_not_set():
+    jwt_signer = ClientSecretJWT()
+
+    assert jwt_signer.expires_in == 3600
 
 
 def sign_and_decode(jwt_signer, client_id, client_secret, token_endpoint):
@@ -232,3 +246,32 @@ def test_sign_with_additional_claims():
         "role": "bar",
     }
     assert {"alg": "HS256", "typ": "JWT"} == decoded.header
+
+
+def test_sign_default_expires_in():
+    jwt_signer = ClientSecretJWT()
+
+    decoded, pre_sign_time, iat, exp, jti = sign_and_decode(
+        jwt_signer,
+        "client_id_1",
+        "client_secret_1",
+        "https://provider.test/oauth/access_token",
+    )
+
+    assert exp >= iat + 3600
+    assert exp <= iat + 3600 + 2
+
+
+def test_sign_custom_expires_in():
+    # Auth0 caps client assertion lifetime at 5 minutes
+    jwt_signer = ClientSecretJWT(expires_in=60)
+
+    decoded, pre_sign_time, iat, exp, jti = sign_and_decode(
+        jwt_signer,
+        "client_id_1",
+        "client_secret_1",
+        "https://provider.test/oauth/access_token",
+    )
+
+    assert exp >= iat + 60
+    assert exp <= iat + 60 + 2

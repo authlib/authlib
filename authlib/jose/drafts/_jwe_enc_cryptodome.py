@@ -1,9 +1,8 @@
 """authlib.jose.draft.
 ~~~~~~~~~~~~~~~~~~~~
 
-Content Encryption per `Section 4`_.
-
-.. _`Section 4`: https://datatracker.ietf.org/doc/html/draft-amringer-jose-chacha-02#section-4
+Content Encryption per
+:draft:`draft-amringer-jose-chacha-02 Section 4 <draft-amringer-jose-chacha-02#section-4>`.
 """
 
 from Cryptodome.Cipher import ChaCha20_Poly1305 as Cryptodome_ChaCha20_Poly1305

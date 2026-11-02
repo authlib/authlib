@@ -149,7 +149,7 @@ we need to save this value into database. In this case, we have to update our
                 code=code,
                 client_id=client.client_id,
                 redirect_uri=request.redirect_uri,
-                scope=request.payload.scope,
+                scope=request.scope,
                 user=request.user,
                 nonce=nonce,
             )
@@ -256,7 +256,7 @@ is ``save_authorization_code``. You can implement it like this::
                 code=code,
                 client_id=client.client_id,
                 redirect_uri=request.redirect_uri,
-                scope=request.payload.scope,
+                scope=request.scope,
                 user=request.user,
                 nonce=nonce,
             )

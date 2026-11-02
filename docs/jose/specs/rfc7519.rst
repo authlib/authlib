@@ -8,10 +8,8 @@ RFC7519: JSON Web Token
         implementation, guide on JWT encoding and decoding, guide on JWT
         payload claims validation.
 
-This section contains the generic Python implementation of RFC7519_. Find how to use
+This section contains the generic Python implementation of :rfc:`7519`. Find how to use
 it in :ref:`JWT Guide <jwt_guide>`.
-
-.. _RFC7519: https://tools.ietf.org/html/rfc7519
 
 API Reference
 -------------

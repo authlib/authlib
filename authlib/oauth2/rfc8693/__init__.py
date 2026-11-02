@@ -4,5 +4,5 @@
 This module represents an implementation of
 OAuth 2.0 Token Exchange.
 
-https://tools.ietf.org/html/rfc8693
+:rfc:`8693`
 """

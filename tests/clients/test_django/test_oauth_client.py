@@ -11,6 +11,7 @@ from authlib.common.urls import urlparse
 from authlib.integrations.django_client import OAuth
 from authlib.integrations.django_client import OAuthError
 from authlib.oidc.core.grants.util import create_half_hash
+from tests.util import HMAC_SECRET
 
 from ..util import get_bearer_token
 from ..util import mock_send_value
@@ -211,7 +212,7 @@ def test_oauth2_authorize_code_verifier(factory):
 def test_openid_authorize(factory):
     request = factory.get("/login")
     request.session = factory.session
-    secret_key = jwk.import_key("secret", "oct")
+    secret_key = jwk.import_key(HMAC_SECRET, "oct")
 
     oauth = OAuth()
     client = oauth.register(

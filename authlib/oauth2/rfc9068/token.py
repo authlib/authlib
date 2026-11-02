@@ -144,7 +144,7 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         # correspond to the subject identifier of the resource owner.
 
         if user:
-            token_data["sub"] = user.get_user_id()
+            token_data["sub"] = str(user.get_user_id())
 
         # In cases of access tokens obtained through grants where no resource owner is
         # involved, such as the client credentials grant, the value of 'sub' SHOULD

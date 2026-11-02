@@ -28,8 +28,8 @@ Requests OAuth 2.0
     :no-index:
 
 
-HTTPX OAuth 2.0
----------------
+HTTPX2 OAuth 2.0
+----------------
 
 .. module:: authlib.integrations.httpx_client
    :no-index:

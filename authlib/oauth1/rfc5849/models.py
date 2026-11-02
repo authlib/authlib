@@ -1,3 +1,8 @@
+import secrets
+
+from authlib.common.encoding import to_bytes
+
+
 class ClientMixin:
     def get_default_redirect_uri(self):
         """A method to get client default redirect_uri. For instance, the
@@ -80,8 +85,15 @@ class TemporaryCredentialMixin(TokenCredentialMixin):
         credential. For instance that this temporary credential has recorded
         the value in database as column ``oauth_verifier``::
 
+            import secrets
+
+            from authlib.common.encoding import to_bytes
+
+
             def check_verifier(self, verifier):
-                return self.oauth_verifier == verifier
+                return secrets.compare_digest(
+                    to_bytes(self.oauth_verifier), to_bytes(verifier)
+                )
 
         :return: Boolean
         """
@@ -99,7 +111,10 @@ class TemporaryCredential(dict, TemporaryCredentialMixin):
         return self.get("oauth_callback")
 
     def check_verifier(self, verifier):
-        return self.get("oauth_verifier") == verifier
+        oauth_verifier = self.get("oauth_verifier")
+        if oauth_verifier is None or verifier is None:
+            return False
+        return secrets.compare_digest(to_bytes(oauth_verifier), to_bytes(verifier))
 
     def get_oauth_token(self):
         return self.get("oauth_token")

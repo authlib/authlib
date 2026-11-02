@@ -1,25 +1,23 @@
 .. _httpx_oauth1_client:
 
-OAuth 1.0 for HTTPX
-===================
+OAuth 1.0 for HTTPX2
+====================
 
 .. meta::
-    :description: An OAuth 1.0 Client implementation for HTTPX,
+    :description: An OAuth 1.0 Client implementation for HTTPX2,
         powered by Authlib.
 
 .. module:: authlib.integrations.httpx_client
     :noindex:
 
-HTTPX is a next-generation HTTP client for Python. Authlib enables OAuth 1.0
-for HTTPX with:
+HTTPX2 is a next-generation HTTP client for Python. Authlib enables OAuth 1.0
+for HTTPX2 with:
 
 * :class:`OAuth1Client`
 * :class:`AsyncOAuth1Client`
 
-.. note:: HTTPX is still in its "alpha" stage, use it with caution.
-
-HTTPX OAuth 1.0
----------------
+HTTPX2 OAuth 1.0
+----------------
 
 There are three steps in OAuth 1 to obtain an access token:
 

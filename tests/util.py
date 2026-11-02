@@ -6,6 +6,8 @@ from authlib.common.urls import url_decode
 
 ROOT = os.path.abspath(os.path.dirname(__file__))
 
+HMAC_SECRET = "a-test-hmac-secret-of-32-bytes!!"
+
 
 def get_file_path(name):
     return os.path.join(ROOT, "files", name)

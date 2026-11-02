@@ -7,11 +7,56 @@ RFC7662: OAuth 2.0 Token Introspection
     :description: API references on RFC7009, OAuth 2.0 Token Introspection,
         in Python via Authlib implementation.
 
-This section contains the generic implementation of RFC7662_. OAuth 2.0 Token
+This section contains the generic implementation of :rfc:`7662`. OAuth 2.0 Token
 Introspection is usually designed to let resource servers to know content of
 a token.
 
-.. _RFC7662: https://tools.ietf.org/html/rfc7662
+The Resource Server receives a token it cannot read. It asks the
+Authorization Server whether the token is active:
+
+.. mermaid::
+
+    sequenceDiagram
+        autonumber
+        participant Client
+        box rgba(80, 120, 220, 0.12) IntrospectTokenValidator
+            participant RS as Resource Server
+        end
+        box rgba(80, 120, 220, 0.12) IntrospectionEndpoint
+            participant AS as Authorization Server
+        end
+
+        Client->>RS: GET /api (bearer token)
+        RS->>AS: POST /oauth/introspect (token)
+        AS-->>RS: 200 OK + active, scope, …
+        alt Active token with the required scope
+            autonumber 4
+            RS-->>Client: 200 OK + resource
+        else Inactive token
+            autonumber 4
+            RS-->>Client: 401 invalid_token
+        else Insufficient scope
+            autonumber 4
+            RS-->>Client: 403 insufficient_scope
+        end
+
+1. The client calls the API with an access token, in the
+   ``Authorization: Bearer`` header.
+2. :class:`IntrospectTokenValidator` sends the token to the introspection
+   endpoint. The Resource Server authenticates as a client of the
+   Authorization Server.
+3. :class:`IntrospectionEndpoint` authenticates the Resource Server and
+   calls ``check_permission``. It returns ``{"active": false}`` if the
+   token is unknown, expired or revoked, or if ``check_permission``
+   refuses. Otherwise, it returns the result of ``introspect_token``.
+4. The Resource Server answers depending on the introspection result:
+
+   a. ``200 OK`` with the resource, if the token is active and has the
+      required scope.
+   b. ``401 invalid_token``, if the token is not active.
+   c. ``403 insufficient_scope``, if the token lacks a required scope.
+
+The ``/api`` path is an example.
 
 .. module:: authlib.oauth2.rfc7662
 

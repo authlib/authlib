@@ -1,5 +1,8 @@
 import warnings
 
+# Strings wrapped with _() are extracted by external translation projects.
+from sphinx.locale import _
+
 import authlib
 from authlib.deprecate import AuthlibDeprecationWarning
 
@@ -30,11 +33,17 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx_copybutton",
     "sphinx_design",
+    "sphinxcontrib.mermaid",
 ]
+
+# Shibuya inverts mermaid diagrams in dark mode.
+mermaid_dark_theme = "default"
+mermaid_height = "auto"
 
 extlinks = {
     "issue": ("https://github.com/authlib/authlib/issues/%s", "issue #%s"),
     "PR": ("https://github.com/authlib/authlib/pull/%s", "pull request #%s"),
+    "draft": ("https://datatracker.ietf.org/doc/html/%s", "%s"),
 }
 
 intersphinx_mapping = {
@@ -43,6 +52,8 @@ intersphinx_mapping = {
 }
 html_favicon = "_static/icon.svg"
 html_theme_options = {
+    "carbon_ads_code": "CE7DKK3W",
+    "carbon_ads_placement": "authliborg",
     "accent_color": "blue",
     "globaltoc_expand_depth": 1,
     "og_image_url": "https://authlib.org/logo.png",
@@ -55,26 +66,26 @@ html_theme_options = {
     "discord_url": "https://discord.gg/HvBVAeNAaV",
     "nav_links": [
         {
-            "title": "Projects",
+            "title": _("Projects"),
             "children": [
                 {
-                    "title": "Authlib",
+                    "title": _("Authlib"),
                     "url": "https://authlib.org/",
-                    "summary": "OAuth, JOSE, OpenID, etc.",
+                    "summary": _("OAuth, JOSE, OpenID, etc."),
                 },
                 {
-                    "title": "JOSE RFC",
+                    "title": _("JOSE RFC"),
                     "url": "https://jose.authlib.org/",
-                    "summary": "JWS, JWE, JWK, and JWT.",
+                    "summary": _("JWS, JWE, JWK, and JWT."),
                 },
                 {
-                    "title": "OTP Auth",
+                    "title": _("OTP Auth"),
                     "url": "https://otp.authlib.org/",
-                    "summary": "One time password, HOTP/TOTP.",
+                    "summary": _("One time password, HOTP/TOTP."),
                 },
             ],
         },
-        {"title": "Sponsor me", "url": "https://github.com/sponsors/lepture"},
+        {"title": _("Sponsor me"), "url": "https://github.com/sponsors/lepture"},
     ],
 }
 

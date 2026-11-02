@@ -1,8 +1,8 @@
+from authlib.common.hooks import Hookable
 from authlib.consts import default_json_headers
 
 from ..errors import InvalidRequestError
-from ..hooks import Hookable
-from ..hooks import hooked
+from ..errors import InvalidScopeError
 from ..requests import OAuth2Request
 
 
@@ -85,7 +85,7 @@ class BaseGrant(Hookable):
         return self.server.validate_requested_scope(scope)
 
 
-class TokenEndpointMixin:
+class TokenEndpointMixin(Hookable):
     #: Allowed HTTP methods of this token endpoint
     TOKEN_ENDPOINT_HTTP_METHODS = ["POST"]
 
@@ -106,7 +106,7 @@ class TokenEndpointMixin:
         raise NotImplementedError()
 
 
-class AuthorizationEndpointMixin:
+class AuthorizationEndpointMixin(Hookable):
     RESPONSE_TYPES = set()
     ERROR_RESPONSE_FRAGMENT = False
 
@@ -133,9 +133,7 @@ class AuthorizationEndpointMixin:
     @staticmethod
     def validate_no_multiple_request_parameter(request: OAuth2Request):
         """For the Authorization Endpoint, request and response parameters MUST NOT be included
-        more than once. Per `Section 3.1`_.
-
-        .. _`Section 3.1`: https://tools.ietf.org/html/rfc6749#section-3.1
+        more than once. Per :rfc:`6749#section-3.1`.
         """
         datalist = request.payload.datalist
         parameters = ["response_type", "client_id", "redirect_uri", "scope", "state"]
@@ -145,7 +143,14 @@ class AuthorizationEndpointMixin:
                     f"Multiple '{param}' in request.", state=request.payload.state
                 )
 
-    @hooked
+    def validate_authorization_request_payload(self, redirect_uri):
+        """Validate the requested scope of an authorization request."""
+        self.validate_requested_scope()
+        scope = self.request.client.get_allowed_scope(self.request.payload.scope)
+        if scope is None:
+            raise InvalidScopeError()
+        self.request.scope = scope
+
     def validate_consent_request(self):
         redirect_uri = self.validate_authorization_request()
         self.redirect_uri = redirect_uri

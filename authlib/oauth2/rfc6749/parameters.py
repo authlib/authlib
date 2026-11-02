@@ -20,19 +20,19 @@ def prepare_grant_uri(
     using the ``application/x-www-form-urlencoded`` format:
 
     :param uri: The authorize endpoint to fetch "code" or "token".
-    :param client_id: The client identifier as described in `Section 2.2`_.
+    :param client_id: The client identifier as described in :rfc:`6749#section-2.2`.
     :param response_type: To indicate which OAuth 2 grant/flow is required,
                           "code" and "token".
     :param redirect_uri: The client provided URI to redirect back to after
-                         authorization as described in `Section 3.1.2`_.
+                         authorization as described in :rfc:`6749#section-3.1.2`.
     :param scope: The scope of the access request as described by
-                  `Section 3.3`_.
+                  :rfc:`6749#section-3.3`.
     :param state: An opaque value used by the client to maintain
                   state between the request and callback.  The authorization
                   server includes this value when redirecting the user-agent
                   back to the client.  The parameter SHOULD be used for
                   preventing cross-site request forgery as described in
-                  `Section 10.12`_.
+                  :rfc:`6749#section-10.12`.
     :param kwargs: Extra arguments to embed in the grant/authorization URL.
 
     An example of an authorization code grant authorization URL::
@@ -40,10 +40,6 @@ def prepare_grant_uri(
         /authorize?response_type=code&client_id=s6BhdRkqt3&state=xyz
         &redirect_uri=https%3A%2F%2Fclient%2Eexample%2Ecom%2Fcb
 
-    .. _`Section 2.2`: https://tools.ietf.org/html/rfc6749#section-2.2
-    .. _`Section 3.1.2`: https://tools.ietf.org/html/rfc6749#section-3.1.2
-    .. _`Section 3.3`: https://tools.ietf.org/html/rfc6749#section-3.3
-    .. _`section 10.12`: https://tools.ietf.org/html/rfc6749#section-10.12
     """
     params = [("response_type", response_type), ("client_id", client_id)]
 
@@ -67,7 +63,7 @@ def prepare_grant_uri(
 
 
 def prepare_token_request(grant_type, body="", redirect_uri=None, **kwargs):
-    """Prepare the access token request. Per `Section 4.1.3`_.
+    """Prepare the access token request. Per :rfc:`6749#section-4.1.3`.
 
     The client makes a request to the token endpoint by adding the
     following parameters using the ``application/x-www-form-urlencoded``
@@ -78,16 +74,13 @@ def prepare_token_request(grant_type, body="", redirect_uri=None, **kwargs):
     :param body: Existing request body to embed parameters in.
     :param redirect_uri: If the "redirect_uri" parameter was included in the
                          authorization request as described in
-                         `Section 4.1.1`_, and their values MUST be identical.
+                         :rfc:`6749#section-4.1.1`, and their values MUST be identical.
     :param kwargs: Extra arguments to embed in the request body.
 
     An example of an authorization code token request body::
 
         grant_type=authorization_code&code=SplxlOBeZQQYbYS6WxSbIA
         &redirect_uri=https%3A%2F%2Fclient%2Eexample%2Ecom%2Fcb
-
-    .. _`Section 4.1.1`: https://tools.ietf.org/html/rfc6749#section-4.1.1
-    .. _`Section 4.1.3`: https://tools.ietf.org/html/rfc6749#section-4.1.3
     """
     params = [("grant_type", grant_type)]
 

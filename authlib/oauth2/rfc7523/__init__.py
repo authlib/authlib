@@ -5,7 +5,7 @@ This module represents a direct implementation of
 JSON Web Token (JWT) Profile for OAuth 2.0 Client
 Authentication and Authorization Grants.
 
-https://tools.ietf.org/html/rfc7523
+:rfc:`7523`
 """
 
 from .assertion import client_secret_jwt_sign

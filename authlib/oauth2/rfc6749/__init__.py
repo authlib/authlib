@@ -4,7 +4,7 @@
 This module represents a direct implementation of
 The OAuth 2.0 Authorization Framework.
 
-https://tools.ietf.org/html/rfc6749
+:rfc:`6749`
 """
 
 from .authenticate_client import ClientAuthentication

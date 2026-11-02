@@ -1,5 +1,6 @@
 from authlib.common.urls import add_params_to_uri
 from authlib.deprecate import deprecate
+from authlib.oauth2.rfc6749.authorization_server import AuthorizationServer
 from authlib.oauth2.rfc6749.grants import BaseGrant
 
 
@@ -17,8 +18,8 @@ class IssuerParameter:
 
         else:
             authorization_server.register_hook(
-                "after_create_authorization_response",
                 self.add_issuer_parameter,
+                after=AuthorizationServer.create_authorization_response,
             )
 
     def add_issuer_parameter(self, authorization_server, response):

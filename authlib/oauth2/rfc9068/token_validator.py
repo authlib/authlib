@@ -1,9 +1,7 @@
 """authlib.oauth2.rfc9068.token_validator.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Implementation of Validating JWT Access Tokens per `Section 4`_.
-
-.. _`Section 7`: https://www.rfc-editor.org/rfc/rfc9068.html#name-validating-jwt-access-token
+Implementation of Validating JWT Access Tokens per :rfc:`9068#section-4`.
 """
 
 from joserfc import jwt

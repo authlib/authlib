@@ -12,6 +12,7 @@ from authlib.oauth2.rfc8628 import DeviceCredentialDict
 from .models import Client
 from .models import User
 from .models import db
+from .oauth2_server import create_basic_header
 
 device_credentials = {
     "valid-device": {
@@ -72,12 +73,15 @@ class DeviceCodeGrant(_DeviceCodeGrant):
         return False
 
 
+saved_credentials = []
+
+
 class DeviceAuthorizationEndpoint(_DeviceAuthorizationEndpoint):
     def get_verification_uri(self):
         return "https://resource.test/activate"
 
     def save_device_credential(self, client_id, scope, data):
-        pass
+        saved_credentials.append({"client_id": client_id, "scope": scope})
 
 
 @pytest.fixture(autouse=True)
@@ -237,6 +241,30 @@ def test_missing_client_id(test_client):
     assert rv.status_code == 401
     resp = json.loads(rv.data)
     assert resp["error"] == "invalid_client"
+
+
+def test_client_secret_basic_saves_authenticated_client_id(test_client, db, client):
+    # When the client authenticates with HTTP Basic, its id is in the
+    # Authorization header rather than the form body, so the saved credential
+    # must come from the authenticated client, not request.payload.client_id.
+    client.set_client_metadata(
+        {
+            "scope": "profile",
+            "grant_types": [DeviceCodeGrant.GRANT_TYPE],
+            "token_endpoint_auth_method": "client_secret_basic",
+        }
+    )
+    db.session.add(client)
+    db.session.commit()
+
+    saved_credentials.clear()
+    rv = test_client.post(
+        "/device_authorize",
+        data={"scope": "profile"},
+        headers=create_basic_header("client-id", "client-secret"),
+    )
+    assert rv.status_code == 200
+    assert saved_credentials[-1]["client_id"] == "client-id"
 
 
 def test_create_authorization_response(test_client):

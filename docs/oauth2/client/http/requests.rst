@@ -123,7 +123,7 @@ Self-Signed Certificate
 -----------------------
 
 Self-signed certificate mutual-TLS method internet standard is defined in
-`RFC8705 Section 2.2`_ .
+:rfc:`8705#section-2.2`.
 
 You can use the environment variables CURL_CA_BUNDLE and REQUESTS_CA_BUNDLE
 to specify a CA certificate file for validating your self-signed certificate.
@@ -133,5 +133,3 @@ to specify a CA certificate file for validating your self-signed certificate.
     REQUESTS_CA_BUNDLE=/path/to/ca-cert.pem
 
 Please remember to set the env variable only in you development environment.
-
-.. _RFC8705 Section 2.2: https://tools.ietf.org/html/rfc8705#section-2.2

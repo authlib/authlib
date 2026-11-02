@@ -1,0 +1,32 @@
+name: changelog
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+jobs:
+  fragment:
+    name: check changelog fragment
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.pull_request.user.type != 'Bot'
+      && !contains(github.event.pull_request.labels.*.name, 'skip changelog')
+
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        fetch-depth: 0
+
+    - name: Check that a fragment was added
+      env:
+        BASE_REF: ${{ github.base_ref }}
+      run: |
+        fragments=$(git diff --name-only --diff-filter=A "origin/$BASE_REF...HEAD" -- 'changelog.d/*.rst' ':!changelog.d/README.rst')
+        if [ -z "$fragments" ]; then
+          echo "::error::No changelog fragment found. Run 'uv run scriv create', or add the 'skip changelog' label."
+          exit 1
+        fi
+        echo "$fragments"

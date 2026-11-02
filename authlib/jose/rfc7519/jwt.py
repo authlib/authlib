@@ -1,7 +1,7 @@
 import calendar
 import datetime
-import random
 import re
+import secrets
 
 from authlib.common.encoding import json_dumps
 from authlib.common.encoding import json_loads
@@ -141,7 +141,7 @@ def find_encode_key(key, header):
         if kid:
             return key.find_by_kid(kid)
 
-        rv = random.choice(key.keys)
+        rv = secrets.choice(key.keys)
         # use side effect to add kid value into header
         header["kid"] = rv.kid
         return rv
@@ -154,7 +154,7 @@ def find_encode_key(key, header):
                 return k
 
         if not kid:
-            rv = random.choice(keys)
+            rv = secrets.choice(keys)
             header["kid"] = rv["kid"]
             return rv
         raise ValueError("Invalid JSON Web Key Set")

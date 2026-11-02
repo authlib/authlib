@@ -5,7 +5,7 @@ HTTP Clients
 
 .. meta::
     :description: An OAuth 1.0 protocol Client implementation for Python
-        requests and httpx, powered by Authlib.
+        requests and httpx2, powered by Authlib.
 
 .. module:: authlib.integrations
     :noindex:
@@ -46,7 +46,7 @@ But first, we need to initialize an OAuth 1.0 client::
     >>> # using requests client
     >>> from authlib.integrations.requests_client import OAuth1Session
     >>> client = OAuth1Session(client_id, client_secret)
-    >>> # using httpx client
+    >>> # using httpx2 client
     >>> from authlib.integrations.httpx_client import AsyncOAuth1Client
     >>> client = AsyncOAuth1Client(client_id, client_secret)
 
@@ -131,7 +131,7 @@ session::
     >>> oauth_token = request_token['oauth_token']
     >>> oauth_token_secret = request_token['oauth_token_secret']
     >>> from authlib.integrations.requests_client import OAuth1Session
-    >>> # if using httpx: from authlib.integrations.httpx_client import AsyncOAuth1Client
+    >>> # if using httpx2: from authlib.integrations.httpx_client import AsyncOAuth1Client
     >>> client = OAuth1Session(
     ...     client_id, client_secret,
     ...     token=oauth_token,
@@ -159,7 +159,7 @@ The above is not the real flow, just like what we did in
     >>> access_token = restore_access_token_from_database()
     >>> oauth_token = access_token['oauth_token']
     >>> oauth_token_secret = access_token['oauth_token_secret']
-    >>> # if using httpx: from authlib.integrations.httpx_client import AsyncOAuth1Client
+    >>> # if using httpx2: from authlib.integrations.httpx_client import AsyncOAuth1Client
     >>> client = OAuth1Session(
     ...     client_id, client_secret,
     ...     token=oauth_token,
@@ -179,7 +179,7 @@ Create an instance of OAuth1Auth with an access token::
     # if using requests
     from authlib.integrations.requests_client import OAuth1Auth
 
-    # if using httpx
+    # if using httpx2
     from authlib.integrations.httpx_client import OAuth1Auth
 
     auth = OAuth1Auth(
@@ -197,10 +197,10 @@ If using ``requests``, pass this ``auth`` to access protected resources::
     url = 'https://api.twitter.com/1.1/account/verify_credentials.json'
     resp = requests.get(url, auth=auth)
 
-If using ``httpx``, pass this ``auth`` to access protected resources::
+If using ``httpx2``, pass this ``auth`` to access protected resources::
 
-    import httpx
+    import httpx2
 
     url = 'https://api.twitter.com/1.1/account/verify_credentials.json'
-    resp = await httpx.get(url, auth=auth)
+    resp = await httpx2.get(url, auth=auth)
 

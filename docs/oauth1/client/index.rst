@@ -4,7 +4,7 @@ Client
 ======
 
 .. meta::
-    :description: Python OAuth 1.0 Client implementations with requests, HTTPX,
+    :description: Python OAuth 1.0 Client implementations with requests, HTTPX2,
         Flask, Django and Starlette, powered by Authlib.
 
 Authlib provides OAuth 1.0 client implementations for two distinct use cases:

@@ -28,7 +28,7 @@ first, let's create an :class:`OAuth` instance::
 
     oauth = OAuth()
 
-Unlike Flask and Django, Starlette OAuth registry uses HTTPX
+Unlike Flask and Django, Starlette OAuth registry uses HTTPX2
 :class:`~authlib.integrations.httpx_client.AsyncOAuth1Client` as the OAuth 1.0
 backend.
 

@@ -8,11 +8,61 @@ RFC7636: Proof Key for Code Exchange by OAuth Public Clients
         by OAuth Public Clients implementation, guide on how to add it to
         OAuth 2.0 authorization server.
 
-This RFC7636_ is used to improve the security of Authorization Code flow
+This :rfc:`7636` is used to improve the security of Authorization Code flow
 for public clients by sending extra "code_challenge" and "code_verifier"
 to the authorization server.
 
-.. _RFC7636: https://tools.ietf.org/html/rfc7636
+The ``code_challenge`` goes to the authorization endpoint, through the
+browser. The ``code_verifier`` goes to the token endpoint, from server to
+server. Someone who steals the code cannot use it without the
+``code_verifier``:
+
+.. mermaid::
+
+    sequenceDiagram
+        autonumber
+        participant User as User's browser<br/>(User Agent)
+        participant Client
+        box rgba(80, 120, 220, 0.12) CodeChallenge
+            participant AS as Authorization Server
+        end
+        participant RS as Resource Server
+
+        Note over Client: Generates a code_verifier<br/>and its code_challenge
+        rect rgba(120, 120, 120, 0.08)
+            Note over User,AS: Front channel (browser)
+            Client-->>User: 302 Found → /authorize
+            User->>AS: GET /authorize (code_challenge)
+            Note over User,AS: The user logs in and approves
+            AS-->>User: 302 Found → redirect_uri?code=…
+            User->>Client: GET redirect_uri?code=…
+        end
+        rect rgba(120, 120, 120, 0.08)
+            Note over Client,RS: Back channel (server to server)
+            Client->>AS: POST /token (code, code_verifier)
+            AS-->>Client: 200 OK + access token
+            Client->>RS: GET /api (bearer token)
+            RS-->>Client: 200 OK + resource
+        end
+
+1. The client redirects the browser to the authorization endpoint.
+2. The request contains ``code_challenge`` and ``code_challenge_method``.
+   With ``S256``, ``code_challenge`` is the SHA-256 hash of
+   ``code_verifier``, in base64url. :class:`CodeChallenge` checks the format
+   of ``code_challenge`` and the support of ``code_challenge_method``. The
+   ``save_authorization_code`` method of the grant stores them with the code.
+3. The authorization server redirects the browser to the client with a code.
+4. The client receives the code.
+5. The client sends the ``code`` and the ``code_verifier``.
+   :class:`CodeChallenge` computes the challenge from ``code_verifier`` and
+   compares it with the stored ``code_challenge``. It returns
+   ``invalid_grant`` if they differ.
+6. The authorization server returns an access token.
+7. The client calls the API of the Resource Server with the access token,
+   in the ``Authorization: Bearer`` header.
+8. The Resource Server returns the protected resource.
+
+The ``/authorize``, ``/token`` and ``/api`` paths are examples.
 
 .. module:: authlib.oauth2.rfc7636
 
@@ -49,7 +99,7 @@ method::
                 code=code,
                 client_id=request.client.client_id,
                 redirect_uri=request.redirect_uri,
-                scope=request.payload.scope,
+                scope=request.scope,
                 user_id=request.user.id,
                 code_challenge=code_challenge,
                 code_challenge_method=code_challenge_method,
@@ -63,9 +113,20 @@ Now you can register your ``AuthorizationCodeGrant`` with the extension::
     from authlib.oauth2.rfc7636 import CodeChallenge
     server.register_grant(MyAuthorizationCodeGrant, [CodeChallenge(required=True)])
 
-If ``required=True``, code challenge is required for authorization code flow from public clients.
-If ``required=False``, it is optional, it will only valid the code challenge
-when clients send these parameters.
+With ``required=True``, public clients must use PKCE. The check happens at
+the token endpoint: a public client that sends no ``code_verifier`` gets an
+``invalid_request`` error. The authorization endpoint does not reject a request
+without ``code_challenge``, but the code it returns cannot be exchanged.
+
+With ``required=False``, PKCE is optional for all clients.
+
+In both modes:
+
+* If the authorization request contained a ``code_challenge``, the token
+  request must contain a matching ``code_verifier``.
+* If the authorization request contained no ``code_challenge``, a token
+  request with a ``code_verifier`` is rejected.
+* Confidential clients may use PKCE, but are not required to.
 
 Using ``code_challenge`` in Client
 ----------------------------------

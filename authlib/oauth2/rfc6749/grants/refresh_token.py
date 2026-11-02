@@ -2,9 +2,7 @@
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A special grant endpoint for refresh_token grant_type. Refreshing an
-Access Token per `Section 6`_.
-
-.. _`Section 6`: https://tools.ietf.org/html/rfc6749#section-6
+Access Token per :rfc:`6749#section-6`.
 """
 
 import logging
@@ -13,7 +11,6 @@ from ..errors import InvalidGrantError
 from ..errors import InvalidRequestError
 from ..errors import InvalidScopeError
 from ..errors import UnauthorizedClientError
-from ..hooks import hooked
 from ..util import scope_to_list
 from .base import BaseGrant
 from .base import TokenEndpointMixin
@@ -23,9 +20,7 @@ log = logging.getLogger(__name__)
 
 class RefreshTokenGrant(BaseGrant, TokenEndpointMixin):
     """A special grant endpoint for refresh_token grant_type. Refreshing an
-    Access Token per `Section 6`_.
-
-    .. _`Section 6`: https://tools.ietf.org/html/rfc6749#section-6
+    Access Token per :rfc:`6749#section-6`.
     """
 
     GRANT_TYPE = "refresh_token"
@@ -110,7 +105,6 @@ class RefreshTokenGrant(BaseGrant, TokenEndpointMixin):
         self._validate_token_scope(refresh_token)
         self.request.refresh_token = refresh_token
 
-    @hooked
     def create_token_response(self):
         """If valid and authorized, the authorization server issues an access
         token as described in Section 5.1.  If the request failed

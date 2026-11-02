@@ -5,6 +5,9 @@ from authlib.oauth2.rfc7591 import ClientMetadataClaims as OAuth2ClientMetadataC
 from authlib.oauth2.rfc7591 import (
     ClientRegistrationEndpoint as _ClientRegistrationEndpoint,
 )
+from authlib.oidc.backchannel import (
+    ClientMetadataClaims as BackchannelClientMetadataClaims,
+)
 from authlib.oidc.registration import ClientMetadataClaims as OIDCClientMetadataClaims
 from tests.util import read_file_path
 
@@ -45,7 +48,11 @@ def server(server, app, metadata):
 
     server.register_endpoint(
         MyClientRegistration(
-            claims_classes=[OAuth2ClientMetadataClaims, OIDCClientMetadataClaims]
+            claims_classes=[
+                OAuth2ClientMetadataClaims,
+                OIDCClientMetadataClaims,
+                BackchannelClientMetadataClaims,
+            ]
         )
     )
 
@@ -620,3 +627,34 @@ def test_redirect_uri(test_client):
     )
     resp = json.loads(rv.data)
     assert resp["error"] in "invalid_client_metadata"
+
+
+def test_backchannel_logout_uri(test_client, monkeypatch):
+    """An http backchannel_logout_uri is an invalid_client_metadata error for public clients."""
+    # Nominal case
+    body = {
+        "backchannel_logout_uri": "https://client.test/logout",
+        "token_endpoint_auth_method": "none",
+        "client_name": "Authlib",
+    }
+    rv = test_client.post(
+        "/create_client", json=body, headers={"Authorization": "bearer abc"}
+    )
+    resp = json.loads(rv.data)
+    assert "client_id" in resp
+    assert resp["backchannel_logout_uri"] == "https://client.test/logout"
+
+    # Error case
+    body = {
+        "backchannel_logout_uri": "http://client.test/logout",
+        "token_endpoint_auth_method": "none",
+        "client_name": "Authlib",
+    }
+    with monkeypatch.context() as m:
+        m.delenv("AUTHLIB_INSECURE_TRANSPORT")
+        rv = test_client.post(
+            "/create_client", json=body, headers={"Authorization": "bearer abc"}
+        )
+    assert rv.status_code == 400
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_client_metadata"

@@ -1,15 +1,14 @@
 import logging
-import warnings
 
 from joserfc import jwt
 
 from authlib._joserfc_helpers import import_any_key
+from authlib.deprecate import deprecate
 from authlib.oauth2.rfc6749 import AccessDeniedError
 from authlib.oauth2.rfc6749 import ImplicitGrant
 from authlib.oauth2.rfc6749 import InvalidScopeError
 from authlib.oauth2.rfc6749 import OAuth2Error
 from authlib.oauth2.rfc6749.errors import InvalidRequestError
-from authlib.oauth2.rfc6749.hooks import hooked
 
 from ._legacy import LegacyMixin
 from .util import create_half_hash
@@ -69,7 +68,7 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
 
     def validate_authorization_request(self):
         redirect_uri = super().validate_authorization_request()
-        if not is_openid_scope(self.request.payload.scope):
+        if not is_openid_scope(self.request.scope):
             raise InvalidScopeError(
                 "Missing 'openid' scope",
                 redirect_uri=redirect_uri,
@@ -83,7 +82,6 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
             raise error
         return redirect_uri
 
-    @hooked
     def validate_consent_request(self):
         redirect_uri = self.validate_authorization_request()
         validate_request_prompt(self, redirect_uri, redirect_fragment=True)
@@ -114,7 +112,7 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
         client = self.request.client
         token = self.generate_token(
             user=grant_user,
-            scope=self.request.payload.scope,
+            scope=self.request.scope,
             include_refresh_token=False,
         )
         if self.request.payload.response_type == "id_token":
@@ -173,11 +171,9 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
     def _compatible_resolve_jwt_config(self, grant, client):
         if not hasattr(self, "get_jwt_config"):
             return {}
-        warnings.warn(
+        deprecate(
             "get_jwt_config(self, client) is deprecated and will be removed in version 1.8. "
-            "Use resolve_client_private_key, get_client_claims, get_client_algorithm instead.",
-            DeprecationWarning,
-            stacklevel=2,
+            "Use resolve_client_private_key, get_client_claims, get_client_algorithm instead."
         )
         try:
             config = self.get_jwt_config(client)

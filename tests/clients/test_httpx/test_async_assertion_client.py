@@ -1,11 +1,15 @@
 import time
 
 import pytest
-from httpx import ASGITransport
+from httpx2 import ASGITransport
+from joserfc.jwk import OctKey
 
 from authlib.integrations.httpx_client import AsyncAssertionClient
+from tests.util import HMAC_SECRET
 
 from ..asgi_helper import AsyncMockDispatch
+
+hmac_key = OctKey.import_key(HMAC_SECRET)
 
 default_token = {
     "token_type": "Bearer",
@@ -30,7 +34,7 @@ async def test_refresh_token():
         subject="foo",
         audience="foo",
         alg="HS256",
-        key="secret",
+        key=hmac_key,
         transport=ASGITransport(AsyncMockDispatch(default_token, assert_func=verifier)),
     ) as client:
         await client.get("https://provider.test")
@@ -45,12 +49,35 @@ async def test_refresh_token():
         issued_at=now,
         expires_at=now + 3600,
         header={"alg": "HS256"},
-        key="secret",
+        key=hmac_key,
         scope="email",
         claims={"test_mode": "true"},
         transport=ASGITransport(AsyncMockDispatch(default_token, assert_func=verifier)),
     ) as client:
         await client.get("https://provider.test")
+        await client.get("https://provider.test")
+
+
+@pytest.mark.asyncio
+async def test_client_id():
+    """client_id is included in the token request body when provided."""
+
+    async def verifier(request):
+        if str(request.url) == "https://provider.test/token":
+            content = await request.body()
+            assert b"assertion=" in content
+            assert b"client_id=my-client" in content
+
+    async with AsyncAssertionClient(
+        "https://provider.test/token",
+        issuer="foo",
+        subject="foo",
+        audience="foo",
+        alg="HS256",
+        key=hmac_key,
+        client_id="my-client",
+        transport=ASGITransport(AsyncMockDispatch(default_token, assert_func=verifier)),
+    ) as client:
         await client.get("https://provider.test")
 
 
@@ -61,7 +88,7 @@ async def test_without_alg():
         issuer="foo",
         subject="foo",
         audience="foo",
-        key="secret",
+        key=hmac_key,
         transport=ASGITransport(AsyncMockDispatch()),
     ) as client:
         with pytest.raises(ValueError):

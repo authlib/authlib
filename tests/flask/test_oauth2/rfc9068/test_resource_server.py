@@ -7,6 +7,7 @@ from joserfc import jwt
 from joserfc.jwk import KeySet
 
 from authlib.common.security import generate_token
+from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.integrations.flask_oauth2 import ResourceProtector
 from authlib.integrations.flask_oauth2 import current_token
 from authlib.oauth2.rfc9068 import JWTBearerTokenValidator
@@ -129,7 +130,7 @@ def create_access_token_claims(client, user):
         "iss": issuer,
         "exp": expires_in,
         "aud": resource_server,
-        "sub": user.get_user_id(),
+        "sub": str(user.get_user_id()),
         "client_id": client.client_id,
         "iat": now,
         "jti": generate_token(16),
@@ -365,3 +366,18 @@ def test_invalid_amr(test_client, claims, jwks):
     rv = test_client.get("/protected", headers=headers)
     resp = json.loads(rv.data)
     assert resp["error"] == "invalid_token"
+
+
+def test_jwks_dict(access_token, user):
+    """A JWKS dict is still accepted by 'get_jwks' but deprecated."""
+
+    class DictJWTBearerTokenValidator(JWTBearerTokenValidator):
+        def get_jwks(self):
+            return read_file_path("jwks_private.json")
+
+    validator = DictJWTBearerTokenValidator(
+        issuer=issuer, resource_server=resource_server
+    )
+    with pytest.warns(AuthlibDeprecationWarning, match="KeySet.import_key_set"):
+        token = validator.authenticate_token(access_token)
+    assert token["sub"] == str(user.id)

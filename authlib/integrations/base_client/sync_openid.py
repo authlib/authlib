@@ -1,6 +1,7 @@
 from joserfc import jwt
 from joserfc.errors import InvalidKeyIdError
 from joserfc.jwk import KeySet
+from joserfc.jws import JWSRegistry
 
 from authlib.common.security import generate_token
 from authlib.common.urls import add_params_to_uri
@@ -39,7 +40,11 @@ class OpenIDMixin:
     def parse_id_token(
         self, token, nonce, claims_options=None, claims_cls=None, leeway=120
     ):
-        """Return an instance of UserInfo from token's ``id_token``."""
+        """Return UserInfo after validating the token's ``id_token``.
+
+        The expected ``nonce`` is controlled by the application. Token claims
+        such as ``nonce_supported`` cannot disable its validation.
+        """
         if "id_token" not in token:
             return None
 
@@ -66,21 +71,17 @@ class OpenIDMixin:
             token = jwt.decode(
                 token["id_token"],
                 key=key_set,
-                algorithms=alg_values,
+                registry=JWSRegistry(algorithms=alg_values, strict_check_header=False),
             )
         except InvalidKeyIdError:
             key_set = KeySet.import_key_set(self.fetch_jwk_set(force=True))
             token = jwt.decode(
                 token["id_token"],
                 key=key_set,
-                algorithms=alg_values,
+                registry=JWSRegistry(algorithms=alg_values, strict_check_header=False),
             )
 
         claims = claims_cls(token.claims, token.header, claims_options, claims_params)
-        # https://github.com/authlib/authlib/issues/259
-        if claims.get("nonce_supported") is False:
-            claims.params["nonce"] = None
-
         claims.validate(leeway=leeway)
         return UserInfo(claims)
 

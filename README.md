@@ -5,7 +5,7 @@
   <img alt="Authlib" src="docs/_static/light-logo.svg" height="68" />
 </picture>
 
-[![Build Status](https://github.com/authlib/authlib/workflows/tests/badge.svg)](https://github.com/authlib/authlib/actions)
+[![Build Status](https://github.com/authlib/authlib/actions/workflows/ci.yml/badge.svg)](https://github.com/authlib/authlib/actions)
 [![PyPI version](https://img.shields.io/pypi/v/authlib.svg)](https://pypi.org/project/authlib)
 [![conda-forge version](https://img.shields.io/conda/v/conda-forge/authlib.svg?label=conda-forge&colorB=0090ff)](https://anaconda.org/conda-forge/authlib)
 [![PyPI Downloads](https://static.pepy.tech/badge/authlib/month)](https://pepy.tech/projects/authlib)
@@ -61,6 +61,7 @@ Generic, spec-compliant implementation to build clients and providers:
   - [RFC9068: JSON Web Token (JWT) Profile for OAuth 2.0 Access Tokens](https://docs.authlib.org/en/stable/oauth2/specs/rfc9068.html)
   - [RFC9101: The OAuth 2.0 Authorization Framework: JWT-Secured Authorization Request (JAR)](https://docs.authlib.org/en/stable/oauth2/specs/rfc9101.html)
   - [RFC9207: OAuth 2.0 Authorization Server Issuer Identification](https://docs.authlib.org/en/stable/oauth2/specs/rfc9207.html)
+  - [RFC9728: OAuth 2.0 Protected Resource Metadata](https://docs.authlib.org/en/stable/oauth2/specs/rfc9728.html)
 - [Javascript Object Signing and Encryption](https://docs.authlib.org/en/stable/jose/index.html)
   - [RFC7515: JSON Web Signature](https://docs.authlib.org/en/stable/jose/jws.html)
   - [RFC7516: JSON Web Encryption](https://docs.authlib.org/en/stable/jose/jwe.html)
@@ -76,6 +77,7 @@ Generic, spec-compliant implementation to build clients and providers:
   - [x] OpenID Connect Discovery 1.0
   - [x] OpenID Connect Dynamic Client Registration 1.0
   - [x] [OpenID Connect RP-Initiated Logout 1.0](https://openid.net/specs/openid-connect-rpinitiated-1_0.html)
+  - [x] [OpenID Connect Back-Channel Logout 1.0](https://openid.net/specs/openid-connect-backchannel-1_0.html)
 
 Connect third party OAuth providers with Authlib built-in client integrations:
 

@@ -39,6 +39,11 @@ class ClientConfigurationEndpoint:
                 status_code=401, description="The client does not exist on this server."
             )
 
+        # The registration access token is only valid for the client it was
+        # issued to.
+        if not token.check_client(client):
+            raise AccessDeniedError()
+
         if not self.check_permission(client, request):
             # If the client does not have permission to read its record, the server
             # MUST return an HTTP 403 Forbidden.
@@ -146,24 +151,34 @@ class ClientConfigurationEndpoint:
         raise NotImplementedError()
 
     def authenticate_token(self, request):
-        """Authenticate current credential who is requesting to register a client.
+        """Authenticate the registration access token of the request.
         Developers MUST implement this method in subclass::
 
             def authenticate_token(self, request):
                 auth = request.headers.get("Authorization")
                 return get_token_by_auth(auth)
 
+        The token MUST implement
+        :meth:`~authlib.oauth2.rfc6749.TokenMixin.check_client`. Requests
+        are denied when the token was not issued to the requested client.
+
         :return: token instance
         """
         raise NotImplementedError()
 
     def authenticate_client(self, request):
-        """Read a client from the request payload.
+        """Read the client from the client configuration endpoint URL.
         Developers MUST implement this method in subclass::
 
+            from urllib.parse import urlparse
+
+
             def authenticate_client(self, request):
-                client_id = request.payload.data.get("client_id")
+                path = urlparse(request.uri).path
+                client_id = path.rstrip("/").rsplit("/", 1)[-1]
                 return Client.get(client_id=client_id)
+
+        The route parameter of the web framework can also be used.
 
         :return: client instance
         """

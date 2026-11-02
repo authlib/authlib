@@ -1,0 +1,4 @@
+Added
+~~~~~
+
+- Support Python 3.15.

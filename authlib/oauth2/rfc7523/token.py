@@ -48,7 +48,7 @@ class JWTBearerTokenGenerator:
         def get_sub_value(user):
             return str(user.id)
         """
-        return user.get_user_id()
+        return str(user.get_user_id())
 
     def get_token_data(self, grant_type, client, expires_in, user=None, scope=None):
         scope = self.get_allowed_scope(client, scope)

@@ -12,6 +12,7 @@ issues and finance.
     support
     security
     contribute
+    release
     awesome
     sustainable
     authors

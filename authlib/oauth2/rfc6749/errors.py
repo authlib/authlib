@@ -25,7 +25,7 @@ REQUIRED if a "state" parameter was present in the client
 authorization request.  The exact value received from the
 client.
 
-https://tools.ietf.org/html/rfc6749#section-5.2
+:rfc:`6749#section-5.2`
 
 :copyright: (c) 2017 by Hsiaoming Yang.
 
@@ -72,7 +72,7 @@ class InvalidRequestError(OAuth2Error):
     utilizes more than one mechanism for authenticating the
     client, or is otherwise malformed.
 
-    https://tools.ietf.org/html/rfc6749#section-5.2
+    :rfc:`6749#section-5.2`
     """
 
     error = "invalid_request"
@@ -90,7 +90,7 @@ class InvalidClientError(OAuth2Error):
     include the "WWW-Authenticate" response header field
     matching the authentication scheme used by the client.
 
-    https://tools.ietf.org/html/rfc6749#section-5.2
+    :rfc:`6749#section-5.2`
     """
 
     error = "invalid_client"
@@ -117,7 +117,7 @@ class InvalidGrantError(OAuth2Error):
     URI used in the authorization request, or was issued to
     another client.
 
-    https://tools.ietf.org/html/rfc6749#section-5.2
+    :rfc:`6749#section-5.2`
     """
 
     error = "invalid_grant"
@@ -127,7 +127,7 @@ class UnauthorizedClientError(OAuth2Error):
     """The authenticated client is not authorized to use this
     authorization grant type.
 
-    https://tools.ietf.org/html/rfc6749#section-5.2
+    :rfc:`6749#section-5.2`
     """
 
     error = "unauthorized_client"
@@ -152,7 +152,7 @@ class UnsupportedGrantTypeError(OAuth2Error):
     """The authorization grant type is not supported by the
     authorization server.
 
-    https://tools.ietf.org/html/rfc6749#section-5.2
+    :rfc:`6749#section-5.2`
     """
 
     error = "unsupported_grant_type"
@@ -169,7 +169,7 @@ class InvalidScopeError(OAuth2Error):
     """The requested scope is invalid, unknown, malformed, or
     exceeds the scope granted by the resource owner.
 
-    https://tools.ietf.org/html/rfc6749#section-5.2
+    :rfc:`6749#section-5.2`
     """
 
     error = "invalid_scope"
@@ -180,9 +180,7 @@ class AccessDeniedError(OAuth2Error):
     """The resource owner or authorization server denied the request.
 
     Used in authorization endpoint for "code" and "implicit". Defined in
-    `Section 4.1.2.1`_.
-
-    .. _`Section 4.1.2.1`: https://tools.ietf.org/html/rfc6749#section-4.1.2.1
+    :rfc:`6749#section-4.1.2.1`.
     """
 
     error = "access_denied"

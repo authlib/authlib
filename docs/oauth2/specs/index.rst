@@ -8,6 +8,7 @@ Specifications
     rfc6750
     rfc7009
     rfc7523
+    id-jag
     rfc7591
     rfc7592
     rfc7636
@@ -17,5 +18,7 @@ Specifications
     rfc9068
     rfc9101
     rfc9207
+    rfc9728
     oidc
     rpinitiated
+    backchannel

@@ -3,7 +3,7 @@
 RFC7592: OAuth 2.0 Dynamic Client Registration Management Protocol
 ==================================================================
 
-This section contains the generic implementation of RFC7592_. OAuth 2.0 Dynamic
+This section contains the generic implementation of :rfc:`7592`. OAuth 2.0 Dynamic
 Client Registration Management Protocol allows developers edit and delete OAuth
 client via API through Authorization Server. This specification is an extension
 of :ref:`specs/rfc7591`.
@@ -15,12 +15,18 @@ of :ref:`specs/rfc7591`.
 
 .. module:: authlib.oauth2.rfc7592
 
-.. _RFC7592: https://tools.ietf.org/html/rfc7592
-
 Client Configuration Endpoint
 -----------------------------
 
+The endpoint URL identifies the client, for instance
+``/oauth/register/<client_id>``. The registration access token returned by the
+:ref:`specs/rfc7591` registration endpoint is only valid for this client. The
+endpoint calls :meth:`~authlib.oauth2.rfc6749.TokenMixin.check_client` on the
+token, and denies the request when the token was issued to another client.
+
 Before register the endpoint, developers MUST implement the missing methods::
+
+    from urllib.parse import urlparse
 
     from authlib.oauth2.rfc7592 import ClientConfigurationEndpoint
 
@@ -35,7 +41,11 @@ Before register the endpoint, developers MUST implement the missing methods::
             return token
 
         def authenticate_client(self, request):
-            client_id = request.payload.data.get('client_id')
+            # read the client_id from the endpoint URL, not from the body:
+            # GET and DELETE requests have no body.
+            # The route parameter of the web framework can also be used.
+            path = urlparse(request.uri).path
+            client_id = path.rstrip('/').rsplit('/', 1)[-1]
             return Client.get(client_id=client_id)
 
         def revoke_access_token(self, token, request):
@@ -48,13 +58,8 @@ Before register the endpoint, developers MUST implement the missing methods::
         def delete_client(self, client, request):
             client.delete()
 
-        def save_client(self, client_info, client_metadata, request):
-            client = OAuthClient(
-                user_id=request.credential.user_id,
-                client_id=client_info['client_id'],
-                client_secret=client_info['client_secret'],
-                **client_metadata,
-            )
+        def update_client(self, client, client_metadata, request):
+            client.set_client_metadata(client_metadata)
             client.save()
             return client
 

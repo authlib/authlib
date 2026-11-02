@@ -9,10 +9,70 @@ RFC8628: OAuth 2.0 Device Authorization Grant
 
 .. module:: authlib.oauth2.rfc8628
 
-This section contains the generic implementation of RFC8628_. OAuth 2.0 Device
+This section contains the generic implementation of :rfc:`8628`. OAuth 2.0 Device
 Authorization Grant is usually used when devices have limited input capabilities
 or lack a suitable browser, such as smart TVs, media consoles, picture frames,
 printers and etc.
+
+The device and the user act in parallel. The device polls the token
+endpoint, while the user approves the request in a browser on another device:
+
+.. mermaid::
+
+    sequenceDiagram
+        autonumber
+        participant Device as Client (device)
+        participant User as User's browser<br/>(User Agent)
+        participant AS as Authorization Server
+        participant RS as Resource Server
+
+        Device->>AS: POST /device_authorization
+        AS-->>Device: 200 OK + device_code, user_code
+        Note over Device: Shows user_code<br/>and verification_uri
+        par Device polls
+            loop Every interval seconds
+                Device->>AS: POST /token (device_code)
+                AS-->>Device: 400 authorization_pending
+            end
+        and User approves
+            User->>AS: GET /active
+            AS-->>User: 200 OK + form
+            Note over User,AS: The user logs in<br/>and enters user_code
+            User->>AS: POST /active (user_code, allowed)
+            AS-->>User: 200 OK
+        end
+        Device->>AS: POST /token (device_code)
+        AS-->>Device: 200 OK + access token
+        Device->>RS: GET /api (bearer token)
+        RS-->>Device: 200 OK + resource
+
+1. The device requests a device code. :class:`DeviceAuthorizationEndpoint`
+   handles this request.
+2. The response contains ``device_code``, ``user_code``,
+   ``verification_uri``, ``verification_uri_complete``, ``expires_in`` and
+   ``interval``. The device shows ``user_code`` and ``verification_uri`` to
+   the user.
+3. The device sends
+   ``grant_type=urn:ietf:params:oauth:grant-type:device_code`` and the
+   ``device_code``. :class:`DeviceCodeGrant` handles this request.
+4. While the user has not answered, the response is
+   ``authorization_pending``. It is ``slow_down`` if the device polls too
+   often, ``expired_token`` if the code has expired, and ``access_denied``
+   if the user refused.
+5. The user opens ``verification_uri`` in a browser. The application
+   implements this endpoint.
+6. The user logs in. The verification endpoint shows a form to enter
+   ``user_code``.
+7. The user submits ``user_code`` and approves or denies the request.
+8. The verification endpoint saves the user decision.
+9. The device polls again.
+10. The user has approved: the response contains the access token.
+11. The device calls the API of the Resource Server with the access token,
+    in the ``Authorization: Bearer`` header.
+12. The Resource Server returns the protected resource.
+
+The ``/device_authorization``, ``/active``, ``/token`` and ``/api`` paths are
+examples.
 
 To integrate with Authlib :ref:`flask_oauth2_server` or :ref:`django_oauth2_server`,
 developers MUST implement the missing methods of the two classes:
@@ -70,10 +130,10 @@ But first, we need to implement the missing methods::
 
             user_id, allowed = data.split()
             user = User.query.get(user_id)
-            return user, bool(allowed)
+            return user, allowed == '1'
 
-        def should_slow_down(self, credential, now):
-            # developers can return True/False based on credential and now
+        def should_slow_down(self, credential):
+            # developers can return True/False based on credential
             return False
 
     authorization_server.register_grant(MyDeviceCodeGrant)
@@ -93,10 +153,10 @@ how to implement this endpoint::
         if request.method == 'GET':
             return render_template('verification.html')
 
-        allowed = request.form['allowed']
+        allowed = request.form['allowed'] == 'yes'
         user_code = request.form['user_code']
         key = 'oauth_user_grant:' + user_code
-        redis.set(key, f'{current_user.id} {allowed}', 12)
+        redis.set(key, f'{current_user.id} {int(allowed)}', 12)
         return render_template('verification.html')
 
 Check points:
@@ -104,8 +164,6 @@ Check points:
 1. route should match ``get_verification_uri`` in Device Authorization Endpoint
 2. user grant should match ``query_user_grant`` in Device Code Grant
 
-
-.. _RFC8628: https://tools.ietf.org/html/rfc8628
 
 
 API Reference

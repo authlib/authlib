@@ -5,10 +5,8 @@ RFC7638: JSON Web Key (JWK) Thumbprint
 
 .. automodule:: authlib.jose
 
-This RFC7638_ is used for computing a hash value over a JSON Web Key (JWK).
+This :rfc:`7638` is used for computing a hash value over a JSON Web Key (JWK).
 The value can be used as an identity of the JWK.
-
-.. _RFC7638: https://tools.ietf.org/html/rfc7638
 
 The ``.thumbprint`` method is defined on the ``Key`` class, you can use it
 directly::

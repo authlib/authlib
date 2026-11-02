@@ -4,6 +4,7 @@ from joserfc import jwt
 from joserfc.jwk import KeySet
 from joserfc.jwk import RSAKey
 
+from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.oauth2.rfc7591 import (
     ClientRegistrationEndpoint as _ClientRegistrationEndpoint,
 )
@@ -23,7 +24,7 @@ class ClientRegistrationEndpoint(_ClientRegistrationEndpoint):
             return auth_header
 
     def resolve_public_key(self, request):
-        return read_file_path("rsa_public.pem")
+        return RSAKey.import_key(read_file_path("rsa_public.pem"))
 
     def save_client(self, client_info, client_metadata, request):
         client = Client(user_id=request.user_id, **client_info)
@@ -87,6 +88,32 @@ def test_software_statement(test_client):
     rv = test_client.post("/create_client", json=body, headers=headers)
     resp = json.loads(rv.data)
     assert "client_id" in resp
+    assert resp["client_name"] == "Authlib"
+
+
+@pytest.mark.filterwarnings(
+    "ignore:Using implicit key type is not recommended:joserfc.errors.SecurityWarning"
+)
+def test_software_statement_raw_public_key(test_client, server):
+    """A raw PEM public key is still accepted but deprecated."""
+
+    class RawKeyClientRegistrationEndpoint(ClientRegistrationEndpoint):
+        def get_server_metadata(self):
+            return {}
+
+        def resolve_public_key(self, request):
+            return read_file_path("rsa_public.pem")
+
+    server._endpoints[ClientRegistrationEndpoint.ENDPOINT_NAME] = [
+        RawKeyClientRegistrationEndpoint(server)
+    ]
+    payload = {"software_id": "uuid-123", "client_name": "Authlib"}
+    key = RSAKey.import_key(read_file_path("rsa_private.pem"))
+    body = {"software_statement": jwt.encode({"alg": "RS256"}, payload, key)}
+    headers = {"Authorization": "bearer abc"}
+    with pytest.warns(AuthlibDeprecationWarning, match="Please use OctKey"):
+        rv = test_client.post("/create_client", json=body, headers=headers)
+    resp = json.loads(rv.data)
     assert resp["client_name"] == "Authlib"
 
 
