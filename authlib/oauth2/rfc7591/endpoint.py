@@ -10,8 +10,9 @@ from authlib.common.security import generate_token
 from authlib.consts import default_json_headers
 from authlib.deprecate import deprecate
 
-from ..rfc6749 import AccessDeniedError
 from ..rfc6749 import InvalidRequestError
+from ..rfc6749 import MissingAuthorizationError
+from ..rfc6750 import InvalidTokenError
 from .claims import ClientMetadataClaims
 from .errors import InvalidClientMetadataError
 from .errors import InvalidSoftwareStatementError
@@ -39,7 +40,11 @@ class ClientRegistrationEndpoint:
     def create_registration_response(self, request):
         token = self.authenticate_token(request)
         if not token:
-            raise AccessDeniedError()
+            # Per RFC 6750 §3.1, a request without authentication information
+            # gets no error code.
+            if not request.headers.get("Authorization"):
+                raise MissingAuthorizationError()
+            raise InvalidTokenError()
 
         request.credential = token
 
@@ -162,7 +167,11 @@ class ClientRegistrationEndpoint:
                 auth = request.headers.get("Authorization")
                 return get_token_by_auth(auth)
 
-        :return: token instance
+        For open registration, return a truthy value for requests without
+        token. When it returns ``None``, the endpoint responds with HTTP 401,
+        per :rfc:`7591#section-3.2.2` and :rfc:`6750#section-3`.
+
+        :return: token instance, or ``None`` if the request is not allowed
         """
         raise NotImplementedError()
 
