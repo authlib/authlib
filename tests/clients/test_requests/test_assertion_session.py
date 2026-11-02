@@ -107,7 +107,8 @@ def test_assertion_includes_default_jti(token):
     assert len(claims["jti"]) == 36
 
 
-def test_assertion_jti_is_unique_per_refresh(token):
+@pytest.mark.parametrize("claims", [None, {"test_mode": "true"}])
+def test_assertion_jti_is_unique_per_refresh(token, claims):
     """Verify that each token refresh generates a new unique jti."""
     assertions = []
 
@@ -131,6 +132,7 @@ def test_assertion_jti_is_unique_per_refresh(token):
         audience="foo",
         alg="HS256",
         key=hmac_key,
+        claims=claims,
     )
     sess.send = verifier
     sess.get("https://provider.test")

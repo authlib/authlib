@@ -50,10 +50,10 @@ class OpenIDHybridGrant(OpenIDImplicitGrant):
 
     def validate_authorization_request(self):
         self.register_hook(
-            "after_validate_authorization_request_payload",
             lambda grant, redirect_uri: validate_nonce(
                 grant.request, grant.exists_nonce, required=True
             ),
+            after=self.validate_authorization_request_payload,
         )
         redirect_uri = validate_code_authorization_request(self)
         if not is_openid_scope(self.request.scope):

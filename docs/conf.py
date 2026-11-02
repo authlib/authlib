@@ -52,6 +52,8 @@ intersphinx_mapping = {
 }
 html_favicon = "_static/icon.svg"
 html_theme_options = {
+    "carbon_ads_code": "CE7DKK3W",
+    "carbon_ads_placement": "authliborg",
     "accent_color": "blue",
     "globaltoc_expand_depth": 1,
     "og_image_url": "https://authlib.org/logo.png",

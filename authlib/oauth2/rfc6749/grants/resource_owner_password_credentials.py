@@ -2,7 +2,6 @@ import logging
 
 from ..errors import InvalidRequestError
 from ..errors import UnauthorizedClientError
-from ..hooks import hooked
 from .base import BaseGrant
 from .base import TokenEndpointMixin
 
@@ -109,7 +108,6 @@ class ResourceOwnerPasswordCredentialsGrant(BaseGrant, TokenEndpointMixin):
         self.request.user = user
         self.validate_requested_scope()
 
-    @hooked
     def create_token_response(self):
         """If the access token request is valid and authorized, the
         authorization server issues an access token and optional refresh

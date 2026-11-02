@@ -8,6 +8,21 @@ Here you can see the full list of changes between each Authlib release.
 
 .. scriv-insert-here
 
+.. _changelog-1.9.2:
+
+Version 1.9.2 — 2026-11-01
+--------------------------
+
+Security
+~~~~~~~~
+
+- ``IDJAGGrant`` limits the access token to the scopes in the ``scope`` claim
+  of the ID-JAG. A client used to get any scope allowed by its registration,
+  even when the IdP granted fewer scopes. Without a ``scope`` request
+  parameter, the access token now gets the scopes of the claim instead of no
+  scope.
+  `GHSA-f3fg-34g9-v7jx <https://github.com/authlib/authlib/security/advisories/GHSA-f3fg-34g9-v7jx>`_
+
 .. _changelog-1.9.1:
 
 Version 1.9.1 — 2026-10-14

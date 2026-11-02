@@ -4,6 +4,7 @@ from joserfc import jwt
 from joserfc.jwk import OctKey
 
 from authlib.common.urls import url_decode
+from authlib.common.urls import url_encode
 from authlib.common.urls import urlparse
 from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.oauth2.rfc6749.grants import (
@@ -14,6 +15,7 @@ from authlib.oauth2.rfc6749.requests import OAuth2Request
 from authlib.oidc.core import HybridIDToken
 from authlib.oidc.core.grants import OpenIDCode as _OpenIDCode
 from authlib.oidc.core.grants import OpenIDHybridGrant as _OpenIDHybridGrant
+from authlib.oidc.prompt_create import PromptCreate
 from tests.util import HMAC_SECRET
 
 from .models import AuthorizationCode
@@ -92,6 +94,24 @@ def create_hybrid_request(client, user):
     request.client = client
     request.user = user
     return request
+
+
+def test_prompt_create(test_client, server):
+    """PromptCreate sets the grant prompt to 'create' in the hybrid flow."""
+    server.register_extension(PromptCreate())
+    query = url_encode(
+        [
+            ("response_type", "code id_token"),
+            ("client_id", "client-id"),
+            ("scope", "openid profile"),
+            ("state", "bar"),
+            ("nonce", "abc"),
+            ("redirect_uri", "https://client.test"),
+            ("prompt", "create"),
+        ]
+    )
+    rv = test_client.get("/oauth/authorize?" + query)
+    assert rv.data == b"create"
 
 
 def test_invalid_client_id(test_client):

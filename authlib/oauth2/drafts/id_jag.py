@@ -32,6 +32,7 @@ from authlib.common.security import generate_token
 from ..rfc6749 import BaseGrant
 from ..rfc6749 import InvalidGrantError
 from ..rfc6749 import InvalidRequestError
+from ..rfc6749 import InvalidScopeError
 from ..rfc6749 import TokenEndpointMixin
 from ..rfc6749 import UnauthorizedClientError
 from ..rfc6749 import scope_to_list
@@ -182,6 +183,7 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
         self.request.client = client
         log.debug("Validate token request of %s", client)
         self.validate_requested_scope()
+        self.request.scope = self._resolve_scope(claims)
 
         # Authenticate user from sub claim (required by ID-JAG).
         user = self.authenticate_user(claims["sub"])
@@ -189,7 +191,7 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
             raise InvalidGrantError(description="Invalid 'sub' value in assertion")
 
         # Application policy check.
-        scopes = scope_to_list(self.request.payload.scope) or []
+        scopes = scope_to_list(self.request.scope) or []
         if not self.check_id_jag_permission(client, user, scopes):
             raise InvalidGrantError(
                 description=(
@@ -203,7 +205,7 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
     def create_token_response(self):
         """Issue an access token (no refresh token per the ID-JAG draft)."""
         token = self.generate_token(
-            scope=self.request.payload.scope,
+            scope=self.request.scope,
             user=self.request.user,
             include_refresh_token=False,
         )
@@ -226,6 +228,9 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
                 description="Missing required 'iss' claim in assertion"
             )
 
+        if not isinstance(issuer, str):
+            raise InvalidGrantError(description="Invalid 'iss' claim in assertion")
+
         key = import_any_key(self.resolve_issuer_key(issuer, headers))
 
         try:
@@ -241,6 +246,31 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
 
         return token.claims
 
+    def _resolve_scope(self, claims):
+        """Return the scope of the access token.
+
+        The scope is bounded by the scope claim of the assertion, and
+        defaults to it. Without that claim, the requested scope is used.
+        """
+        requested = self.request.payload.scope
+        if "scope" not in claims:
+            return requested
+
+        granted = claims["scope"]
+        if not isinstance(granted, str):
+            raise InvalidGrantError(description="Invalid 'scope' claim in assertion")
+
+        if not requested:
+            return granted
+
+        # RFC 7521 §4.1: "the requested scope MUST be equal to or less than
+        # the scope originally granted to the authorized accessor."
+        if not set(scope_to_list(requested)).issubset(scope_to_list(granted)):
+            raise InvalidScopeError(
+                description="The requested scope exceeds the 'scope' claim in assertion"
+            )
+        return requested
+
     def _extract_assertion(self, assertion: str):
         try:
             obj = jws.extract_compact(to_bytes(assertion))
@@ -251,6 +281,10 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
             claims = json_loads(obj.payload)
         except ValueError:
             raise InvalidGrantError(description="Invalid JWT payload.") from None
+
+        if not isinstance(claims, dict):
+            raise InvalidGrantError(description="Invalid JWT payload.")
+
         return obj.headers(), claims
 
     def _validate_typ_header(self, headers):
@@ -264,7 +298,12 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
 
     def _verify_claims(self, claims: jwt.Claims):
         options = dict(self.CLAIMS_OPTIONS)
-        options["aud"] = {"essential": True, "values": self.get_audiences()}
+        audiences = self.get_audiences()
+        if not audiences:
+            raise InvalidGrantError(
+                description="No audience identifiers configured for this authorization server."
+            )
+        options["aud"] = {"essential": True, "values": audiences}
 
         claims_requests = jwt.JWTClaimsRegistry(leeway=self.LEEWAY, **options)
         try:
@@ -288,7 +327,8 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
 
         Per the ID-JAG draft, ``aud`` is the issuer identifier of the
         Resource Authorization Server. The returned list must be non-empty; ``aud`` validation is
-        mandatory for ID-JAG assertions.
+        mandatory for ID-JAG assertions. If the list is empty, the assertion is
+        rejected with an ``invalid_grant`` error.
         """
         raise NotImplementedError()
 

@@ -22,3 +22,4 @@ Specifications
     oidc
     rpinitiated
     backchannel
+    prompt-create
