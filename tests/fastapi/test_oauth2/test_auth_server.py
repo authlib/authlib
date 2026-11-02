@@ -1,5 +1,8 @@
 import json
+from unittest.mock import AsyncMock
+from unittest.mock import MagicMock
 from unittest.mock import Mock
+from unittest.mock import patch
 
 import pytest
 from fastapi import FastAPI
@@ -428,3 +431,193 @@ def test_non_dict_config_uses_default_expirations(config):
     generator = create_token_expires_in_generator(config)
 
     assert generator(None, "unknown_grant") == (BearerTokenGenerator.DEFAULT_EXPIRES_IN)
+
+
+@pytest.fixture
+def oauth2_request():
+    return OAuth2Request(
+        "GET",
+        "https://example.com",
+        {},
+        {},
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_oauth2_request_returns_existing_request(server, oauth2_request):
+    with patch(
+        "authlib.integrations.fastapi_oauth2.authorization_server."
+        "_create_oauth2_request"
+    ) as create_request:
+        result = await server.create_oauth2_request(oauth2_request)
+
+    assert result is oauth2_request
+    create_request.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_json_request_returns_existing_request(server, oauth2_request):
+    with patch(
+        "authlib.integrations.fastapi_oauth2.authorization_server._create_json_request"
+    ) as create_request:
+        result = await server.create_json_request(oauth2_request)
+
+    assert result is oauth2_request
+    create_request.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_parse_request_form_encoded(server):
+    request = Mock()
+    request.headers = {"content-type": "application/x-www-form-urlencoded"}
+    server.create_oauth2_request = AsyncMock(return_value="oauth-request")
+
+    result = await server._parse_request(request)
+
+    assert result == "oauth-request"
+    server.create_oauth2_request.assert_awaited_once_with(request)
+
+
+@pytest.mark.asyncio
+async def test_create_authorization_response_without_request(server):
+    with pytest.raises(TypeError, match="requires the FastAPI/Starlette"):
+        await server.create_authorization_response()
+
+
+@pytest.mark.asyncio
+async def test_create_token_response_without_request(server):
+    with pytest.raises(TypeError, match="requires the FastAPI/Starlette"):
+        await server.create_token_response()
+
+
+@pytest.mark.asyncio
+async def test_create_authorization_response_with_parsed_request(
+    server, oauth2_request
+):
+    grant_user = object()
+    expected = Mock()
+
+    with patch.object(
+        AuthorizationServer,
+        "create_authorization_response",
+        return_value=expected,
+    ) as create_response:
+        result = await server.create_authorization_response(
+            oauth2_request,
+            grant_user=grant_user,
+        )
+
+    assert result is expected
+    create_response.assert_called_once_with(
+        oauth2_request,
+        grant_user=grant_user,
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_token_response_with_parsed_request(server, oauth2_request):
+    expected = Mock()
+
+    with patch.object(
+        AuthorizationServer,
+        "create_token_response",
+        return_value=expected,
+    ) as create_response:
+        result = await server.create_token_response(oauth2_request)
+
+    assert result is expected
+    create_response.assert_called_once_with(oauth2_request)
+
+
+@pytest.mark.parametrize(
+    "signal_name, signal_path",
+    [
+        # Update the path to point directly to the module containing the signals,
+        # removing the extra '.authorization' attribute segment.
+        (
+            "after_authenticate_client",
+            "authlib.integrations.fastapi_oauth2.authorization_server.client_authenticated",
+        ),
+        (
+            "after_revoke_token",
+            "authlib.integrations.fastapi_oauth2.authorization_server.token_revoked",
+        ),
+    ],
+)
+def test_send_signal(server, signal_name, signal_path):
+    with patch(f"{signal_path}.send") as mock_send:
+        server.send_signal(signal_name, user="test_user", token="abc123xyz")
+
+        # Verify the underlying signal's .send method was called with the server instance and kwargs
+        mock_send.assert_called_once_with(server, user="test_user", token="abc123xyz")
+
+
+def test_send_signal_unknown_name(server):
+    with (
+        patch(
+            "authlib.integrations.fastapi_oauth2.authorization_server.client_authenticated.send"
+        ) as mock_client_auth,
+        patch(
+            "authlib.integrations.fastapi_oauth2.authorization_server.token_revoked.send"
+        ) as mock_token_revoked,
+    ):
+        # Calling with an unknown signal name should execute safely without raising errors
+        server.send_signal("unknown_signal_name", user="test_user")
+
+        # Ensure neither of the known signals were triggered
+        mock_client_auth.assert_not_called()
+        mock_token_revoked.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_authorization_response_branch_coverage(server):
+
+    raw_request = MagicMock()
+    parsed_req = OAuth2Request("GET", "https://example.com/authorize", {}, {})
+    server._parse_request = AsyncMock(return_value=parsed_req)
+
+    with patch(
+        "authlib.oauth2.AuthorizationServer.create_authorization_response",
+        new_callable=AsyncMock,
+    ) as _:
+        await server.create_authorization_response(
+            request=raw_request, grant_user=MagicMock()
+        )
+        server._parse_request.assert_awaited_once_with(raw_request)
+
+    valid_oauth_req = OAuth2Request("GET", "https://example.com/authorize", {}, {})
+    server._parse_request.reset_mock()
+
+    with patch(
+        "authlib.oauth2.AuthorizationServer.create_authorization_response",
+        new_callable=AsyncMock,
+    ) as _:
+        await server.create_authorization_response(
+            request=valid_oauth_req, grant_user=MagicMock()
+        )
+        server._parse_request.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_create_token_response_branch_coverage(server):
+
+    raw_request = MagicMock()
+    parsed_req = OAuth2Request("POST", "https://example.com/token", {}, {})
+    server._parse_request = AsyncMock(return_value=parsed_req)
+
+    with patch(
+        "authlib.oauth2.AuthorizationServer.create_token_response",
+        new_callable=AsyncMock,
+    ) as _:
+        await server.create_token_response(request=raw_request)
+        server._parse_request.assert_awaited_once_with(raw_request)
+
+    valid_oauth_req = OAuth2Request("POST", "https://example.com/token", {}, {})
+    server._parse_request.reset_mock()
+
+    with patch(
+        "authlib.oauth2.AuthorizationServer.create_token_response",
+        new_callable=AsyncMock,
+    ) as _:
+        await server.create_token_response(request=valid_oauth_req)
+        server._parse_request.assert_not_awaited()
