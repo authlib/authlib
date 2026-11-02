@@ -9,7 +9,6 @@ from authlib.oauth2.rfc6749 import ImplicitGrant
 from authlib.oauth2.rfc6749 import InvalidScopeError
 from authlib.oauth2.rfc6749 import OAuth2Error
 from authlib.oauth2.rfc6749.errors import InvalidRequestError
-from authlib.oauth2.rfc6749.hooks import hooked
 
 from ._legacy import LegacyMixin
 from .util import create_half_hash
@@ -83,7 +82,6 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
             raise error
         return redirect_uri
 
-    @hooked
     def validate_consent_request(self):
         redirect_uri = self.validate_authorization_request()
         validate_request_prompt(self, redirect_uri, redirect_fragment=True)

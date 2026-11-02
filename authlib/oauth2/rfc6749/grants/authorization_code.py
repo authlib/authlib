@@ -7,10 +7,8 @@ from ..errors import AccessDeniedError
 from ..errors import InvalidClientError
 from ..errors import InvalidGrantError
 from ..errors import InvalidRequestError
-from ..errors import InvalidScopeError
 from ..errors import OAuth2Error
 from ..errors import UnauthorizedClientError
-from ..hooks import hooked
 from .base import AuthorizationEndpointMixin
 from .base import BaseGrant
 from .base import TokenEndpointMixin
@@ -162,7 +160,6 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
         headers = [("Location", uri)]
         return 302, "", headers
 
-    @hooked
     def validate_token_request(self):
         """The client makes a request to the token endpoint by sending the
         following parameters using the "application/x-www-form-urlencoded"
@@ -235,7 +232,6 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
         self.request.client = client
         self.request.authorization_code = authorization_code
 
-    @hooked
     def create_token_response(self):
         """If the access token request is valid and authorized, the
         authorization server issues an access token and optional refresh
@@ -376,16 +372,8 @@ def validate_code_authorization_request(grant):
 
     grant.request.client = client
 
-    @hooked
-    def validate_authorization_request_payload(grant, redirect_uri):
-        grant.validate_requested_scope()
-        scope = client.get_allowed_scope(request.payload.scope)
-        if scope is None:
-            raise InvalidScopeError()
-        request.scope = scope
-
     try:
-        validate_authorization_request_payload(grant, redirect_uri)
+        grant.validate_authorization_request_payload(redirect_uri)
     except OAuth2Error as error:
         error.redirect_uri = redirect_uri
         raise error

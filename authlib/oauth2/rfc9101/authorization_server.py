@@ -73,7 +73,8 @@ class JWTAuthenticationRequest:
 
     def __call__(self, authorization_server: AuthorizationServer):
         authorization_server.register_hook(
-            "before_get_authorization_grant", self.parse_authorization_request
+            self.parse_authorization_request,
+            before=AuthorizationServer.get_authorization_grant,
         )
 
     def get_request_object_signing_algorithms(self, client):

@@ -1,4 +1,5 @@
 from authlib.common.errors import ContinueIteration
+from authlib.common.hooks import Hookable
 from authlib.deprecate import deprecate
 
 from .authenticate_client import ClientAuthentication
@@ -8,8 +9,6 @@ from .errors import InvalidScopeError
 from .errors import OAuth2Error
 from .errors import UnsupportedGrantTypeError
 from .errors import UnsupportedResponseTypeError
-from .hooks import Hookable
-from .hooks import hooked
 from .requests import JsonRequest
 from .requests import OAuth2Request
 from .util import scope_to_list
@@ -232,7 +231,6 @@ class AuthorizationServer(Hookable):
         endpoints = self._endpoints.setdefault(endpoint.ENDPOINT_NAME, [])
         endpoints.append(endpoint)
 
-    @hooked
     def get_authorization_grant(self, request):
         """Find the authorization grant for current request.
 
@@ -358,7 +356,6 @@ class AuthorizationServer(Hookable):
             except OAuth2Error as error:
                 return self.handle_error_response(request, error)
 
-    @hooked
     def create_authorization_response(self, request=None, grant_user=None, grant=None):
         """Validate authorization request and create authorization response.
 
