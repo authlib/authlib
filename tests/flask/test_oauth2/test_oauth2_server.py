@@ -94,13 +94,15 @@ def test_invalid_token(test_client, token):
     rv = test_client.get("/user")
     assert rv.status_code == 401
     resp = json.loads(rv.data)
-    assert resp["error"] == "missing_authorization"
+    assert "error" not in resp
+    assert rv.headers["WWW-Authenticate"] == "Bearer"
 
     headers = {"Authorization": "invalid token"}
     rv = test_client.get("/user", headers=headers)
     assert rv.status_code == 401
     resp = json.loads(rv.data)
-    assert resp["error"] == "unsupported_token_type"
+    assert "error" not in resp
+    assert rv.headers["WWW-Authenticate"] == "Bearer"
 
     headers = create_bearer_header("invalid")
     rv = test_client.get("/user", headers=headers)
@@ -175,3 +177,21 @@ def test_optional_token(test_client, token):
     assert rv.status_code == 200
     resp = json.loads(rv.data)
     assert resp["username"] == "foo"
+
+
+def test_optional_token_unsupported_scheme(test_client):
+    """An unsupported authentication scheme is treated as no token."""
+    headers = {"Authorization": "Basic Zm9vOmJhcg=="}
+    rv = test_client.get("/optional", headers=headers)
+    assert rv.status_code == 200
+    resp = json.loads(rv.data)
+    assert resp["username"] == "anonymous"
+
+
+def test_authorization_header_without_token(test_client):
+    """An Authorization header without token gets no error code."""
+    rv = test_client.get("/user", headers={"Authorization": "Bearer"})
+    assert rv.status_code == 401
+    resp = json.loads(rv.data)
+    assert "error" not in resp
+    assert rv.headers["WWW-Authenticate"] == "Bearer"
