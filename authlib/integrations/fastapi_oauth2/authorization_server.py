@@ -80,9 +80,7 @@ class AuthorizationServer(_AuthorizationServer):
         if not isinstance(request, OAuth2Request):
             request = await self._parse_request(request)
 
-        return super().create_authorization_response(
-            request, grant_user=grant_user
-        )
+        return super().create_authorization_response(request, grant_user=grant_user)
 
     async def create_token_response(self, request=None):
         if request is None:
@@ -144,8 +142,7 @@ class AuthorizationServer(_AuthorizationServer):
         if isinstance(request, OAuth2Request):
             return request
         raise TypeError(
-            "Expected an OAuth2Request. "
-            "Use the asynchronous request parsing methods."
+            "Expected an OAuth2Request.Use the asynchronous request parsing methods."
         )
 
 

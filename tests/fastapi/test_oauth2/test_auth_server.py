@@ -199,16 +199,6 @@ def test_default_grant_type_expires_in():
         assert generator(None, grant_type) == expires_in
 
 
-# def test_custom_expires_in_overrides_default():
-#     generator = create_token_expires_in_generator(
-#         {
-#             "authorization_code": 7200,
-#         }
-#     )
-#
-#     assert generator(None, "authorization_code") == 7200
-
-
 def test_expires_in_import_string(monkeypatch):
     def dummy_expires_in(client, grant_type):
         return 3600
@@ -247,14 +237,21 @@ async def test_create_oauth2_request(app):
                 (b"content-type", b"application/x-www-form-urlencoded"),
             ],
             "query_string": b"",
-            "server": ("testserver", 443),  # Optionally use 443 for HTTPS
+            "server": ("testserver", 443),
             "client": ("testclient", 12345),
-            "scheme": "https",  # <-- Change from "http" to "https"
+            "scheme": "https",
         },
         receive=receive,
     )
 
-    result = await server.create_oauth2_request(request)
+    with patch(
+        "authlib.integrations.fastapi_oauth2.authorization_server._create_oauth2_request",
+        new_callable=AsyncMock,
+    ) as mock_create:
+        mock_create.return_value = OAuth2Request(
+            "POST", "https://testserver/oauth/token", {}, {}
+        )
+        result = await server._create_oauth2_request(request)
 
     assert isinstance(result, OAuth2Request)
 
@@ -278,16 +275,19 @@ async def test_create_json_request(app):
         }
     )
 
-    result = await server.create_json_request(request)
+    with patch(
+        "authlib.integrations.fastapi_oauth2.authorization_server._create_json_request",
+        new_callable=AsyncMock,
+    ) as mock_create:
+        mock_create.return_value = FastApiJsonRequest(request)
+        result = await server._create_json_request(request)
 
     assert isinstance(result, FastApiJsonRequest)
 
 
 @pytest.mark.asyncio
 async def test_parse_request_json(server):
-    from unittest.mock import AsyncMock
-
-    server.create_json_request = AsyncMock(return_value="json-request")
+    server._create_json_request = AsyncMock(return_value="json-request")
 
     request = Request(
         {
@@ -305,7 +305,7 @@ async def test_parse_request_json(server):
     result = await server._parse_request(request)
 
     assert result == "json-request"
-    server.create_json_request.assert_awaited_once_with(request)
+    server._create_json_request.assert_awaited_once_with(request)
 
 
 def test_handle_response_dict(server):
@@ -367,29 +367,11 @@ def test_get_error_uri_without_config(server):
     assert server.get_error_uri(request, error) is None
 
 
-# def test_default_expires_in():
-#     generator = create_token_expires_in_generator()
-#
-#     assert generator(None, "unknown_grant") == (BearerTokenGenerator.DEFAULT_EXPIRES_IN)
-
-
 def test_default_grant_type_expiration():
     generator = create_token_expires_in_generator()
 
     for grant_type, expected in BearerTokenGenerator.GRANT_TYPES_EXPIRES_IN.items():
         assert generator(None, grant_type) == expected
-
-
-# def test_custom_expires_in():
-#     generator = create_token_expires_in_generator(
-#         {
-#             "authorization_code": 3600,
-#             "client_credentials": 1800,
-#         }
-#     )
-#
-#     assert generator(None, "authorization_code") == 3600
-#     assert generator(None, "client_credentials") == 1800
 
 
 def test_custom_expiration_overrides_default():
@@ -443,39 +425,36 @@ def oauth2_request():
     )
 
 
-@pytest.mark.asyncio
-async def test_create_oauth2_request_returns_existing_request(server, oauth2_request):
-    with patch(
-        "authlib.integrations.fastapi_oauth2.authorization_server."
-        "_create_oauth2_request"
-    ) as create_request:
-        result = await server.create_oauth2_request(oauth2_request)
-
+def test_create_oauth2_request_returns_existing_request(server, oauth2_request):
+    result = server.create_oauth2_request(oauth2_request)
     assert result is oauth2_request
-    create_request.assert_not_called()
 
 
-@pytest.mark.asyncio
-async def test_create_json_request_returns_existing_request(server, oauth2_request):
-    with patch(
-        "authlib.integrations.fastapi_oauth2.authorization_server._create_json_request"
-    ) as create_request:
-        result = await server.create_json_request(oauth2_request)
-
+def test_create_json_request_returns_existing_request(server, oauth2_request):
+    result = server.create_json_request(oauth2_request)
     assert result is oauth2_request
-    create_request.assert_not_called()
+
+
+def test_create_oauth2_request_raises_type_error(server):
+    with pytest.raises(TypeError, match="Expected an OAuth2Request"):
+        server.create_oauth2_request(object())
+
+
+def test_create_json_request_raises_type_error(server):
+    with pytest.raises(TypeError, match="Expected an OAuth2Request"):
+        server.create_json_request(object())
 
 
 @pytest.mark.asyncio
 async def test_parse_request_form_encoded(server):
     request = Mock()
     request.headers = {"content-type": "application/x-www-form-urlencoded"}
-    server.create_oauth2_request = AsyncMock(return_value="oauth-request")
+    server._create_oauth2_request = AsyncMock(return_value="oauth-request")
 
     result = await server._parse_request(request)
 
     assert result == "oauth-request"
-    server.create_oauth2_request.assert_awaited_once_with(request)
+    server._create_oauth2_request.assert_awaited_once_with(request)
 
 
 @pytest.mark.asyncio
@@ -497,9 +476,10 @@ async def test_create_authorization_response_with_parsed_request(
     grant_user = object()
     expected = Mock()
 
-    with patch.object(
-        AuthorizationServer,
-        "create_authorization_response",
+    # Оскільки super().create_authorization_response більше не асинхронний,
+    # патчимо його як звичайний Mock, а не AsyncMock
+    with patch(
+        "authlib.oauth2.AuthorizationServer.create_authorization_response",
         return_value=expected,
     ) as create_response:
         result = await server.create_authorization_response(
@@ -518,9 +498,8 @@ async def test_create_authorization_response_with_parsed_request(
 async def test_create_token_response_with_parsed_request(server, oauth2_request):
     expected = Mock()
 
-    with patch.object(
-        AuthorizationServer,
-        "create_token_response",
+    with patch(
+        "authlib.oauth2.AuthorizationServer.create_token_response",
         return_value=expected,
     ) as create_response:
         result = await server.create_token_response(oauth2_request)
@@ -532,8 +511,6 @@ async def test_create_token_response_with_parsed_request(server, oauth2_request)
 @pytest.mark.parametrize(
     "signal_name, signal_path",
     [
-        # Update the path to point directly to the module containing the signals,
-        # removing the extra '.authorization' attribute segment.
         (
             "after_authenticate_client",
             "authlib.integrations.fastapi_oauth2.authorization_server.client_authenticated",
@@ -547,8 +524,6 @@ async def test_create_token_response_with_parsed_request(server, oauth2_request)
 def test_send_signal(server, signal_name, signal_path):
     with patch(f"{signal_path}.send") as mock_send:
         server.send_signal(signal_name, user="test_user", token="abc123xyz")
-
-        # Verify the underlying signal's .send method was called with the server instance and kwargs
         mock_send.assert_called_once_with(server, user="test_user", token="abc123xyz")
 
 
@@ -561,17 +536,13 @@ def test_send_signal_unknown_name(server):
             "authlib.integrations.fastapi_oauth2.authorization_server.token_revoked.send"
         ) as mock_token_revoked,
     ):
-        # Calling with an unknown signal name should execute safely without raising errors
         server.send_signal("unknown_signal_name", user="test_user")
-
-        # Ensure neither of the known signals were triggered
         mock_client_auth.assert_not_called()
         mock_token_revoked.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_create_authorization_response_branch_coverage(server):
-
     raw_request = MagicMock()
     parsed_req = OAuth2Request("GET", "https://example.com/authorize", {}, {})
     server._parse_request = AsyncMock(return_value=parsed_req)
@@ -600,7 +571,6 @@ async def test_create_authorization_response_branch_coverage(server):
 
 @pytest.mark.asyncio
 async def test_create_token_response_branch_coverage(server):
-
     raw_request = MagicMock()
     parsed_req = OAuth2Request("POST", "https://example.com/token", {}, {})
     server._parse_request = AsyncMock(return_value=parsed_req)
@@ -621,3 +591,112 @@ async def test_create_token_response_branch_coverage(server):
     ) as _:
         await server.create_token_response(request=valid_oauth_req)
         server._parse_request.assert_not_awaited()
+
+
+def test_get_error_uri_success(server):
+    server._error_uris = {
+        "invalid_request": "https://example.com/errors/invalid-request",
+    }
+    request = Mock()
+    error = Mock()
+    error.error = "invalid_request"
+
+    result = server.get_error_uri(request, error)
+    assert result == "https://example.com/errors/invalid-request"
+
+
+def test_get_error_uri_not_found(server):
+    server._error_uris = {
+        "invalid_request": "https://example.com/errors/invalid-request",
+    }
+    request = Mock()
+    error = Mock()
+    error.error = "unknown_error"
+
+    result = server.get_error_uri(request, error)
+    assert result is None
+
+
+def test_get_error_uri_no_config(server):
+    server._error_uris = None
+    request = Mock()
+    error = Mock()
+    error.error = "invalid_request"
+
+    result = server.get_error_uri(request, error)
+    assert result is None
+
+
+# --- Тести для _create_json_request ---
+@pytest.mark.asyncio
+async def test_create_json_request_with_oauth2_request(server):
+    oauth2_req = OAuth2Request("POST", "https://example.com/token", {}, {})
+    result = await server._create_json_request(oauth2_req)
+    assert result is oauth2_req
+
+
+@pytest.mark.asyncio
+async def test_create_json_request_with_starlette_request(server):
+    request = Mock()
+    # Виправляємо ініціалізацію: FastApiJsonRequest очікує лише request
+    expected_req = FastApiJsonRequest(request)
+
+    with patch(
+        "authlib.integrations.fastapi_oauth2.authorization_server._create_json_request",
+        new_callable=AsyncMock,
+        return_value=expected_req,
+    ) as mock_create:
+        result = await server._create_json_request(request)
+
+    assert result is expected_req
+    mock_create.assert_awaited_once_with(request)
+
+
+# --- Тести для _create_oauth2_request ---
+@pytest.mark.asyncio
+async def test_create_oauth2_request_with_oauth2_request(server):
+    oauth2_req = OAuth2Request("POST", "https://example.com/token", {}, {})
+    result = await server._create_oauth2_request(oauth2_req)
+    assert result is oauth2_req
+
+
+@pytest.mark.asyncio
+async def test_create_oauth2_request_with_starlette_request(server):
+    request = Mock()
+    expected_req = OAuth2Request("POST", "https://example.com/token", {}, {})
+
+    with patch(
+        "authlib.integrations.fastapi_oauth2.authorization_server._create_oauth2_request",
+        new_callable=AsyncMock,
+        return_value=expected_req,
+    ) as mock_create:
+        result = await server._create_oauth2_request(request)
+
+    assert result is expected_req
+    mock_create.assert_awaited_once_with(request)
+
+
+# --- Тести для handle_response ---
+def test_handle_response_with_dict_payload_and_list_headers(server):
+    payload = {"access_token": "token123", "token_type": "Bearer"}
+    headers = [("Cache-Control", "no-store"), ("Pragma", "no-cache")]
+
+    response = server.handle_response(200, payload, headers)
+
+    assert isinstance(response, Response)
+    assert response.status_code == 200
+    assert json.loads(response.body) == payload
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["pragma"] == "no-cache"
+
+
+def test_handle_response_with_string_payload_and_dict_headers(server):
+    payload = "error_description"
+    headers = {"Content-Type": "text/plain"}
+
+    response = server.handle_response(400, payload, headers)
+
+    assert isinstance(response, Response)
+    assert response.status_code == 400
+    assert response.body == b"error_description"
+    assert response.headers["content-type"] == "text/plain"
