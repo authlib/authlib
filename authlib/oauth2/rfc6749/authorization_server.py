@@ -4,7 +4,6 @@ from authlib.deprecate import deprecate
 from .authenticate_client import ClientAuthentication
 from .endpoint import Endpoint
 from .endpoint import EndpointRequest
-from .errors import InsecureTransportError
 from .errors import InvalidScopeError
 from .errors import OAuth2Error
 from .errors import UnsupportedGrantTypeError
@@ -398,7 +397,7 @@ class AuthorizationServer(Hookable):
         try:
             request = self.create_oauth2_request(request)
             grant = self.get_token_grant(request)
-        except (InsecureTransportError, UnsupportedGrantTypeError) as error:
+        except OAuth2Error as error:
             return self.handle_error_response(request, error)
 
         try:

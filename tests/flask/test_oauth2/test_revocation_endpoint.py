@@ -146,7 +146,8 @@ def test_revoke_token_bound_to_client(test_client, token):
 
 
 def test_insecure_transport(test_client, monkeypatch):
-    monkeypatch.setenv("AUTHLIB_INSECURE_TRANSPORT", "")
-    rv = test_client.post("/oauth/revoke", base_url="http://client.test")
+    with monkeypatch.context() as m:
+        m.delenv("AUTHLIB_INSECURE_TRANSPORT")
+        rv = test_client.post("/oauth/revoke", base_url="http://client.test")
     assert rv.status_code == 400
     assert json.loads(rv.data)["error"] == "insecure_transport"
