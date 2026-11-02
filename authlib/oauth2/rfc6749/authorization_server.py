@@ -347,8 +347,8 @@ class AuthorizationServer(Hookable):
 
         # Otherwise, validate and respond (existing behavior)
         for endpoint in endpoints:
-            request = endpoint.create_endpoint_request(request)
             try:
+                request = endpoint.create_endpoint_request(request)
                 result = endpoint(request)
                 if result is None:
                     return None
@@ -394,10 +394,10 @@ class AuthorizationServer(Hookable):
 
         :param request: HTTP request instance
         """
-        request = self.create_oauth2_request(request)
         try:
+            request = self.create_oauth2_request(request)
             grant = self.get_token_grant(request)
-        except UnsupportedGrantTypeError as error:
+        except OAuth2Error as error:
             return self.handle_error_response(request, error)
 
         try:
