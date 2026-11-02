@@ -6,6 +6,7 @@ Form-Encoded Body Parameter per :rfc:`6750#section-2.2`.
 
 from ..rfc6749 import InvalidRequestError
 from ..rfc6749 import MissingAuthorizationError
+from ..rfc6749 import ResourceProtector
 
 
 class FormEncodedBodyToken:
@@ -26,7 +27,8 @@ class FormEncodedBodyToken:
 
     def __call__(self, protector):
         protector.register_hook(
-            "replace_parse_request_authorization", self._parse_request_authorization
+            self._parse_request_authorization,
+            replace=ResourceProtector.parse_request_authorization,
         )
 
     def _parse_request_authorization(self, protector, original, request):
