@@ -43,6 +43,8 @@ Responses
 
 .. autoclass:: RedirectResponse
 
+.. autoclass:: AuthorizationResponse
+
 Client Model
 ~~~~~~~~~~~~
 

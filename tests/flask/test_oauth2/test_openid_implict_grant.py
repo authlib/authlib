@@ -6,6 +6,7 @@ from authlib.common.urls import add_params_to_uri
 from authlib.common.urls import url_decode
 from authlib.common.urls import urlparse
 from authlib.deprecate import AuthlibDeprecationWarning
+from authlib.oauth2.rfc6749 import AuthorizationServer
 from authlib.oauth2.rfc6749.requests import BasicOAuth2Payload
 from authlib.oauth2.rfc6749.requests import OAuth2Request
 from authlib.oidc.core import ImplicitIDToken
@@ -245,6 +246,34 @@ def test_authorize_access_token(test_client, db, client, response_type, register
     assert "state=bar" in rv.location
     params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
     validate_claims(params["id_token"], params)
+
+
+@pytest.mark.parametrize("user_id", ["1", ""])
+def test_hook_changes_the_response(test_client, server, user_id):
+    """A hook on encode_authorization_response adds parameters to the
+    fragment, granted or denied."""
+
+    def add_param(server, response):
+        response.params.append(("extra", "value"))
+
+    server.register_hook(
+        add_param, before=AuthorizationServer.encode_authorization_response
+    )
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "id_token",
+            "client_id": "client-id",
+            "scope": "openid profile",
+            "state": "bar",
+            "nonce": "abc",
+            "redirect_uri": "https://client.test/callback",
+            "user_id": user_id,
+        },
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["extra"] == "value"
+    assert params["state"] == "bar"
 
 
 def test_authorize_id_token(test_client):

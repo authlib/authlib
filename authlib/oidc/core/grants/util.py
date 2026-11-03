@@ -5,11 +5,10 @@ from joserfc import jwt
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.encoding import to_native
-from authlib.common.urls import add_params_to_uri
 from authlib.common.urls import urlparse
+from authlib.oauth2.rfc6749 import AuthorizationResponse
 from authlib.oauth2.rfc6749 import InvalidRequestError
 from authlib.oauth2.rfc6749 import OAuth2Response
-from authlib.oauth2.rfc6749 import RedirectResponse
 from authlib.oauth2.rfc6749 import scope_to_list
 
 from ..errors import AccountSelectionRequiredError
@@ -183,8 +182,7 @@ def create_response_mode_response(redirect_uri, params, response_mode):
         ]
         return OAuth2Response(200, body, headers)
 
-    uri = add_params_to_uri(redirect_uri, params, fragment=True)
-    return RedirectResponse(uri)
+    return AuthorizationResponse(redirect_uri, params, "fragment")
 
 
 def _guess_prompt_value(end_user, prompts, redirect_uri, redirect_fragment):

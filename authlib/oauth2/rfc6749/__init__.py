@@ -44,6 +44,7 @@ from .requests import OAuth2Payload
 from .requests import OAuth2Request
 from .resource_protector import ResourceProtector
 from .resource_protector import TokenValidator
+from .responses import AuthorizationResponse
 from .responses import JsonResponse
 from .responses import OAuth2Response
 from .responses import RedirectResponse
@@ -60,6 +61,7 @@ __all__ = [
     "JsonPayload",
     "JsonRequest",
     "OAuth2Response",
+    "AuthorizationResponse",
     "JsonResponse",
     "RedirectResponse",
     "OAuth2Error",

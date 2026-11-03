@@ -1,12 +1,10 @@
 import logging
 
-from authlib.common.urls import add_params_to_uri
-
 from ..errors import AccessDeniedError
 from ..errors import InvalidScopeError
 from ..errors import OAuth2Error
 from ..errors import UnauthorizedClientError
-from ..responses import RedirectResponse
+from ..responses import AuthorizationResponse
 from .base import AuthorizationEndpointMixin
 from .base import BaseGrant
 
@@ -200,24 +198,22 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
         :param redirect_uri: Redirect to the given URI for the authorization
         :param grant_user: if resource owner granted the request, pass this
             resource owner, otherwise pass None.
-        :returns: a :class:`~authlib.oauth2.rfc6749.RedirectResponse`
+        :returns: an :class:`~authlib.oauth2.rfc6749.AuthorizationResponse`
         """
-        state = self.request.payload.state
-        if grant_user:
-            self.request.user = grant_user
-            token = self.generate_token(
-                user=grant_user,
-                scope=self.request.scope,
-                include_refresh_token=False,
-            )
-            log.debug("Grant token %r to %r", token, self.request.client)
-
-            self.save_token(token)
-            params = [(k, token[k]) for k in token]
-            if state:
-                params.append(("state", state))
-
-            uri = add_params_to_uri(redirect_uri, params, fragment=True)
-            return RedirectResponse(uri)
-        else:
+        if not grant_user:
             raise AccessDeniedError(redirect_uri=redirect_uri, redirect_fragment=True)
+
+        self.request.user = grant_user
+        token = self.generate_token(
+            user=grant_user,
+            scope=self.request.scope,
+            include_refresh_token=False,
+        )
+        log.debug("Grant token %r to %r", token, self.request.client)
+
+        self.save_token(token)
+        params = [(k, token[k]) for k in token]
+        if self.request.payload.state:
+            params.append(("state", self.request.payload.state))
+
+        return AuthorizationResponse(redirect_uri, params, "fragment")

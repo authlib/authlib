@@ -11,8 +11,10 @@ from .errors import UnsupportedGrantTypeError
 from .errors import UnsupportedResponseTypeError
 from .requests import JsonRequest
 from .requests import OAuth2Request
+from .responses import AuthorizationResponse
 from .responses import JsonResponse
 from .responses import OAuth2Response
+from .responses import _encode_redirect
 from .util import scope_to_list
 
 
@@ -411,14 +413,31 @@ class AuthorizationServer(Hookable):
         :param response: an :class:`~authlib.oauth2.rfc6749.OAuth2Response`
         :return: ``(status_code, body, headers)``
         """
+        if isinstance(response, AuthorizationResponse):
+            response = self.encode_authorization_response(response)
+
         return response.status_code, response.body, response.headers
 
+    def encode_authorization_response(self, response):
+        """Encode an authorization response according to its response mode.
+
+        :param response: an :class:`~authlib.oauth2.rfc6749.AuthorizationResponse`
+        :return: an :class:`~authlib.oauth2.rfc6749.OAuth2Response`
+        :raises ValueError: if the response mode is not supported
+        """
+        return _encode_redirect(response)
+
     def handle_error_response(self, request, error):
-        status_code, body, headers = error(self.get_error_uri(request, error))
         if error.redirect_uri:
-            response = OAuth2Response(status_code, body, headers)
-        else:
-            response = JsonResponse(body, status_code=status_code, headers=headers)
+            response = AuthorizationResponse(
+                error.redirect_uri,
+                error.get_body(),
+                "fragment" if error.redirect_fragment else "query",
+            )
+            return self._send_response(response)
+
+        status_code, body, headers = error(self.get_error_uri(request, error))
+        response = JsonResponse(body, status_code=status_code, headers=headers)
         return self._send_response(response)
 
     def _send_response(self, result):
