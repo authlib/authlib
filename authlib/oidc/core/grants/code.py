@@ -13,6 +13,7 @@ from joserfc import jwt
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.oauth2.rfc6749 import OAuth2Request
+from authlib.oauth2.rfc6749 import OAuth2Response
 
 from ..models import AuthorizationCodeMixin
 from ._legacy import LegacyMixin
@@ -87,7 +88,10 @@ class OpenIDToken(LegacyMixin):
         return jwt.encode(header, claims, private_key, [alg])
 
     def process_token(self, grant, response):
-        _, token, _ = response
+        if isinstance(response, OAuth2Response):
+            token = response.body
+        else:
+            _, token, _ = response
         scope = token.get("scope")
         if not scope or not is_openid_scope(scope):
             # standard authorization code flow

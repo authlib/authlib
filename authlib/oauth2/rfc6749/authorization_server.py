@@ -11,6 +11,8 @@ from .errors import UnsupportedGrantTypeError
 from .errors import UnsupportedResponseTypeError
 from .requests import JsonRequest
 from .requests import OAuth2Request
+from .responses import JsonResponse
+from .responses import OAuth2Response
 from .util import scope_to_list
 
 
@@ -339,7 +341,7 @@ class AuthorizationServer(Hookable):
                 result = endpoint.create_response(request)
                 if result is None:
                     return None
-                return self.handle_response(*result)
+                return self._send_response(result)
             except OAuth2Error as error:
                 return self.handle_error_response(request.request, error)
 
@@ -350,7 +352,7 @@ class AuthorizationServer(Hookable):
                 result = endpoint(request)
                 if result is None:
                     return None
-                return self.handle_response(*result)
+                return self._send_response(result)
             except ContinueIteration:
                 continue
             except OAuth2Error as error:
@@ -377,8 +379,8 @@ class AuthorizationServer(Hookable):
 
         try:
             redirect_uri = grant.validate_authorization_request()
-            args = grant.create_authorization_response(redirect_uri, grant_user)
-            response = self.handle_response(*args)
+            result = grant.create_authorization_response(redirect_uri, grant_user)
+            response = self._send_response(result)
         except OAuth2Error as error:
             error.state = request.payload.state
             response = self.handle_error_response(request, error)
@@ -399,13 +401,36 @@ class AuthorizationServer(Hookable):
 
         try:
             grant.validate_token_request()
-            args = grant.create_token_response()
-            return self.handle_response(*args)
+            return self._send_response(grant.create_token_response())
         except OAuth2Error as error:
             return self.handle_error_response(request, error)
 
+    def encode_response(self, response):
+        """Turn a response into the arguments of :meth:`handle_response`.
+
+        :param response: an :class:`~authlib.oauth2.rfc6749.OAuth2Response`
+        :return: ``(status_code, body, headers)``
+        """
+        return response.status_code, response.body, response.headers
+
     def handle_error_response(self, request, error):
-        return self.handle_response(*error(self.get_error_uri(request, error)))
+        status_code, body, headers = error(self.get_error_uri(request, error))
+        if error.redirect_uri:
+            response = OAuth2Response(status_code, body, headers)
+        else:
+            response = JsonResponse(body, status_code=status_code, headers=headers)
+        return self._send_response(response)
+
+    def _send_response(self, result):
+        """Send a response, or a legacy ``(status_code, body, headers)`` tuple."""
+        if not isinstance(result, OAuth2Response):
+            deprecate(
+                "Returning a '(status_code, body, headers)' tuple from a grant "
+                "or an endpoint is deprecated. Return an 'OAuth2Response' instead.",
+                version="1.11",
+            )
+            result = OAuth2Response(*result)
+        return self.handle_response(*self.encode_response(result))
 
 
 def _create_grant(grant_cls, extensions, request, server):

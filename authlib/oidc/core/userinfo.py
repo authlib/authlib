@@ -2,10 +2,11 @@ from joserfc import jwt
 from joserfc.jws import JWSRegistry
 
 from authlib._joserfc_helpers import import_any_key
-from authlib.consts import default_json_headers
 from authlib.oauth2.rfc6749.authorization_server import AuthorizationServer
 from authlib.oauth2.rfc6749.authorization_server import OAuth2Request
 from authlib.oauth2.rfc6749.resource_protector import ResourceProtector
+from authlib.oauth2.rfc6749.responses import JsonResponse
+from authlib.oauth2.rfc6749.responses import OAuth2Response
 
 from .claims import UserInfo
 
@@ -78,9 +79,9 @@ class UserInfoEndpoint:
             key = import_any_key(self.resolve_private_key())
             algorithms = self.get_supported_algorithms()
             data = jwt.encode({"alg": alg}, user_info, key, algorithms)
-            return 200, data, [("Content-Type", "application/jwt")]
+            return OAuth2Response(200, data, [("Content-Type", "application/jwt")])
 
-        return 200, user_info, default_json_headers
+        return JsonResponse(user_info)
 
     def get_supported_algorithms(self) -> list[str]:
         """Return the supported algorithms for userinfo signing.

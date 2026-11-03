@@ -1,7 +1,6 @@
-from authlib.consts import default_json_headers
-
 from ..rfc6749 import InvalidGrantError
 from ..rfc6749 import InvalidRequestError
+from ..rfc6749 import JsonResponse
 from ..rfc6749 import TokenEndpoint
 from ..rfc6749 import UnsupportedTokenTypeError
 
@@ -54,7 +53,7 @@ class RevocationEndpoint(TokenEndpoint):
 
             token=45ghiukldjahdnhzdauz&token_type_hint=refresh_token
 
-        :returns: (status_code, body, headers)
+        :returns: an :class:`~authlib.oauth2.rfc6749.OAuth2Response`
         """
         # The authorization server first validates the client credentials
         client = self.authenticate_endpoint_client(request)
@@ -71,7 +70,7 @@ class RevocationEndpoint(TokenEndpoint):
                 token=token,
                 client=client,
             )
-        return 200, {}, default_json_headers
+        return JsonResponse({})
 
     def query_token(self, token_string, token_type_hint):
         """Get the token from database/storage by the given token string.

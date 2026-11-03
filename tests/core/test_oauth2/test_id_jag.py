@@ -219,9 +219,9 @@ def test_no_refresh_token_issued(rsa_private):
     assertion = _sign(rsa_private)
     g = _grant({"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": assertion})
     g.validate_token_request()
-    status, token, _ = g.create_token_response()
-    assert status == 200
-    assert "refresh_token" not in token
+    response = g.create_token_response()
+    assert response.status_code == 200
+    assert "refresh_token" not in response.body
 
 
 # === typ header ===

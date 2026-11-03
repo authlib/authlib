@@ -8,6 +8,8 @@ from authlib.common.encoding import to_native
 from authlib.common.urls import add_params_to_uri
 from authlib.common.urls import urlparse
 from authlib.oauth2.rfc6749 import InvalidRequestError
+from authlib.oauth2.rfc6749 import OAuth2Response
+from authlib.oauth2.rfc6749 import RedirectResponse
 from authlib.oauth2.rfc6749 import scope_to_list
 
 from ..errors import AccountSelectionRequiredError
@@ -179,10 +181,10 @@ def create_response_mode_response(redirect_uri, params, response_mode):
             ("Cache-Control", "no-store"),
             ("Pragma", "no-cache"),
         ]
-        return 200, body, headers
+        return OAuth2Response(200, body, headers)
 
     uri = add_params_to_uri(redirect_uri, params, fragment=True)
-    return 302, "", [("Location", uri)]
+    return RedirectResponse(uri)
 
 
 def _guess_prompt_value(end_user, prompts, redirect_uri, redirect_fragment):

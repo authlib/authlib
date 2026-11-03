@@ -44,6 +44,9 @@ from .requests import OAuth2Payload
 from .requests import OAuth2Request
 from .resource_protector import ResourceProtector
 from .resource_protector import TokenValidator
+from .responses import JsonResponse
+from .responses import OAuth2Response
+from .responses import RedirectResponse
 from .token_endpoint import TokenEndpoint
 from .util import list_to_scope
 from .util import normalize_response_type
@@ -56,6 +59,9 @@ __all__ = [
     "OAuth2Request",
     "JsonPayload",
     "JsonRequest",
+    "OAuth2Response",
+    "JsonResponse",
+    "RedirectResponse",
     "OAuth2Error",
     "AccessDeniedError",
     "MissingAuthorizationError",

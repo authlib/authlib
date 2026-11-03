@@ -1,4 +1,5 @@
 import time
+from contextlib import nullcontext
 
 import pytest
 from flask import current_app
@@ -62,6 +63,12 @@ class AuthorizationCodeGrant(CodeGrantMixin, _AuthorizationCodeGrant):
         return save_authorization_code(code, request)
 
 
+class TupleAuthorizationCodeGrant(AuthorizationCodeGrant):
+    def create_token_response(self):
+        response = super().create_token_response()
+        return response.status_code, response.body, response.headers
+
+
 class OpenIDCode(_OpenIDCode):
     def resolve_client_private_key(self, client):
         return current_app.config["OAUTH2_JWT_KEY"]
@@ -90,16 +97,19 @@ class LegacyOpenIDCode(_OpenIDCode):
         return user.generate_user_info(scopes)
 
 
-def register_oidc_code_grant(server, require_nonce=False, extension=OpenIDCode):
-    server.register_grant(
-        AuthorizationCodeGrant, [extension(require_nonce=require_nonce)]
-    )
+def register_oidc_code_grant(
+    server, require_nonce=False, extension=OpenIDCode, grant_cls=AuthorizationCodeGrant
+):
+    server.register_grant(grant_cls, [extension(require_nonce=require_nonce)])
 
 
-def test_authorize_token(test_client, server):
-    register_oidc_code_grant(
-        server,
-    )
+@pytest.mark.parametrize(
+    "grant_cls", [AuthorizationCodeGrant, TupleAuthorizationCodeGrant]
+)
+def test_authorize_token(test_client, server, grant_cls):
+    """The token response contains an ID token, also when the grant returns
+    a (status_code, body, headers) tuple."""
+    register_oidc_code_grant(server, grant_cls=grant_cls)
     auth_request_time = time.time()
     rv = test_client.post(
         "/oauth/authorize",
@@ -119,15 +129,17 @@ def test_authorize_token(test_client, server):
 
     code = params["code"]
     headers = create_basic_header("client-id", "client-secret")
-    rv = test_client.post(
-        "/oauth/token",
-        data={
-            "grant_type": "authorization_code",
-            "redirect_uri": "https://client.test",
-            "code": code,
-        },
-        headers=headers,
-    )
+    deprecated = grant_cls is TupleAuthorizationCodeGrant
+    with pytest.warns(AuthlibDeprecationWarning) if deprecated else nullcontext():
+        rv = test_client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "redirect_uri": "https://client.test",
+                "code": code,
+            },
+            headers=headers,
+        )
     resp = json.loads(rv.data)
     assert "access_token" in resp
     assert "id_token" in resp

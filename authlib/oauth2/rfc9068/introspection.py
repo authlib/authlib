@@ -2,9 +2,9 @@ from joserfc.errors import ExpiredTokenError
 from joserfc.errors import InvalidClaimError
 
 from authlib.common.errors import ContinueIteration
-from authlib.consts import default_json_headers
 from authlib.oauth2.rfc6750.errors import InvalidTokenError
 
+from ..rfc6749 import JsonResponse
 from ..rfc7662 import IntrospectionEndpoint
 from .claims import JWTAccessTokenClaims
 from .token_validator import JWTBearerTokenValidator
@@ -58,7 +58,7 @@ class JWTIntrospectionEndpoint(IntrospectionEndpoint):
 
         # the authorization server invalidates the token
         body = self.create_introspection_payload(token)
-        return 200, body, default_json_headers
+        return JsonResponse(body)
 
     def authenticate_token(self, request, client):
         """"""

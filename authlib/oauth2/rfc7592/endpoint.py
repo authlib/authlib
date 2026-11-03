@@ -1,9 +1,9 @@
 from joserfc.errors import JoseError
 
-from authlib.consts import default_json_headers
-
 from ..rfc6749 import InvalidRequestError
+from ..rfc6749 import JsonResponse
 from ..rfc6749 import MissingAuthorizationError
+from ..rfc6749 import OAuth2Response
 from ..rfc6749 import UnauthorizedClientError
 from ..rfc6750 import InvalidTokenError
 from ..rfc7591 import InvalidClientMetadataError
@@ -70,7 +70,7 @@ class ClientConfigurationEndpoint:
     def create_read_client_response(self, client, request):
         body = self.introspect_client(client)
         body.update(self.generate_client_registration_info(client, request))
-        return 200, body, default_json_headers
+        return JsonResponse(body)
 
     def create_delete_client_response(self, client, request):
         self.delete_client(client, request)
@@ -78,7 +78,7 @@ class ClientConfigurationEndpoint:
             ("Cache-Control", "no-store"),
             ("Pragma", "no-cache"),
         ]
-        return 204, "", headers
+        return OAuth2Response(204, "", headers)
 
     def create_update_client_response(self, client, request):
         # The updated client metadata fields request MUST NOT include the
