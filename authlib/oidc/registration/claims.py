@@ -155,9 +155,10 @@ class ClientMetadataClaims(BaseClaims):
         the JWK Set referenced by the jwks_uri element from OpenID Connect Discovery 1.0
         [OpenID.Discovery].
         """
-        if self.get(
-            "id_token_signed_response_alg"
-        ) == "none" and "id_token" in self.get("response_type", ""):
+        if self.get("id_token_signed_response_alg") == "none" and any(
+            "id_token" in response_type.split()
+            for response_type in self.get("response_types", [])
+        ):
             raise InvalidClaimError("id_token_signed_response_alg")
 
         self.setdefault("id_token_signed_response_alg", "RS256")
