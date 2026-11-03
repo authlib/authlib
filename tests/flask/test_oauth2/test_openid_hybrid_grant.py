@@ -17,6 +17,7 @@ from authlib.oidc.core.grants import OpenIDCode as _OpenIDCode
 from authlib.oidc.core.grants import OpenIDHybridGrant as _OpenIDHybridGrant
 from authlib.oidc.prompt_create import PromptCreate
 from tests.util import HMAC_SECRET
+from tests.util import parse_form
 
 from .models import AuthorizationCode
 from .models import CodeGrantMixin
@@ -445,6 +446,32 @@ def test_response_mode_form_post(test_client):
     assert b'name="code"' in rv.data
     assert b'name="id_token"' in rv.data
     assert b'name="access_token"' in rv.data
+
+
+@pytest.mark.parametrize("user_id", ["1", None])
+def test_response_mode_form_post_values(test_client, user_id):
+    """The client receives the form_post values unchanged."""
+    state = "a b&c\"<>%'"
+    data = {
+        "client_id": "client-id",
+        "response_type": "code id_token token",
+        "response_mode": "form_post",
+        "state": state,
+        "nonce": "abc",
+        "scope": "openid profile",
+        "redirect_uri": "https://client.test",
+    }
+    if user_id:
+        data["user_id"] = user_id
+    rv = test_client.post("/oauth/authorize", data=data)
+    assert rv.headers["Cache-Control"] == "no-store"
+    form = parse_form(rv.data)
+    assert form.action == "https://client.test"
+    assert form.values["state"] == state
+    if not user_id:
+        assert form.values["error_description"] == (
+            "The resource owner or authorization server denied the request"
+        )
 
 
 @pytest.mark.parametrize(

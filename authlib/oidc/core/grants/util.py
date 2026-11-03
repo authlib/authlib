@@ -1,3 +1,4 @@
+import html
 import time
 
 from joserfc import jwt
@@ -5,7 +6,6 @@ from joserfc import jwt
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.encoding import to_native
 from authlib.common.urls import add_params_to_uri
-from authlib.common.urls import quote_url
 from authlib.common.urls import urlparse
 from authlib.oauth2.rfc6749 import InvalidRequestError
 from authlib.oauth2.rfc6749 import scope_to_list
@@ -166,12 +166,20 @@ def create_response_mode_response(redirect_uri, params, response_mode):
         )
         inputs = "".join(
             [
-                f'<input type="hidden" name="{quote_url(k)}" value="{quote_url(v)}"/>'
+                f'<input type="hidden" name="{html.escape(str(k))}" value="{html.escape(str(v))}"/>'
                 for k, v in params
             ]
         )
-        body = tpl.format(quote_url(redirect_uri), inputs)
-        return 200, body, [("Content-Type", "text/html; charset=utf-8")]
+        body = tpl.format(html.escape(redirect_uri), inputs)
+        # Per OAuth 2.0 Form Post Response Mode §2, the Authorization Server
+        # MUST instruct the User Agent (and any intermediaries) not to store
+        # or reuse the content of the response.
+        headers = [
+            ("Content-Type", "text/html; charset=utf-8"),
+            ("Cache-Control", "no-store"),
+            ("Pragma", "no-cache"),
+        ]
+        return 200, body, headers
 
     uri = add_params_to_uri(redirect_uri, params, fragment=True)
     return 302, "", [("Location", uri)]
