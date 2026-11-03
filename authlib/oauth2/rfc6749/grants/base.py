@@ -4,6 +4,7 @@ from authlib.consts import default_json_headers
 from ..errors import InvalidRequestError
 from ..errors import InvalidScopeError
 from ..requests import OAuth2Request
+from ..util import normalize_response_type
 
 
 class BaseGrant(Hookable):
@@ -112,7 +113,10 @@ class AuthorizationEndpointMixin(Hookable):
 
     @classmethod
     def check_authorization_endpoint(cls, request: OAuth2Request):
-        return request.payload.response_type in cls.RESPONSE_TYPES
+        return normalize_response_type(request.payload.response_type) in {
+            normalize_response_type(response_type)
+            for response_type in cls.RESPONSE_TYPES
+        }
 
     @staticmethod
     def validate_authorization_redirect_uri(request: OAuth2Request, client):

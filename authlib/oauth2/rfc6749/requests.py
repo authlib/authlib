@@ -3,6 +3,7 @@ from collections import defaultdict
 from authlib.deprecate import deprecate
 
 from .errors import InsecureTransportError
+from .util import normalize_response_type
 
 
 class OAuth2Payload:
@@ -27,11 +28,7 @@ class OAuth2Payload:
 
     @property
     def response_type(self) -> str:
-        rt = self.data.get("response_type")
-        if rt and " " in rt:
-            # sort multiple response types
-            return " ".join(sorted(rt.split()))
-        return rt
+        return normalize_response_type(self.data.get("response_type"))
 
     @property
     def grant_type(self) -> str:

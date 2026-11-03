@@ -8,6 +8,7 @@ from joserfc.errors import MissingClaimError
 from authlib.common.encoding import to_bytes
 from authlib.common.language import is_valid_language_tag
 from authlib.oauth2.claims import JWTClaims
+from authlib.oauth2.rfc6749.util import normalize_response_type
 from authlib.oauth2.rfc6749.util import scope_to_list
 
 from .util import create_half_hash
@@ -274,9 +275,19 @@ class UserInfo(dict):
 
 
 def get_claim_cls_by_response_type(response_type):
+    """Return the ID Token claims class for a response type.
+
+    Per RFC 6749 §3.1.1, the order of the values does not matter.
+
+    :param response_type: the ``response_type`` of the authorization request
+    :return: a claims class, or ``None`` if no class matches
+    """
+    response_type = normalize_response_type(response_type)
     claims_classes = (CodeIDToken, ImplicitIDToken, HybridIDToken)
     for claims_cls in claims_classes:
-        if response_type in claims_cls.RESPONSE_TYPES:
+        if response_type in {
+            normalize_response_type(rt) for rt in claims_cls.RESPONSE_TYPES
+        }:
             return claims_cls
 
 

@@ -218,11 +218,20 @@ def test_denied(test_client):
     assert "state=bar" in rv.location
 
 
-def test_authorize_access_token(test_client):
+@pytest.mark.parametrize("response_type", ["id_token token", "token id_token"])
+@pytest.mark.parametrize("registered", ["id_token token", "token id_token"])
+def test_authorize_access_token(test_client, db, client, response_type, registered):
+    """The order of the response_type values does not matter, in the request
+    and in the client metadata."""
+    client.set_client_metadata(
+        {**client.client_metadata, "response_types": ["id_token", registered]}
+    )
+    db.session.add(client)
+    db.session.commit()
     rv = test_client.post(
         "/oauth/authorize",
         data={
-            "response_type": "id_token token",
+            "response_type": response_type,
             "client_id": "client-id",
             "scope": "openid profile",
             "state": "bar",
