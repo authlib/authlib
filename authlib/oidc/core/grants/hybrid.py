@@ -8,6 +8,7 @@ from authlib.oauth2.rfc6749.grants.authorization_code import (
 
 from .implicit import OpenIDImplicitGrant
 from .util import is_openid_scope
+from .util import validate_form_post_redirect_uri
 from .util import validate_nonce
 
 log = logging.getLogger(__name__)
@@ -56,6 +57,7 @@ class OpenIDHybridGrant(OpenIDImplicitGrant):
             ),
         )
         redirect_uri = validate_code_authorization_request(self)
+        validate_form_post_redirect_uri(self, redirect_uri)
         if not is_openid_scope(self.request.scope):
             raise InvalidScopeError(
                 "Missing 'openid' scope",
