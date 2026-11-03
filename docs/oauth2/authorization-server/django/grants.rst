@@ -237,7 +237,7 @@ Creating a custom grant type with **BaseGrant**::
 
         def create_authorization_response(self, redirect_uri, grant_user):
             # only needed if using AuthorizationEndpointMixin
-            # return a RedirectResponse(uri)
+            # return an AuthorizationResponse(redirect_uri, params)
 
         def validate_token_request(self):
             # only needed if using TokenEndpointMixin

@@ -1,3 +1,4 @@
+from authlib.common.urls import add_params_to_uri
 from authlib.consts import default_json_headers
 from authlib.deprecate import deprecate
 
@@ -30,6 +31,10 @@ class OAuth2Response:
         if not self._tuple_deprecated:
             self._tuple_deprecated = True
             _deprecate_tuple()
+
+        return self._legacy_tuple()
+
+    def _legacy_tuple(self):
         return self.status_code, self.body, self.headers
 
 
@@ -55,6 +60,43 @@ class RedirectResponse(OAuth2Response):
 
     def __init__(self, location):
         super().__init__(302, "", [("Location", location)])
+
+
+class AuthorizationResponse(OAuth2Response):
+    """The parameters that the authorization endpoint sends to the client.
+
+    The authorization server encodes them according to the response mode,
+    with :meth:`~authlib.oauth2.rfc6749.AuthorizationServer.encode_authorization_response`.
+    The encoding sets the body, and the status code if it is not set.
+
+    :param redirect_uri: the redirect URI of the client
+    :param params: a list of ``(name, value)`` pairs
+    :param response_mode: ``query`` or ``fragment``
+    """
+
+    def __init__(self, redirect_uri, params, response_mode="query"):
+        super().__init__(None, None)
+        self.redirect_uri = redirect_uri
+        self.params = params
+        self.response_mode = response_mode
+
+    def _legacy_tuple(self):
+        return _encode_redirect(self)._legacy_tuple()
+
+
+def _encode_redirect(response):
+    """Encode an authorization response as a redirection to the client."""
+    if response.response_mode not in ("query", "fragment"):
+        raise ValueError(f"Unsupported response mode: {response.response_mode!r}")
+
+    fragment = response.response_mode == "fragment"
+    uri = add_params_to_uri(response.redirect_uri, response.params, fragment=fragment)
+    redirect = RedirectResponse(uri)
+    if response.status_code is not None:
+        redirect.status_code = response.status_code
+
+    redirect.headers.extend(response.headers)
+    return redirect
 
 
 def _deprecate_tuple():

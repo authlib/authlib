@@ -1,7 +1,6 @@
 import logging
 
 from authlib.common.security import generate_token
-from authlib.common.urls import add_params_to_uri
 
 from ..errors import AccessDeniedError
 from ..errors import InvalidClientError
@@ -9,8 +8,8 @@ from ..errors import InvalidGrantError
 from ..errors import InvalidRequestError
 from ..errors import OAuth2Error
 from ..errors import UnauthorizedClientError
+from ..responses import AuthorizationResponse
 from ..responses import JsonResponse
-from ..responses import RedirectResponse
 from .base import AuthorizationEndpointMixin
 from .base import BaseGrant
 from .base import TokenEndpointMixin
@@ -145,7 +144,7 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
         :param redirect_uri: Redirect to the given URI for the authorization
         :param grant_user: if resource owner granted the request, pass this
             resource owner, otherwise pass None.
-        :returns: a :class:`~authlib.oauth2.rfc6749.RedirectResponse`
+        :returns: an :class:`~authlib.oauth2.rfc6749.AuthorizationResponse`
         """
         if not grant_user:
             raise AccessDeniedError(redirect_uri=redirect_uri)
@@ -158,7 +157,8 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
         params = [("code", code)]
         if self.request.payload.state:
             params.append(("state", self.request.payload.state))
-        return RedirectResponse(add_params_to_uri(redirect_uri, params))
+
+        return AuthorizationResponse(redirect_uri, params)
 
     def validate_token_request(self):
         """The client makes a request to the token endpoint by sending the
