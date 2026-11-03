@@ -1,11 +1,14 @@
 import html
 import time
+import weakref
 
 from joserfc import jwt
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.encoding import to_native
 from authlib.common.urls import urlparse
+from authlib.deprecate import deprecate
+from authlib.oauth2.multiple_response_types import MultipleResponseTypes
 from authlib.oauth2.rfc6749 import AuthorizationResponse
 from authlib.oauth2.rfc6749 import InvalidRequestError
 from authlib.oauth2.rfc6749 import OAuth2Response
@@ -15,6 +18,8 @@ from ..errors import AccountSelectionRequiredError
 from ..errors import ConsentRequiredError
 from ..errors import LoginRequiredError
 from ..util import create_half_hash
+
+_warned_servers = weakref.WeakSet()
 
 
 def is_openid_scope(scope):
@@ -71,6 +76,22 @@ def validate_response_mode(grant, redirect_uri):
         ``form_post`` and the redirect URI scheme is not http or https,
         without redirection
     """
+    server = grant.server
+    if any(isinstance(ext, MultipleResponseTypes) for ext in server._extensions):
+        if "response_mode" not in grant.request.payload.data:
+            _validate_form_post_redirect_uri(grant.DEFAULT_RESPONSE_MODE, redirect_uri)
+
+        return
+
+    if "response_mode" in grant.request.payload.data and server not in _warned_servers:
+        _warned_servers.add(server)
+        deprecate(
+            "Using 'response_mode' with the OpenID Connect implicit and hybrid "
+            "grants without the 'MultipleResponseTypes' extension is deprecated. "
+            "Register it with 'server.register_extension(MultipleResponseTypes())'.",
+            version="1.11",
+        )
+
     response_mode = grant.request.payload.data.get(
         "response_mode", grant.DEFAULT_RESPONSE_MODE
     )
@@ -80,8 +101,15 @@ def validate_response_mode(grant, redirect_uri):
             redirect_uri=redirect_uri,
             redirect_fragment=True,
         )
+
+    _validate_form_post_redirect_uri(response_mode, redirect_uri)
+
+
+def _validate_form_post_redirect_uri(response_mode, redirect_uri):
+    """Refuse to render a form that a non-HTTP redirect URI would run."""
     if response_mode != "form_post":
         return
+
     if urlparse.urlparse(redirect_uri).scheme not in ("http", "https"):
         raise InvalidRequestError(
             "The 'form_post' response mode requires an http or https redirect URI."

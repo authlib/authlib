@@ -158,7 +158,9 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
         if self.request.payload.state:
             params.append(("state", self.request.payload.state))
 
-        return AuthorizationResponse(redirect_uri, params)
+        return AuthorizationResponse(
+            redirect_uri, params, self.response_mode or self.RESPONSE_MODE
+        )
 
     def validate_token_request(self):
         """The client makes a request to the token endpoint by sending the

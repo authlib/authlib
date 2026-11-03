@@ -77,6 +77,9 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
     GRANT_TYPE = "implicit"
     ERROR_RESPONSE_FRAGMENT = True
 
+    #: Per RFC 6749 §4.2.2, the access token goes in the fragment.
+    RESPONSE_MODE = "fragment"
+
     def validate_authorization_request(self):
         """The client constructs the request URI by adding the following
         parameters to the query component of the authorization endpoint URI
@@ -216,4 +219,6 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
         if self.request.payload.state:
             params.append(("state", self.request.payload.state))
 
-        return AuthorizationResponse(redirect_uri, params, "fragment")
+        return AuthorizationResponse(
+            redirect_uri, params, self.response_mode or self.RESPONSE_MODE
+        )

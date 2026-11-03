@@ -97,7 +97,8 @@ class ResourceProtector(Hookable):
 
             resource_protector.register_extension(my_extension)
         """
-        self._extensions.append(extension(self))
+        extension(self)
+        self._extensions.append(extension)
 
     def register_token_validator(self, validator: TokenValidator):
         """Register a token validator for a given Authorization type.

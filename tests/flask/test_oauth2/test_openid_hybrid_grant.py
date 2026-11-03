@@ -1,3 +1,5 @@
+from contextlib import nullcontext
+
 import pytest
 from flask import json
 from joserfc import jwt
@@ -7,6 +9,7 @@ from authlib.common.urls import url_decode
 from authlib.common.urls import url_encode
 from authlib.common.urls import urlparse
 from authlib.deprecate import AuthlibDeprecationWarning
+from authlib.oauth2.multiple_response_types import MultipleResponseTypes
 from authlib.oauth2.rfc6749.grants import (
     AuthorizationCodeGrant as _AuthorizationCodeGrant,
 )
@@ -32,6 +35,11 @@ class IDTokenConfigMixin:
 
     def get_client_claims(self, client):
         return {"iss": "Authlib", "aud": [client.get_client_id()]}
+
+
+def deprecated_response_mode():
+    """Using response_mode without MultipleResponseTypes is deprecated."""
+    return pytest.warns(AuthlibDeprecationWarning, match="MultipleResponseTypes")
 
 
 @pytest.fixture(autouse=True)
@@ -415,9 +423,12 @@ def test_code_id_token_access_token(test_client, db, client, response_type, regi
     assert "id_token" in resp
 
 
+@pytest.mark.parametrize("registered", [True, False])
 @pytest.mark.parametrize("response_mode", ["query", "unknown"])
 @pytest.mark.parametrize("user_id", ["1", None])
-def test_response_mode_unsupported(test_client, response_mode, user_id):
+def test_response_mode_unsupported(
+    test_client, server, response_mode, user_id, registered
+):
     """The query response mode and unknown response modes are refused.
 
     The error is returned in the fragment.
@@ -433,7 +444,13 @@ def test_response_mode_unsupported(test_client, response_mode, user_id):
     }
     if user_id:
         data["user_id"] = user_id
-    rv = test_client.post("/oauth/authorize", data=data)
+
+    if registered:
+        server.register_extension(MultipleResponseTypes())
+
+    with nullcontext() if registered else deprecated_response_mode():
+        rv = test_client.post("/oauth/authorize", data=data)
+
     assert rv.status_code == 302
     location = urlparse.urlparse(rv.location)
     assert not location.query
@@ -444,19 +461,21 @@ def test_response_mode_unsupported(test_client, response_mode, user_id):
 
 
 def test_response_mode_form_post(test_client):
-    rv = test_client.post(
-        "/oauth/authorize",
-        data={
-            "client_id": "client-id",
-            "response_type": "code id_token token",
-            "response_mode": "form_post",
-            "state": "bar",
-            "nonce": "abc",
-            "scope": "openid profile",
-            "redirect_uri": "https://client.test",
-            "user_id": "1",
-        },
-    )
+    with deprecated_response_mode():
+        rv = test_client.post(
+            "/oauth/authorize",
+            data={
+                "client_id": "client-id",
+                "response_type": "code id_token token",
+                "response_mode": "form_post",
+                "state": "bar",
+                "nonce": "abc",
+                "scope": "openid profile",
+                "redirect_uri": "https://client.test",
+                "user_id": "1",
+            },
+        )
+
     assert b'name="code"' in rv.data
     assert b'name="id_token"' in rv.data
     assert b'name="access_token"' in rv.data
@@ -477,7 +496,10 @@ def test_response_mode_form_post_values(test_client, user_id):
     }
     if user_id:
         data["user_id"] = user_id
-    rv = test_client.post("/oauth/authorize", data=data)
+
+    with deprecated_response_mode():
+        rv = test_client.post("/oauth/authorize", data=data)
+
     assert rv.headers["Cache-Control"] == "no-store"
     form = parse_form(rv.data)
     assert form.action == "https://client.test"
@@ -532,7 +554,10 @@ def test_response_mode_form_post_non_http_redirect_uri(
     if default_response_mode:
         monkeypatch.setattr(_OpenIDHybridGrant, "DEFAULT_RESPONSE_MODE", "form_post")
         del data["response_mode"]
-    rv = test_client.post("/oauth/authorize", data=data)
+
+    with nullcontext() if default_response_mode else deprecated_response_mode():
+        rv = test_client.post("/oauth/authorize", data=data)
+
     assert rv.status_code == 400
     assert rv.json["error"] == "invalid_request"
     assert rv.location is None
