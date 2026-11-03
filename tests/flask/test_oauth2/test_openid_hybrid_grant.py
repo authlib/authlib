@@ -17,6 +17,7 @@ from authlib.oidc.core.grants import OpenIDCode as _OpenIDCode
 from authlib.oidc.core.grants import OpenIDHybridGrant as _OpenIDHybridGrant
 from authlib.oidc.prompt_create import PromptCreate
 from tests.util import HMAC_SECRET
+from tests.util import parse_form
 
 from .models import AuthorizationCode
 from .models import CodeGrantMixin
@@ -284,6 +285,7 @@ def test_access_denied(test_client):
         },
     )
     assert "error=access_denied" in rv.location
+    assert "state=bar" in rv.location
 
 
 def test_code_access_token(test_client):
@@ -399,26 +401,32 @@ def test_code_id_token_access_token(test_client):
     assert "id_token" in resp
 
 
-def test_response_mode_query(test_client):
-    rv = test_client.post(
-        "/oauth/authorize",
-        data={
-            "client_id": "client-id",
-            "response_type": "code id_token token",
-            "response_mode": "query",
-            "state": "bar",
-            "nonce": "abc",
-            "scope": "openid profile",
-            "redirect_uri": "https://client.test",
-            "user_id": "1",
-        },
-    )
-    assert "code=" in rv.location
-    assert "id_token=" in rv.location
-    assert "access_token=" in rv.location
+@pytest.mark.parametrize("response_mode", ["query", "unknown"])
+@pytest.mark.parametrize("user_id", ["1", None])
+def test_response_mode_unsupported(test_client, response_mode, user_id):
+    """The query response mode and unknown response modes are refused.
 
-    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    The error is returned in the fragment.
+    """
+    data = {
+        "client_id": "client-id",
+        "response_type": "code id_token token",
+        "response_mode": response_mode,
+        "state": "bar",
+        "nonce": "abc",
+        "scope": "openid profile",
+        "redirect_uri": "https://client.test",
+    }
+    if user_id:
+        data["user_id"] = user_id
+    rv = test_client.post("/oauth/authorize", data=data)
+    assert rv.status_code == 302
+    location = urlparse.urlparse(rv.location)
+    assert not location.query
+    params = dict(url_decode(location.fragment))
+    assert params["error"] == "invalid_request"
     assert params["state"] == "bar"
+    assert "code" not in params
 
 
 def test_response_mode_form_post(test_client):
@@ -438,6 +446,32 @@ def test_response_mode_form_post(test_client):
     assert b'name="code"' in rv.data
     assert b'name="id_token"' in rv.data
     assert b'name="access_token"' in rv.data
+
+
+@pytest.mark.parametrize("user_id", ["1", None])
+def test_response_mode_form_post_values(test_client, user_id):
+    """The client receives the form_post values unchanged."""
+    state = "a b&c\"<>%'"
+    data = {
+        "client_id": "client-id",
+        "response_type": "code id_token token",
+        "response_mode": "form_post",
+        "state": state,
+        "nonce": "abc",
+        "scope": "openid profile",
+        "redirect_uri": "https://client.test",
+    }
+    if user_id:
+        data["user_id"] = user_id
+    rv = test_client.post("/oauth/authorize", data=data)
+    assert rv.headers["Cache-Control"] == "no-store"
+    form = parse_form(rv.data)
+    assert form.action == "https://client.test"
+    assert form.values["state"] == state
+    if not user_id:
+        assert form.values["error_description"] == (
+            "The resource owner or authorization server denied the request"
+        )
 
 
 @pytest.mark.parametrize(
