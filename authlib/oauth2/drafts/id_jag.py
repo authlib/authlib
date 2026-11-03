@@ -33,6 +33,7 @@ from ..rfc6749 import BaseGrant
 from ..rfc6749 import InvalidGrantError
 from ..rfc6749 import InvalidRequestError
 from ..rfc6749 import InvalidScopeError
+from ..rfc6749 import JsonResponse
 from ..rfc6749 import TokenEndpointMixin
 from ..rfc6749 import UnauthorizedClientError
 from ..rfc6749 import scope_to_list
@@ -211,7 +212,7 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
         )
         log.debug("Issue token %r to %r", token, self.request.client)
         self.save_token(token)
-        return 200, token, self.TOKEN_RESPONSE_HEADER
+        return JsonResponse(token, headers=self.TOKEN_RESPONSE_HEADER)
 
     # ------------------------------------------------------------------
     # JWT processing (internal)

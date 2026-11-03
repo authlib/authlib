@@ -14,6 +14,7 @@ from ..rfc6749 import BaseGrant
 from ..rfc6749 import InvalidClientError
 from ..rfc6749 import InvalidGrantError
 from ..rfc6749 import InvalidRequestError
+from ..rfc6749 import JsonResponse
 from ..rfc6749 import TokenEndpointMixin
 from ..rfc6749 import UnauthorizedClientError
 from .assertion import sign_jwt_bearer_assertion
@@ -199,7 +200,7 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
         )
         log.debug("Issue token %r to %r", token, self.request.client)
         self.save_token(token)
-        return 200, token, self.TOKEN_RESPONSE_HEADER
+        return JsonResponse(token, headers=self.TOKEN_RESPONSE_HEADER)
 
     def resolve_issuer_client(self, issuer):
         """Fetch client via "iss" in assertion claims. Developers MUST

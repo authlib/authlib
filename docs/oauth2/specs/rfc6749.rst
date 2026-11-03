@@ -34,6 +34,15 @@ Servers
 .. autoclass:: ResourceProtector
     :members:
 
+Responses
+~~~~~~~~~
+
+.. autoclass:: OAuth2Response
+
+.. autoclass:: JsonResponse
+
+.. autoclass:: RedirectResponse
+
 Client Model
 ~~~~~~~~~~~~
 

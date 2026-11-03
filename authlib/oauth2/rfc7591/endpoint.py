@@ -7,10 +7,10 @@ from joserfc.errors import JoseError
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.security import generate_token
-from authlib.consts import default_json_headers
 from authlib.deprecate import deprecate
 
 from ..rfc6749 import InvalidRequestError
+from ..rfc6749 import JsonResponse
 from ..rfc6749 import MissingAuthorizationError
 from ..rfc6750 import InvalidTokenError
 from .claims import ClientMetadataClaims
@@ -57,7 +57,7 @@ class ClientRegistrationEndpoint:
         registration_info = self.generate_client_registration_info(client, request)
         if registration_info:
             body.update(registration_info)
-        return 201, body, default_json_headers
+        return JsonResponse(body, status_code=201)
 
     def extract_client_metadata(self, request):
         if not request.payload.data:

@@ -6,6 +6,7 @@ from ..errors import AccessDeniedError
 from ..errors import InvalidScopeError
 from ..errors import OAuth2Error
 from ..errors import UnauthorizedClientError
+from ..responses import RedirectResponse
 from .base import AuthorizationEndpointMixin
 from .base import BaseGrant
 
@@ -199,7 +200,7 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
         :param redirect_uri: Redirect to the given URI for the authorization
         :param grant_user: if resource owner granted the request, pass this
             resource owner, otherwise pass None.
-        :returns: (status_code, body, headers)
+        :returns: a :class:`~authlib.oauth2.rfc6749.RedirectResponse`
         """
         state = self.request.payload.state
         if grant_user:
@@ -217,7 +218,6 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
                 params.append(("state", state))
 
             uri = add_params_to_uri(redirect_uri, params, fragment=True)
-            headers = [("Location", uri)]
-            return 302, "", headers
+            return RedirectResponse(uri)
         else:
             raise AccessDeniedError(redirect_uri=redirect_uri, redirect_fragment=True)

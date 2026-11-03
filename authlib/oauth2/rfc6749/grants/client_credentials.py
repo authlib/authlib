@@ -1,6 +1,7 @@
 import logging
 
 from ..errors import UnauthorizedClientError
+from ..responses import JsonResponse
 from .base import BaseGrant
 from .base import TokenEndpointMixin
 
@@ -97,11 +98,11 @@ class ClientCredentialsGrant(BaseGrant, TokenEndpointMixin):
                 "example_parameter":"example_value"
             }
 
-        :returns: (status_code, body, headers)
+        :returns: an :class:`~authlib.oauth2.rfc6749.OAuth2Response`
         """
         token = self.generate_token(
             scope=self.request.payload.scope, include_refresh_token=False
         )
         log.debug("Issue token %r to %r", token, self.client)
         self.save_token(token)
-        return 200, token, self.TOKEN_RESPONSE_HEADER
+        return JsonResponse(token, headers=self.TOKEN_RESPONSE_HEADER)

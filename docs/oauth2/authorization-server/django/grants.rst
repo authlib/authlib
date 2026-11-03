@@ -235,14 +235,16 @@ Creating a custom grant type with **BaseGrant**::
         def validate_authorization_request(self):
             # only needed if using AuthorizationEndpointMixin
 
-        def create_authorization_response(self, grant_user):
+        def create_authorization_response(self, redirect_uri, grant_user):
             # only needed if using AuthorizationEndpointMixin
+            # return a RedirectResponse(uri)
 
         def validate_token_request(self):
             # only needed if using TokenEndpointMixin
 
         def create_token_response(self):
             # only needed if using TokenEndpointMixin
+            # return a JsonResponse(token)
 
 For a better understanding, you can read the source code of the built-in
 grant types. And there are extended grant types defined by other specs:

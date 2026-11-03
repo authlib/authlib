@@ -1,6 +1,7 @@
 from authlib.common.security import generate_token
 from authlib.common.urls import add_params_to_uri
-from authlib.consts import default_json_headers
+
+from ..rfc6749 import JsonResponse
 
 
 class DeviceAuthorizationEndpoint:
@@ -117,7 +118,7 @@ class DeviceAuthorizationEndpoint:
         self.save_device_credential(
             request.client.get_client_id(), request.payload.scope, data
         )
-        return 200, data, default_json_headers
+        return JsonResponse(data)
 
     def generate_user_code(self):
         """A method to generate ``user_code`` value for device authorization
