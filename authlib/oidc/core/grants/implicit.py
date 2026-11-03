@@ -14,9 +14,9 @@ from ._legacy import LegacyMixin
 from .util import create_half_hash
 from .util import create_response_mode_response
 from .util import is_openid_scope
-from .util import validate_form_post_redirect_uri
 from .util import validate_nonce
 from .util import validate_request_prompt
+from .util import validate_response_mode
 
 log = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
 
     def validate_authorization_request(self):
         redirect_uri = super().validate_authorization_request()
-        validate_form_post_redirect_uri(self, redirect_uri)
+        validate_response_mode(self, redirect_uri)
         if not is_openid_scope(self.request.scope):
             raise InvalidScopeError(
                 "Missing 'openid' scope",

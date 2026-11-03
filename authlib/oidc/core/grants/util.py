@@ -52,8 +52,12 @@ def validate_request_prompt(grant, redirect_uri, redirect_fragment=False):
     return grant
 
 
-def validate_form_post_redirect_uri(grant, redirect_uri):
-    """Reject the ``form_post`` response mode for a non-HTTP redirect URI.
+def validate_response_mode(grant, redirect_uri):
+    """Validate the response mode of an implicit or hybrid authorization request.
+
+    Per OAuth 2.0 Multiple Response Type Encoding Practices §3 and §5, the
+    ``query`` response mode MUST NOT be used with the ``id_token`` response
+    type and its combinations.
 
     With ``form_post``, the user-agent submits an HTML form to the redirect
     URI. A ``javascript:`` redirect URI would then run a script in the
@@ -61,11 +65,20 @@ def validate_form_post_redirect_uri(grant, redirect_uri):
 
     :param grant: the grant that validates the authorization request
     :param redirect_uri: the redirect URI of the authorization request
-    :raises InvalidRequestError: if the redirect URI scheme is not http or https
+    :raises InvalidRequestError: if the response mode is not ``fragment`` or
+        ``form_post``, with a redirection in the fragment, or if it is
+        ``form_post`` and the redirect URI scheme is not http or https,
+        without redirection
     """
     response_mode = grant.request.payload.data.get(
         "response_mode", grant.DEFAULT_RESPONSE_MODE
     )
+    if response_mode not in ("fragment", "form_post"):
+        raise InvalidRequestError(
+            "The 'response_mode' value is not supported for this response type.",
+            redirect_uri=redirect_uri,
+            redirect_fragment=True,
+        )
     if response_mode != "form_post":
         return
     if urlparse.urlparse(redirect_uri).scheme not in ("http", "https"):
@@ -160,13 +173,7 @@ def create_response_mode_response(redirect_uri, params, response_mode):
         body = tpl.format(quote_url(redirect_uri), inputs)
         return 200, body, [("Content-Type", "text/html; charset=utf-8")]
 
-    if response_mode == "query":
-        uri = add_params_to_uri(redirect_uri, params, fragment=False)
-    elif response_mode == "fragment":
-        uri = add_params_to_uri(redirect_uri, params, fragment=True)
-    else:
-        raise InvalidRequestError('Invalid "response_mode" value')
-
+    uri = add_params_to_uri(redirect_uri, params, fragment=True)
     return 302, "", [("Location", uri)]
 
 

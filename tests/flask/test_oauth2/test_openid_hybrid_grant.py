@@ -400,26 +400,32 @@ def test_code_id_token_access_token(test_client):
     assert "id_token" in resp
 
 
-def test_response_mode_query(test_client):
-    rv = test_client.post(
-        "/oauth/authorize",
-        data={
-            "client_id": "client-id",
-            "response_type": "code id_token token",
-            "response_mode": "query",
-            "state": "bar",
-            "nonce": "abc",
-            "scope": "openid profile",
-            "redirect_uri": "https://client.test",
-            "user_id": "1",
-        },
-    )
-    assert "code=" in rv.location
-    assert "id_token=" in rv.location
-    assert "access_token=" in rv.location
+@pytest.mark.parametrize("response_mode", ["query", "unknown"])
+@pytest.mark.parametrize("user_id", ["1", None])
+def test_response_mode_unsupported(test_client, response_mode, user_id):
+    """The query response mode and unknown response modes are refused.
 
-    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    The error is returned in the fragment.
+    """
+    data = {
+        "client_id": "client-id",
+        "response_type": "code id_token token",
+        "response_mode": response_mode,
+        "state": "bar",
+        "nonce": "abc",
+        "scope": "openid profile",
+        "redirect_uri": "https://client.test",
+    }
+    if user_id:
+        data["user_id"] = user_id
+    rv = test_client.post("/oauth/authorize", data=data)
+    assert rv.status_code == 302
+    location = urlparse.urlparse(rv.location)
+    assert not location.query
+    params = dict(url_decode(location.fragment))
+    assert params["error"] == "invalid_request"
     assert params["state"] == "bar"
+    assert "code" not in params
 
 
 def test_response_mode_form_post(test_client):
