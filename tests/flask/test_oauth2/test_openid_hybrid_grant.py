@@ -440,6 +440,57 @@ def test_response_mode_form_post(test_client):
     assert b'name="access_token"' in rv.data
 
 
+@pytest.mark.parametrize(
+    "redirect_uri",
+    [
+        "javascript://client.test/%0Aalert(1)",
+        "JavaScript://client.test/\nalert(1)",
+        "com.example.app://client.test/callback",
+    ],
+)
+@pytest.mark.parametrize("user_id", ["1", None])
+@pytest.mark.parametrize("default_response_mode", [False, True])
+def test_response_mode_form_post_non_http_redirect_uri(
+    test_client, db, client, monkeypatch, redirect_uri, user_id, default_response_mode
+):
+    """A form_post response must not target a non-HTTP redirect URI.
+
+    The request is refused before any form is rendered, whether the user
+    approves or denies the authorization.
+    """
+    client.set_client_metadata(
+        {
+            "redirect_uris": [redirect_uri],
+            "scope": "openid profile address",
+            "response_types": ["code id_token", "code token", "code id_token token"],
+            "grant_types": ["authorization_code"],
+            "id_token_signed_response_alg": "HS256",
+        }
+    )
+    db.session.add(client)
+    db.session.commit()
+
+    data = {
+        "client_id": "client-id",
+        "response_type": "code id_token token",
+        "response_mode": "form_post",
+        "state": "bar",
+        "nonce": "abc",
+        "scope": "openid profile",
+        "redirect_uri": redirect_uri,
+    }
+    if user_id:
+        data["user_id"] = user_id
+    if default_response_mode:
+        monkeypatch.setattr(_OpenIDHybridGrant, "DEFAULT_RESPONSE_MODE", "form_post")
+        del data["response_mode"]
+    rv = test_client.post("/oauth/authorize", data=data)
+    assert rv.status_code == 400
+    assert rv.json["error"] == "invalid_request"
+    assert rv.location is None
+    assert b"<form" not in rv.data
+
+
 def test_deprecated_get_jwt_config(client, user):
     """Using get_jwt_config(self, client) should emit an AuthlibDeprecationWarning."""
 

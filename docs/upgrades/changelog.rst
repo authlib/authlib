@@ -8,6 +8,21 @@ Here you can see the full list of changes between each Authlib release.
 
 .. scriv-insert-here
 
+.. _changelog-1.9.3:
+
+Version 1.9.3 — 2026-11-03
+--------------------------
+
+Security
+~~~~~~~~
+
+- The OpenID Connect implicit and hybrid grants refuse ``response_mode=form_post``
+  when the redirect URI does not use the ``http`` or ``https`` scheme. They
+  return an ``invalid_request`` error and do not redirect. A client with a
+  ``javascript:`` redirect URI could run a script in the origin of the
+  authorization server, even when the user denied the authorization.
+  `GHSA-gp2m-377p-m4j3 <https://github.com/authlib/authlib/security/advisories/GHSA-gp2m-377p-m4j3>`_
+
 .. _changelog-1.9.2:
 
 Version 1.9.2 — 2026-11-01

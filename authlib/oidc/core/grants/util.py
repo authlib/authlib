@@ -6,6 +6,7 @@ from authlib._joserfc_helpers import import_any_key
 from authlib.common.encoding import to_native
 from authlib.common.urls import add_params_to_uri
 from authlib.common.urls import quote_url
+from authlib.common.urls import urlparse
 from authlib.oauth2.rfc6749 import InvalidRequestError
 from authlib.oauth2.rfc6749 import scope_to_list
 
@@ -49,6 +50,28 @@ def validate_request_prompt(grant, redirect_uri, redirect_fragment=False):
     if prompt:
         grant.prompt = prompt
     return grant
+
+
+def validate_form_post_redirect_uri(grant, redirect_uri):
+    """Reject the ``form_post`` response mode for a non-HTTP redirect URI.
+
+    With ``form_post``, the user-agent submits an HTML form to the redirect
+    URI. A ``javascript:`` redirect URI would then run a script in the
+    origin of the authorization server.
+
+    :param grant: the grant that validates the authorization request
+    :param redirect_uri: the redirect URI of the authorization request
+    :raises InvalidRequestError: if the redirect URI scheme is not http or https
+    """
+    response_mode = grant.request.payload.data.get(
+        "response_mode", grant.DEFAULT_RESPONSE_MODE
+    )
+    if response_mode != "form_post":
+        return
+    if urlparse.urlparse(redirect_uri).scheme not in ("http", "https"):
+        raise InvalidRequestError(
+            "The 'form_post' response mode requires an http or https redirect URI."
+        )
 
 
 def validate_nonce(request, exists_nonce, required=False):

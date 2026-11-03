@@ -293,6 +293,57 @@ def test_response_mode_form_post(test_client):
     assert b'name="state"' in rv.data
 
 
+@pytest.mark.parametrize(
+    "redirect_uri",
+    [
+        "javascript://client.test/%0Aalert(1)",
+        "JavaScript://client.test/\nalert(1)",
+        "com.example.app://client.test/callback",
+    ],
+)
+@pytest.mark.parametrize("user_id", ["1", None])
+@pytest.mark.parametrize("default_response_mode", [False, True])
+def test_response_mode_form_post_non_http_redirect_uri(
+    test_client, db, client, monkeypatch, redirect_uri, user_id, default_response_mode
+):
+    """A form_post response must not target a non-HTTP redirect URI.
+
+    The request is refused before any form is rendered, whether the user
+    approves or denies the authorization.
+    """
+    client.set_client_metadata(
+        {
+            "redirect_uris": [redirect_uri],
+            "scope": "openid profile",
+            "token_endpoint_auth_method": "none",
+            "response_types": ["id_token", "id_token token"],
+            "id_token_signed_response_alg": "HS256",
+        }
+    )
+    db.session.add(client)
+    db.session.commit()
+
+    data = {
+        "response_type": "id_token",
+        "response_mode": "form_post",
+        "client_id": "client-id",
+        "scope": "openid profile",
+        "state": "bar",
+        "nonce": "abc",
+        "redirect_uri": redirect_uri,
+    }
+    if user_id:
+        data["user_id"] = user_id
+    if default_response_mode:
+        monkeypatch.setattr(_OpenIDImplicitGrant, "DEFAULT_RESPONSE_MODE", "form_post")
+        del data["response_mode"]
+    rv = test_client.post("/oauth/authorize", data=data)
+    assert rv.status_code == 400
+    assert rv.json["error"] == "invalid_request"
+    assert rv.location is None
+    assert b"<form" not in rv.data
+
+
 def test_client_metadata_custom_alg(test_client, db, client):
     """If the client metadata 'id_token_signed_response_alg' is defined,
     it should be used to sign id_tokens."""
