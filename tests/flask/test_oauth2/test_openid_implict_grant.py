@@ -1,3 +1,5 @@
+from contextlib import nullcontext
+
 import pytest
 from joserfc import jwt
 from joserfc.jwk import OctKey
@@ -6,6 +8,7 @@ from authlib.common.urls import add_params_to_uri
 from authlib.common.urls import url_decode
 from authlib.common.urls import urlparse
 from authlib.deprecate import AuthlibDeprecationWarning
+from authlib.oauth2.multiple_response_types import MultipleResponseTypes
 from authlib.oauth2.rfc6749 import AuthorizationServer
 from authlib.oauth2.rfc6749.requests import BasicOAuth2Payload
 from authlib.oauth2.rfc6749.requests import OAuth2Request
@@ -19,6 +22,11 @@ from .models import Client
 from .models import exists_nonce
 
 authorize_url = "/oauth/authorize?response_type=token&client_id=client-id"
+
+
+def deprecated_response_mode():
+    """Using response_mode without MultipleResponseTypes is deprecated."""
+    return pytest.warns(AuthlibDeprecationWarning, match="MultipleResponseTypes")
 
 
 @pytest.fixture(autouse=True)
@@ -295,9 +303,12 @@ def test_authorize_id_token(test_client):
     validate_claims(params["id_token"], params)
 
 
+@pytest.mark.parametrize("registered", [True, False])
 @pytest.mark.parametrize("response_mode", ["query", "unknown"])
 @pytest.mark.parametrize("user_id", ["1", None])
-def test_response_mode_unsupported(test_client, response_mode, user_id):
+def test_response_mode_unsupported(
+    test_client, server, response_mode, user_id, registered
+):
     """The query response mode and unknown response modes are refused.
 
     The error is returned in the fragment.
@@ -313,7 +324,13 @@ def test_response_mode_unsupported(test_client, response_mode, user_id):
     }
     if user_id:
         data["user_id"] = user_id
-    rv = test_client.post("/oauth/authorize", data=data)
+
+    if registered:
+        server.register_extension(MultipleResponseTypes())
+
+    with nullcontext() if registered else deprecated_response_mode():
+        rv = test_client.post("/oauth/authorize", data=data)
+
     assert rv.status_code == 302
     location = urlparse.urlparse(rv.location)
     assert not location.query
@@ -323,12 +340,15 @@ def test_response_mode_unsupported(test_client, response_mode, user_id):
     assert "id_token" not in params
 
 
-def test_response_mode_form_post(test_client):
+def test_response_mode_with_extension(test_client, server):
+    """With the MultipleResponseTypes extension, the requested response mode
+    is used without deprecation."""
+    server.register_extension(MultipleResponseTypes())
     rv = test_client.post(
         "/oauth/authorize",
         data={
-            "response_type": "id_token token",
-            "response_mode": "form_post",
+            "response_type": "id_token",
+            "response_mode": "fragment",
             "client_id": "client-id",
             "scope": "openid profile",
             "state": "bar",
@@ -337,6 +357,45 @@ def test_response_mode_form_post(test_client):
             "user_id": "1",
         },
     )
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["state"] == "bar"
+    validate_claims(params["id_token"], params)
+
+
+def test_response_mode_deprecated_once(test_client):
+    """The deprecation is emitted once per authorization server."""
+    data = {
+        "response_type": "id_token",
+        "response_mode": "fragment",
+        "client_id": "client-id",
+        "scope": "openid profile",
+        "nonce": "abc",
+        "redirect_uri": "https://client.test/callback",
+        "user_id": "1",
+    }
+    with deprecated_response_mode() as record:
+        test_client.post("/oauth/authorize", data=data)
+        test_client.post("/oauth/authorize", data={**data, "nonce": "def"})
+
+    assert len(record) == 1
+
+
+def test_response_mode_form_post(test_client):
+    with deprecated_response_mode():
+        rv = test_client.post(
+            "/oauth/authorize",
+            data={
+                "response_type": "id_token token",
+                "response_mode": "form_post",
+                "client_id": "client-id",
+                "scope": "openid profile",
+                "state": "bar",
+                "nonce": "abc",
+                "redirect_uri": "https://client.test/callback",
+                "user_id": "1",
+            },
+        )
+
     assert rv.status_code == 200
     assert rv.headers["Cache-Control"] == "no-store"
     assert rv.headers["Pragma"] == "no-cache"
@@ -362,7 +421,10 @@ def test_response_mode_form_post_values(test_client, user_id):
     }
     if user_id:
         data["user_id"] = user_id
-    rv = test_client.post("/oauth/authorize", data=data)
+
+    with deprecated_response_mode():
+        rv = test_client.post("/oauth/authorize", data=data)
+
     form = parse_form(rv.data)
     assert form.values["state"] == state
     if not user_id:
@@ -380,9 +442,19 @@ def test_response_mode_form_post_values(test_client, user_id):
     ],
 )
 @pytest.mark.parametrize("user_id", ["1", None])
-@pytest.mark.parametrize("default_response_mode", [False, True])
+@pytest.mark.parametrize(
+    "default_response_mode,registered", [(False, False), (True, False), (True, True)]
+)
 def test_response_mode_form_post_non_http_redirect_uri(
-    test_client, db, client, monkeypatch, redirect_uri, user_id, default_response_mode
+    test_client,
+    server,
+    db,
+    client,
+    monkeypatch,
+    redirect_uri,
+    user_id,
+    default_response_mode,
+    registered,
 ):
     """A form_post response must not target a non-HTTP redirect URI.
 
@@ -415,7 +487,13 @@ def test_response_mode_form_post_non_http_redirect_uri(
     if default_response_mode:
         monkeypatch.setattr(_OpenIDImplicitGrant, "DEFAULT_RESPONSE_MODE", "form_post")
         del data["response_mode"]
-    rv = test_client.post("/oauth/authorize", data=data)
+
+    if registered:
+        server.register_extension(MultipleResponseTypes())
+
+    with nullcontext() if default_response_mode else deprecated_response_mode():
+        rv = test_client.post("/oauth/authorize", data=data)
+
     assert rv.status_code == 400
     assert rv.json["error"] == "invalid_request"
     assert rv.location is None

@@ -46,6 +46,7 @@ class OAuth2Error(AuthlibHTTPError):
         self.state = state
         self.redirect_uri = redirect_uri
         self.redirect_fragment = redirect_fragment
+        self.response_mode = None
 
     def get_body(self):
         """Get a list of body."""

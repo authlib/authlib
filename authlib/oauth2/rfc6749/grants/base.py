@@ -111,6 +111,14 @@ class AuthorizationEndpointMixin(Hookable):
     RESPONSE_TYPES = set()
     ERROR_RESPONSE_FRAGMENT = False
 
+    #: Where the authorization response parameters are added to the redirect
+    #: URI. Per RFC 6749 §4.1.2, the authorization code goes in the query.
+    RESPONSE_MODE = "query"
+
+    #: The response mode chosen for this request, if it differs from
+    #: ``RESPONSE_MODE``. Errors use it too.
+    response_mode = None
+
     @classmethod
     def check_authorization_endpoint(cls, request: OAuth2Request):
         return normalize_response_type(request.payload.response_type) in {

@@ -5,6 +5,7 @@ from joserfc import jwt
 from authlib._joserfc_helpers import import_any_key
 from authlib.deprecate import deprecate
 from authlib.oauth2.rfc6749 import AccessDeniedError
+from authlib.oauth2.rfc6749 import AuthorizationResponse
 from authlib.oauth2.rfc6749 import ImplicitGrant
 from authlib.oauth2.rfc6749 import InvalidScopeError
 from authlib.oauth2.rfc6749 import OAuth2Error
@@ -98,6 +99,9 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
         else:
             error = AccessDeniedError(state=state)
             params = error.get_body()
+
+        if self.response_mode:
+            return AuthorizationResponse(redirect_uri, params, self.response_mode)
 
         # http://openid.net/specs/oauth-v2-multiple-response-types-1_0.html#ResponseModes
         response_mode = self.request.payload.data.get(

@@ -157,7 +157,8 @@ class AuthorizationServer(Hookable):
         self._client_auth.register(method, func)
 
     def register_extension(self, extension):
-        self._extensions.append(extension(self))
+        extension(self)
+        self._extensions.append(extension)
 
     def get_error_uri(self, request, error):
         """Return a URI for the given error, framework may implement this method."""
@@ -267,6 +268,7 @@ class AuthorizationServer(Hookable):
         is designed for resource owner to grant or deny the authorization.
         """
         request = self.create_oauth2_request(request)
+        grant = None
 
         try:
             request.user = end_user
@@ -280,7 +282,9 @@ class AuthorizationServer(Hookable):
             # authorization request.  The exact value received from the
             # client.
             error.state = request.payload.state
+            _set_error_response_mode(error, grant)
             raise
+
         return grant
 
     def get_token_grant(self, request):
@@ -385,6 +389,7 @@ class AuthorizationServer(Hookable):
             response = self._send_response(result)
         except OAuth2Error as error:
             error.state = request.payload.state
+            _set_error_response_mode(error, grant)
             response = self.handle_error_response(request, error)
 
         grant.execute_hook("after_authorization_response", response)
@@ -429,10 +434,11 @@ class AuthorizationServer(Hookable):
 
     def handle_error_response(self, request, error):
         if error.redirect_uri:
+            response_mode = error.response_mode or (
+                "fragment" if error.redirect_fragment else "query"
+            )
             response = AuthorizationResponse(
-                error.redirect_uri,
-                error.get_body(),
-                "fragment" if error.redirect_fragment else "query",
+                error.redirect_uri, error.get_body(), response_mode
             )
             return self._send_response(response)
 
@@ -450,6 +456,12 @@ class AuthorizationServer(Hookable):
             )
             result = OAuth2Response(*result)
         return self.handle_response(*self.encode_response(result))
+
+
+def _set_error_response_mode(error, grant):
+    """Send the error with the response mode chosen for the request."""
+    if error.response_mode is None:
+        error.response_mode = getattr(grant, "response_mode", None)
 
 
 def _create_grant(grant_cls, extensions, request, server):
