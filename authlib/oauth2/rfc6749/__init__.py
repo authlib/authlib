@@ -46,6 +46,7 @@ from .resource_protector import ResourceProtector
 from .resource_protector import TokenValidator
 from .token_endpoint import TokenEndpoint
 from .util import list_to_scope
+from .util import normalize_response_type
 from .util import scope_to_list
 from .wrappers import OAuth2Token
 
@@ -91,4 +92,5 @@ __all__ = [
     "RefreshTokenGrant",
     "scope_to_list",
     "list_to_scope",
+    "normalize_response_type",
 ]

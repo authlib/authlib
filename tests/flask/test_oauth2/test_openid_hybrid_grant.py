@@ -364,12 +364,26 @@ def test_code_id_token(test_client):
     assert "id_token" in resp
 
 
-def test_code_id_token_access_token(test_client):
+@pytest.mark.parametrize(
+    "response_type", ["code id_token token", "token id_token code"]
+)
+@pytest.mark.parametrize("registered", ["code id_token token", "id_token token code"])
+def test_code_id_token_access_token(test_client, db, client, response_type, registered):
+    """The order of the response_type values does not matter, in the request
+    and in the client metadata."""
+    client.set_client_metadata(
+        {
+            **client.client_metadata,
+            "response_types": ["code id_token", "code token", registered],
+        }
+    )
+    db.session.add(client)
+    db.session.commit()
     rv = test_client.post(
         "/oauth/authorize",
         data={
             "client_id": "client-id",
-            "response_type": "code id_token token",
+            "response_type": response_type,
             "state": "bar",
             "nonce": "abc",
             "scope": "openid profile",

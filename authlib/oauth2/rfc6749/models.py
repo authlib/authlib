@@ -110,11 +110,20 @@ class ClientMixin:
 
     def check_response_type(self, response_type):
         """Validate if the client can handle the given response_type. There
-        are two response types defined by RFC6749: code and token. For
-        instance, there is a ``allowed_response_types`` column in your client::
+        are two response types defined by RFC6749: code and token. Other
+        specifications combine several values, such as ``code id_token``.
+
+        Per RFC 6749 §3.1.1, the order of the values does not matter.
+        ``normalize_response_type`` sorts them before the comparison. With a
+        ``response_types`` column in your client::
+
+            from authlib.oauth2.rfc6749 import normalize_response_type
+
 
             def check_response_type(self, response_type):
-                return response_type in self.response_types
+                return normalize_response_type(response_type) in [
+                    normalize_response_type(allowed) for allowed in self.response_types
+                ]
 
         :param response_type: the requested response_type string.
         :return: bool

@@ -7,6 +7,9 @@ from authlib.oauth2.rfc6749 import OAuth2Token
 from authlib.oauth2.rfc6749 import errors
 from authlib.oauth2.rfc6749 import parameters
 from authlib.oauth2.rfc6749 import util
+from authlib.oauth2.rfc6749.grants.base import AuthorizationEndpointMixin
+from authlib.oauth2.rfc6749.requests import BasicOAuth2Payload
+from authlib.oauth2.rfc6749.requests import OAuth2Request
 
 
 def test_parse_authorization_code_response():
@@ -68,6 +71,37 @@ def test_scope_to_list():
     assert util.scope_to_list("a b") == ["a", "b"]
     assert util.scope_to_list(["a", "b"]) == ["a", "b"]
     assert util.scope_to_list(None) is None
+
+
+@pytest.mark.parametrize(
+    "response_type,expected",
+    [
+        ("code", "code"),
+        ("token id_token code", "code id_token token"),
+        (" code  id_token ", "code id_token"),
+        ("code code", "code code"),
+        ("code\tid_token", "code\tid_token"),
+        ("", ""),
+        (None, None),
+    ],
+)
+def test_normalize_response_type(response_type, expected):
+    assert util.normalize_response_type(response_type) == expected
+
+
+def test_check_authorization_endpoint_unsorted_response_types():
+    """A grant can declare its response types in any order."""
+
+    class CustomGrant(AuthorizationEndpointMixin):
+        RESPONSE_TYPES = {"token code"}
+
+    request = OAuth2Request("GET", "https://provider.test/authorize")
+    for response_type in ("token code", "code token"):
+        request.payload = BasicOAuth2Payload({"response_type": response_type})
+        assert CustomGrant.check_authorization_endpoint(request)
+
+    request.payload = BasicOAuth2Payload({"response_type": "code"})
+    assert not CustomGrant.check_authorization_endpoint(request)
 
 
 def test_extract_basic_authorization():

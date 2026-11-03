@@ -168,6 +168,14 @@ def test_get_claim_cls_by_response_type():
     assert cls == CodeIDToken
     cls = get_claim_cls_by_response_type("code id_token")
     assert cls == HybridIDToken
+    cls = get_claim_cls_by_response_type("token id_token")
+    assert cls == ImplicitIDToken
+    cls = get_claim_cls_by_response_type("token id_token code")
+    assert cls == HybridIDToken
+    cls = get_claim_cls_by_response_type("code code")
+    assert cls is None
+    cls = get_claim_cls_by_response_type(None)
+    assert cls is None
     cls = get_claim_cls_by_response_type("none")
     assert cls is None
 
