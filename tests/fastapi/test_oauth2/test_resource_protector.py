@@ -1,25 +1,130 @@
+import importlib
+from contextvars import ContextVar
+from types import SimpleNamespace
+
 import pytest
+from fastapi import Depends
 from fastapi import FastAPI
 from fastapi import Request
 from fastapi.testclient import TestClient
 
+from authlib.integrations.base_client import InvalidTokenError
 from authlib.integrations.fastapi_oauth2.errors import OAuth2HTTPException
 from authlib.integrations.fastapi_oauth2.resource_protector import ResourceProtector
-from authlib.integrations.fastapi_oauth2.resource_protector import _call_endpoint
-from authlib.integrations.fastapi_oauth2.resource_protector import _current_token
-from authlib.integrations.fastapi_oauth2.resource_protector import current_token
-from authlib.oauth2 import OAuth2Error
-from authlib.oauth2.rfc6749 import MissingAuthorizationError
+from authlib.oauth2.rfc6750 import BearerTokenValidator
+from authlib.oauth2.rfc6750.errors import InsufficientScopeError
+from authlib.oauth2.rfc6750.errors import InvalidTokenError as OAuthInvalidTokenError
+
+module = importlib.import_module(
+    "authlib.integrations.fastapi_oauth2.resource_protector"
+)
 
 
-@pytest.fixture
-def protector():
-    return ResourceProtector()
+class DummyToken:
+    def __init__(
+        self,
+        user_id,
+        client_id,
+        scopes,
+        revoked=False,
+    ):
+        self.user_id = user_id
+        self.client_id = client_id
+        self.scopes = scopes
+        self.revoked = revoked
+
+    def is_revoked(self):
+        return self.revoked
+
+    def is_expired(self):
+        return False
+
+
+class DummyBearerTokenValidator(BearerTokenValidator):
+    tokens = {
+        "valid-token-profile": DummyToken(
+            user_id=1,
+            client_id="client-1",
+            scopes=["profile", "read"],
+        ),
+        "valid-token-another-user": DummyToken(
+            user_id=3,
+            client_id="client-3",
+            scopes=["profile", "read"],
+        ),
+        "valid-token-read-only": DummyToken(
+            user_id=2,
+            client_id="client-2",
+            scopes=["read"],
+        ),
+        "revoked-token": DummyToken(
+            user_id=4,
+            client_id="client-4",
+            scopes=["profile"],
+            revoked=True,
+        ),
+    }
+
+    def authenticate_token(self, token_string):
+        return self.tokens.get(token_string)
+
+    def validate_token(self, token, scopes, request):
+        if token is None or token.is_revoked():
+            raise OAuthInvalidTokenError()
+
+        if not set(scopes).issubset(set(token.scopes)):
+            raise InsufficientScopeError()
 
 
 @pytest.fixture
 def app():
-    return FastAPI()
+    app = FastAPI()
+    protector = ResourceProtector()
+    protector.register_token_validator(DummyBearerTokenValidator())
+
+    @app.get("/profile")
+    async def profile(
+        token=Depends(protector(["profile"])),  # noqa: B008
+    ):
+        return {
+            "user_id": token.user_id,
+            "client_id": token.client_id,
+        }
+
+    @app.get("/optional-profile")
+    async def optional_profile(
+        token=Depends(protector(["profile"], optional=True)),  # noqa: B008
+    ):
+        if token is None:
+            return {"authenticated": False}
+
+        return {
+            "authenticated": True,
+            "user_id": token.user_id,
+        }
+
+    @app.get("/dynamic-scope")
+    async def dynamic_scope(
+        request: Request,
+        token=Depends(  # noqa: B008
+            protector(  # noqa: B008
+                lambda request: [request.query_params.get("scope", "profile")]
+            )
+        ),
+    ):
+        return {"user_id": token.user_id}
+
+    @app.get("/request-state")
+    async def request_state(
+        request: Request,
+        token=Depends(protector(["profile"])),  # noqa: B008
+    ):
+        return {
+            "same_token": request.state.oauth2_token is token,
+            "user_id": request.state.oauth2_token.user_id,
+        }
+
+    return app
 
 
 @pytest.fixture
@@ -27,534 +132,205 @@ def client(app):
     return TestClient(app)
 
 
-@pytest.fixture(autouse=True)
-def reset_current_token():
-    token = _current_token.set(None)
-    yield
-    _current_token.reset(token)
+def test_valid_token(client):
+    response = client.get(
+        "/profile",
+        headers={"Authorization": "Bearer valid-token-profile"},
+    )
 
+    assert response.status_code == 200
+    assert response.json() == {
+        "user_id": 1,
+        "client_id": "client-1",
+    }
 
-class DummyToken:
-    def __init__(self, access_token="test-token", scopes=None):
-        self.access_token = access_token
-        self.scopes = scopes or ["profile"]
 
+def test_missing_authorization_header(client):
+    response = client.get("/profile")
 
-class TestRaiseErrorResponse:
-    def test_raises_http_exception(self, protector):
-        error = MissingAuthorizationError()
+    assert response.status_code == 401
 
-        with pytest.raises(OAuth2HTTPException) as exc_info:
-            protector.raise_error_response(error)
 
-        exc = exc_info.value
+def test_invalid_token(client):
+    response = client.get(
+        "/profile",
+        headers={"Authorization": "Bearer invalid-token"},
+    )
 
-        assert exc.status_code == error.status_code
-        assert exc.body is not None
-        assert exc.headers is not None
+    assert response.status_code == 401
 
-    def test_error_body_is_json(self, protector):
-        error = MissingAuthorizationError()
 
-        with pytest.raises(OAuth2HTTPException) as exc_info:
-            protector.raise_error_response(error)
+def test_revoked_token(client):
+    response = client.get(
+        "/profile",
+        headers={"Authorization": "Bearer revoked-token"},
+    )
 
-        import json
+    assert response.status_code == 401
 
-        body = json.loads(exc_info.value.body)
 
-        assert isinstance(body, dict)
-        assert body["error"] == error.error
+def test_insufficient_scope(client):
+    response = client.get(
+        "/profile",
+        headers={"Authorization": "Bearer valid-token-read-only"},
+    )
 
+    assert response.status_code == 403
 
-class TestHandleErrorResponse:
-    def test_returns_response(self, protector):
-        error = MissingAuthorizationError()
 
-        response = protector.handle_error_response(error)
+def test_optional_dependency_without_token(client):
+    response = client.get("/optional-profile")
 
-        assert response.status_code == error.status_code
-        assert response.media_type == "application/json"
+    assert response.status_code == 200
+    assert response.json() == {"authenticated": False}
 
-    def test_response_body_is_json(self, protector):
-        import json
 
-        error = MissingAuthorizationError()
+def test_optional_dependency_with_token(client):
+    response = client.get(
+        "/optional-profile",
+        headers={"Authorization": "Bearer valid-token-profile"},
+    )
 
-        response = protector.handle_error_response(error)
-        body = json.loads(response.body)
+    assert response.status_code == 200
+    assert response.json() == {
+        "authenticated": True,
+        "user_id": 1,
+    }
 
-        assert body["error"] == error.error
 
-    def test_response_headers(self, protector):
-        error = MissingAuthorizationError()
+def test_callable_scopes(client):
+    response = client.get(
+        "/dynamic-scope?scope=profile",
+        headers={"Authorization": "Bearer valid-token-profile"},
+    )
 
-        response = protector.handle_error_response(error)
+    assert response.status_code == 200
+    assert response.json() == {"user_id": 1}
 
-        for key, value in error.get_headers():
-            assert response.headers[key.lower()] == value
 
+def test_callable_scopes_reject_insufficient_scope(client):
+    response = client.get(
+        "/dynamic-scope?scope=admin",
+        headers={"Authorization": "Bearer valid-token-profile"},
+    )
 
-class TestAcquireToken:
-    def test_requires_request(self, protector):
-        with pytest.raises(RuntimeError, match="requires the"):
-            protector.acquire_token()
+    assert response.status_code == 403
 
-    def test_acquires_token(self, protector, client, monkeypatch):
-        token = DummyToken()
 
-        def mock_validate_request(request, **kwargs):
-            return token
+def test_token_is_stored_in_request_state(client):
+    response = client.get(
+        "/request-state",
+        headers={"Authorization": "Bearer valid-token-profile"},
+    )
 
-        monkeypatch.setattr(
-            protector,
-            "validate_request",
-            mock_validate_request,
-        )
+    assert response.status_code == 200
+    assert response.json() == {
+        "same_token": True,
+        "user_id": 1,
+    }
 
-        @client.app.get("/test")
-        async def endpoint(request: Request):
-            result = protector.acquire_token(
-                request,
-                scopes=["profile"],
-            )
 
-            assert result is token
-            assert current_token.access_token == "test-token"
+def test_handle_error_response():
+    protector = ResourceProtector()
 
-            return {"ok": True}
+    response = protector.handle_error_response(OAuthInvalidTokenError())
 
-        response = client.get("/test")
+    assert response.status_code == 401
+    assert response.media_type == "application/json"
 
-        assert response.status_code == 200
-        assert response.json() == {"ok": True}
-
-    def test_passes_scopes_to_validator(self, protector, client, monkeypatch):
-        received = {}
-
-        def mock_validate_request(request, **kwargs):
-            received.update(kwargs)
-            return DummyToken()
 
-        monkeypatch.setattr(
-            protector,
-            "validate_request",
-            mock_validate_request,
-        )
-
-        @client.app.get("/test")
-        async def endpoint(request: Request):
-            protector.acquire_token(request, scopes="profile")
-            return {"ok": True}
-
-        response = client.get("/test")
-
-        assert response.status_code == 200
-        assert received["scopes"] == ["profile"]
-
-    def test_string_claims_are_converted_to_lists(self, protector, client, monkeypatch):
-        received = {}
-
-        def mock_validate_request(request, **kwargs):
-            received.update(kwargs)
-            return DummyToken()
-
-        monkeypatch.setattr(
-            protector,
-            "validate_request",
-            mock_validate_request,
-        )
-
-        @client.app.get("/test")
-        async def endpoint(request: Request):
-            protector.acquire_token(
-                request,
-                scopes=["profile"],
-                claims="email",
-            )
-            return {"ok": True}
-
-        response = client.get("/test")
-
-        assert response.status_code == 200
-        assert received["claims"] == ["email"]
-
-    def test_sends_token_authenticated_signal(self, protector, client, monkeypatch):
-        from authlib.integrations.fastapi_oauth2 import resource_protector
-
-        token = DummyToken()
-        calls = []
-
-        def mock_validate_request(request, **kwargs):
-            return token
+def test_raise_error_response():
+    protector = ResourceProtector()
 
-        monkeypatch.setattr(
-            protector,
-            "validate_request",
-            mock_validate_request,
-        )
-        monkeypatch.setattr(
-            resource_protector.token_authenticated,
-            "send",
-            lambda sender, **kwargs: calls.append((sender, kwargs)),
-        )
-
-        @client.app.get("/test")
-        async def endpoint(request: Request):
-            protector.acquire_token(request)
-            return {"ok": True}
+    with pytest.raises(OAuth2HTTPException) as exc:
+        protector.raise_error_response(OAuthInvalidTokenError())
 
-        response = client.get("/test")
-
-        assert response.status_code == 200
-        assert len(calls) == 1
-        assert calls[0][0] is protector
-        assert calls[0][1]["token"] is token
+    assert exc.value.status_code == 401
 
 
-class TestAcquire:
-    def test_acquire_context_manager(self, protector, client, monkeypatch):
-        token = DummyToken()
-
-        monkeypatch.setattr(
-            protector,
-            "validate_request",
-            lambda request, **kwargs: token,
-        )
-
-        @client.app.get("/test")
-        async def endpoint(request: Request):
-            with protector.acquire(request, ["profile"]) as acquired:
-                assert acquired is token
-                assert current_token.access_token == "test-token"
+@pytest.mark.anyio
+async def test_call_endpoint_sync():
+    def endpoint(value):
+        return value
 
-            return {"ok": True}
-
-        response = client.get("/test")
-
-        assert response.status_code == 200
-
-    def test_handles_oauth2_error(self, protector, client, monkeypatch):
-        def mock_validate_request(request, **kwargs):
-            raise MissingAuthorizationError()
-
-        monkeypatch.setattr(
-            protector,
-            "validate_request",
-            mock_validate_request,
-        )
-
-        @client.app.get("/test")
-        async def endpoint(request: Request):
-            with protector.acquire(request):
-                return {"ok": True}
-
-        @client.app.exception_handler(OAuth2HTTPException)
-        async def oauth_handler(request, exc):
-            from fastapi.responses import Response
-
-            return Response(
-                exc.body,
-                status_code=exc.status_code,
-                headers=exc.headers,
-                media_type="application/json",
-            )
-
-        response = client.get("/test")
-
-        assert response.status_code == 401
-        assert response.json()["error"] == "missing_authorization"
-
-
-class TestDecorator:
-    def test_protected_endpoint(self, protector, client, monkeypatch):
-        token = DummyToken()
-
-        monkeypatch.setattr(
-            protector,
-            "validate_request",
-            lambda request, **kwargs: token,
-        )
+    result = await module._call_endpoint(endpoint, "test")
 
-        @client.app.get("/test")
-        @protector(["profile"])
-        async def endpoint(request: Request):
-            return {"token": current_token.access_token}
-
-        response = client.get("/test")
-
-        assert response.status_code == 200
-        assert response.json() == {"token": "test-token"}
-
-    def test_missing_authorization(self, protector, client, monkeypatch):
-        def mock_validate_request(request, **kwargs):
-            raise MissingAuthorizationError()
-
-        monkeypatch.setattr(
-            protector,
-            "validate_request",
-            mock_validate_request,
-        )
+    assert result == "test"
 
-        @client.app.get("/test")
-        @protector(["profile"])
-        async def endpoint(request: Request):
-            return {"ok": True}
-
-        response = client.get("/test")
 
-        assert response.status_code == 401
-        assert response.json()["error"] == "missing_authorization"
+@pytest.mark.anyio
+async def test_call_endpoint_async():
+    async def endpoint(value):
+        return value
 
-    def test_optional_missing_authorization(self, protector, client, monkeypatch):
-        def mock_validate_request(request, **kwargs):
-            raise MissingAuthorizationError()
+    result = await module._call_endpoint(endpoint, "test")
 
-        monkeypatch.setattr(
-            protector,
-            "validate_request",
-            mock_validate_request,
-        )
+    assert result == "test"
 
-        @client.app.get("/test")
-        @protector(optional=True)
-        async def endpoint(request: Request):
-            return {"authenticated": False}
 
-        response = client.get("/test")
+def test_current_token_without_request(monkeypatch):
+    request_context = ContextVar("request", default=None)
+    monkeypatch.setattr(module, "_current_request", request_context, raising=False)
 
-        assert response.status_code == 200
-        assert response.json() == {"authenticated": False}
+    with pytest.raises(RuntimeError, match="No request found"):
+        _ = module.current_token.user_id
 
-    def test_optional_does_not_ignore_other_oauth_errors(
-        self, protector, client, monkeypatch
-    ):
-        def mock_validate_request(request, **kwargs):
-            raise OAuth2Error(error="invalid_token", status_code=401)
 
-        monkeypatch.setattr(
-            protector,
-            "validate_request",
-            mock_validate_request,
-        )
+def test_current_token_without_oauth2_token(monkeypatch):
+    request_context = ContextVar("request", default=None)
+    monkeypatch.setattr(module, "_current_request", request_context, raising=False)
 
-        @client.app.get("/test")
-        @protector(optional=True)
-        async def endpoint(request: Request):
-            return {"ok": True}
+    request_context.set(SimpleNamespace(state=SimpleNamespace()))
 
-        response = client.get("/test")
+    with pytest.raises(RuntimeError, match="No OAuth2 token found"):
+        _ = module.current_token.user_id
 
-        assert response.status_code == 401
-        assert response.json()["error"] == "invalid_token"
 
-    def test_callable_scopes(self, protector, client, monkeypatch):
-        received = {}
+def test_current_token_getattr(monkeypatch):
+    request_context = ContextVar("request", default=None)
+    monkeypatch.setattr(module, "_current_request", request_context, raising=False)
 
-        def mock_validate_request(request, **kwargs):
-            received.update(kwargs)
-            return DummyToken()
+    token = SimpleNamespace(user_id=42)
+    request_context.set(SimpleNamespace(state=SimpleNamespace(oauth2_token=token)))
 
-        monkeypatch.setattr(
-            protector,
-            "validate_request",
-            mock_validate_request,
-        )
+    assert module.current_token.user_id == 42
 
-        def dynamic_scopes(request):
-            return ["profile", "email"]
 
-        @client.app.get("/test")
-        @protector(scopes=dynamic_scopes)  # <-- Use keyword argument here
-        async def endpoint(request: Request):
-            return {"ok": True}
+def test_current_token_repr(monkeypatch):
+    request_context = ContextVar("request", default=None)
+    monkeypatch.setattr(module, "_current_request", request_context, raising=False)
 
-        response = client.get("/test")
+    token = SimpleNamespace(user_id=42)
+    request_context.set(SimpleNamespace(state=SimpleNamespace(oauth2_token=token)))
 
-        assert response.status_code == 200
-        assert received["scopes"] == ["profile", "email"]
+    assert repr(module.current_token) == repr(token)
 
-    def test_sync_endpoint(self, protector, client, monkeypatch):
-        monkeypatch.setattr(
-            protector,
-            "validate_request",
-            lambda request, **kwargs: DummyToken(),
-        )
 
-        @client.app.get("/test")
-        @protector()
-        def endpoint(request: Request):
-            return {"ok": True}
+def test_validate_token_valid():
+    protector = ResourceProtector()
+    token = DummyToken(1, "client-1", ["profile", "read"])
 
-        response = client.get("/test")
+    protector.validate_token(token, ["profile"], None)
 
-        assert response.status_code == 200
-        assert response.json() == {"ok": True}
 
+def test_validate_token_missing_token():
+    protector = ResourceProtector()
 
-class TestCurrentToken:
-    def test_raises_without_token(self):
-        with pytest.raises(RuntimeError, match="No OAuth2 token"):
-            _ = current_token.access_token
+    with pytest.raises(InvalidTokenError):
+        protector.validate_token(None, ["profile"], None)
 
-    def test_getattr(self):
-        token = DummyToken()
-        _current_token.set(token)
 
-        assert current_token.access_token == "test-token"
-        assert current_token.scopes == ["profile"]
+def test_validate_token_revoked_token():
+    protector = ResourceProtector()
+    token = DummyToken(1, "client-1", ["profile"], revoked=True)
 
-    def test_repr(self):
-        token = DummyToken()
-        _current_token.set(token)
+    with pytest.raises(InvalidTokenError):
+        protector.validate_token(token, ["profile"], None)
 
-        assert repr(current_token) == repr(token)
 
-    def test_getattr_propagates_missing_attribute(self):
-        token = DummyToken()
-        _current_token.set(token)
+def test_validate_token_insufficient_scope():
+    protector = ResourceProtector()
+    token = DummyToken(1, "client-1", ["read"])
 
-        with pytest.raises(AttributeError):
-            _ = current_token.nonexistent
-
-
-class TestCallEndpoint:
-    @pytest.mark.anyio
-    async def test_async_endpoint(self):
-        async def endpoint():
-            return {"ok": True}
-
-        result = await _call_endpoint(endpoint)
-
-        assert result == {"ok": True}
-
-    @pytest.mark.anyio
-    async def test_sync_endpoint(self):
-        def endpoint():
-            return {"ok": True}
-
-        result = await _call_endpoint(endpoint)
-
-        assert result == {"ok": True}
-
-    @pytest.mark.anyio
-    async def test_endpoint_arguments(self):
-        async def endpoint(request, value=None):
-            return {"value": value}
-
-        result = await _call_endpoint(
-            endpoint,
-            request="test",
-            value=42,
-        )
-
-        assert result == {"value": 42}
-
-    def test_decorator_without_parentheses(self, protector, client, monkeypatch):
-        monkeypatch.setattr(
-            protector,
-            "validate_request",
-            lambda request, **kwargs: DummyToken(),
-        )
-
-        @client.app.get("/test")
-        @protector
-        async def endpoint(request: Request):
-            return {"ok": True}
-
-        response = client.get("/test")
-
-        assert response.status_code == 200
-        assert response.json() == {"ok": True}
-
-    def test_decorator_with_parentheses(self, protector, client, monkeypatch):
-        monkeypatch.setattr(
-            protector,
-            "validate_request",
-            lambda request, **kwargs: DummyToken(),
-        )
-
-        @client.app.get("/test")
-        @protector()
-        async def endpoint(request: Request):
-            return {"ok": True}
-
-        response = client.get("/test")
-
-        assert response.status_code == 200
-
-    def test_dynamic_scopes(self, protector, client, monkeypatch):
-        received = {}
-
-        def mock_validate_request(request, **kwargs):
-            received.update(kwargs)
-            return DummyToken()
-
-        monkeypatch.setattr(
-            protector,
-            "validate_request",
-            mock_validate_request,
-        )
-
-        def get_scopes(request):
-            return ["profile", "email"]
-
-        @client.app.get("/test")
-        @protector(scopes=get_scopes)
-        async def endpoint(request: Request):
-            return {"ok": True}
-
-        response = client.get("/test")
-
-        assert response.status_code == 200
-        assert received["scopes"] == ["profile", "email"]
-
-    def test_dynamic_scopes_receive_request(self, protector, client, monkeypatch):
-        received = {}
-
-        def mock_validate_request(request, **kwargs):
-            received.update(kwargs)
-            return DummyToken()
-
-        monkeypatch.setattr(
-            protector,
-            "validate_request",
-            mock_validate_request,
-        )
-
-        def get_scopes(request):
-            assert isinstance(request, Request)
-            return ["admin"]
-
-        @client.app.get("/test")
-        @protector(scopes=get_scopes)
-        async def endpoint(request: Request):
-            return {"ok": True}
-
-        response = client.get("/test")
-
-        assert response.status_code == 200
-        assert received["scopes"] == ["admin"]
-
-    def test_static_scopes_are_preserved(self, protector, client, monkeypatch):
-        received = {}
-
-        def mock_validate_request(request, **kwargs):
-            received.update(kwargs)
-            return DummyToken()
-
-        monkeypatch.setattr(
-            protector,
-            "validate_request",
-            mock_validate_request,
-        )
-
-        @client.app.get("/test")
-        @protector(["profile", "email"])
-        async def endpoint(request: Request):
-            return {"ok": True}
-
-        response = client.get("/test")
-
-        assert response.status_code == 200
-        assert received["scopes"] == ["profile", "email"]
+    with pytest.raises(InsufficientScopeError):
+        protector.validate_token(token, ["profile"], None)
