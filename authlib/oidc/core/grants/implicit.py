@@ -96,7 +96,7 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
             if state:
                 params.append(("state", state))
         else:
-            error = AccessDeniedError()
+            error = AccessDeniedError(state=state)
             params = error.get_body()
 
         # http://openid.net/specs/oauth-v2-multiple-response-types-1_0.html#ResponseModes

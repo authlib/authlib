@@ -284,6 +284,7 @@ def test_access_denied(test_client):
         },
     )
     assert "error=access_denied" in rv.location
+    assert "state=bar" in rv.location
 
 
 def test_code_access_token(test_client):
