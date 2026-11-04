@@ -6,16 +6,22 @@ from joserfc import jwk
 from joserfc import jwt
 
 from authlib.common.urls import add_params_to_uri
+from authlib.common.urls import url_encode
 from authlib.oauth2 import rfc7591
 from authlib.oauth2 import rfc9101
+from authlib.oauth2.multiple_response_types import MultipleResponseTypes
 from authlib.oauth2.rfc6749.grants import (
     AuthorizationCodeGrant as _AuthorizationCodeGrant,
 )
+from authlib.oauth2.rfc7636 import CodeChallenge
+from authlib.oidc.core import OpenIDCode as _OpenIDCode
 from authlib.oidc.core import OpenIDJWTAuthenticationRequest
 from tests.util import read_file_path
 
 from .models import Client
 from .models import CodeGrantMixin
+from .models import exists_nonce
+from .models import get_auth_time
 from .models import save_authorization_code
 
 authorize_url = "/oauth/authorize"
@@ -42,7 +48,16 @@ def server(server):
         def save_authorization_code(self, code, request):
             return save_authorization_code(code, request)
 
-    server.register_grant(AuthorizationCodeGrant)
+    class OpenIDCode(_OpenIDCode):
+        def exists_nonce(self, nonce, request):
+            return exists_nonce(nonce, request)
+
+        def get_auth_time(self, request):
+            return get_auth_time(request)
+
+    server.register_grant(
+        AuthorizationCodeGrant, [CodeChallenge(required=False), OpenIDCode()]
+    )
     return server
 
 
@@ -800,25 +815,8 @@ def test_empty_request_uri_rejected_before_policy(test_client, server, extension
     extension.get_request_object.assert_not_called()
 
 
-@pytest.mark.parametrize(
-    "extension_cls,claims",
-    [
-        (rfc9101.JWTAuthenticationRequest, {"response_type": ["code"]}),
-        (rfc9101.JWTAuthenticationRequest, {"redirect_uri": 1}),
-        (rfc9101.JWTAuthenticationRequest, {"scope": ["profile"]}),
-        (rfc9101.JWTAuthenticationRequest, {"state": {}}),
-        (rfc9101.JWTAuthenticationRequest, {"code_challenge": True}),
-        (OpenIDJWTAuthenticationRequest, {"prompt": ["login"]}),
-        (OpenIDJWTAuthenticationRequest, {"ui_locales": ["fr"]}),
-        (OpenIDJWTAuthenticationRequest, {"nonce": 1}),
-        (OpenIDJWTAuthenticationRequest, {"max_age": []}),
-        (OpenIDJWTAuthenticationRequest, {"max_age": "60"}),
-        (OpenIDJWTAuthenticationRequest, {"max_age": True}),
-    ],
-)
-def test_request_object_parameter_types(test_client, server, extension_cls, claims):
-    """Request object parameters with an invalid JSON type are rejected."""
-    register_request_object_extension(server, extension_cls=extension_cls)
+def authorize_with_request_object(test_client, claims):
+    """Send an authorization request with a request object."""
     payload = {"response_type": "code", "client_id": "client-id", **claims}
     request_obj = jwt.encode(
         {"alg": "RS256"}, payload, jwk.import_key(read_file_path("jwk_private.json"))
@@ -826,9 +824,74 @@ def test_request_object_parameter_types(test_client, server, extension_cls, clai
     url = add_params_to_uri(
         authorize_url, {"client_id": "client-id", "request": request_obj}
     )
-    rv = test_client.get(url)
+    return test_client.get(url)
+
+
+@pytest.mark.parametrize(
+    "extension_cls", [rfc9101.JWTAuthenticationRequest, OpenIDJWTAuthenticationRequest]
+)
+@pytest.mark.parametrize(
+    "claims",
+    [
+        {"response_type": ["code"]},
+        {"redirect_uri": 1},
+        {"scope": ["profile"]},
+        {"state": {}},
+        {"code_challenge": True},
+        {"scope": "openid", "prompt": ["login"]},
+        {"scope": "openid", "ui_locales": ["fr"]},
+        {"scope": "openid", "nonce": 1},
+        {"scope": "openid", "max_age": []},
+        {"scope": "openid", "max_age": "60"},
+        {"scope": "openid", "max_age": True},
+        {"scope": "openid", "claims": "{}"},
+        {"scope": "openid", "registration": "{}"},
+    ],
+)
+def test_request_object_parameter_types(test_client, server, extension_cls, claims):
+    """Request object parameters with an invalid JSON type are rejected."""
+    register_request_object_extension(server, extension_cls=extension_cls)
+    rv = authorize_with_request_object(test_client, claims)
     assert rv.status_code == 400
     assert rv.json["error"] == "invalid_request_object"
+    assert rv.json["error_description"].endswith("parameter has an invalid type.")
+
+
+def test_request_object_server_extension_parameter_type(test_client, server):
+    """The parameters of the server extensions are checked."""
+    server.register_extension(MultipleResponseTypes())
+    register_request_object_extension(server)
+    rv = authorize_with_request_object(test_client, {"response_mode": ["query"]})
+    assert rv.status_code == 400
+    assert rv.json["error"] == "invalid_request_object"
+
+
+def test_request_object_openid_parameters_without_openid_scope(test_client, server):
+    """Without the openid scope, the OpenID Connect parameters are not
+    checked."""
+    register_request_object_extension(server)
+    rv = authorize_with_request_object(test_client, {"prompt": ["login"]})
+    assert rv.data == b"ok"
+
+
+@pytest.mark.parametrize(
+    "name,value", [("client_id", "other"), ("request", "a"), ("request_uri", "a")]
+)
+def test_repeated_parameter_before_request_object(test_client, server, name, value):
+    """A repeated client_id, request or request_uri is rejected before the
+    request object is fetched."""
+    extension = register_request_object_extension(server)
+    extension.get_request_object = Mock(return_value="unexpected fetch")
+    params = [
+        ("client_id", "client-id"),
+        ("request_uri" if name == "client_id" else name, "a"),
+        (name, value),
+    ]
+    rv = test_client.get(authorize_url + "?" + url_encode(params))
+    assert rv.status_code == 400
+    assert rv.json["error"] == "invalid_request"
+    assert rv.json["error_description"] == f"Multiple '{name}' in request."
+    extension.get_request_object.assert_not_called()
 
 
 def test_request_object_parameter_numbers(test_client, server):
