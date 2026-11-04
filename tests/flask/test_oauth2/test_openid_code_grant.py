@@ -145,6 +145,53 @@ def test_authorize_token(test_client, server, grant_cls):
     assert claims["amr"] == ["pwd", "otp"]
 
 
+def exchange_code_for_id_token(test_client, extra=None):
+    """Authorize, exchange the code, and return the ID token claims."""
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "code",
+            "client_id": "client-id",
+            "scope": "openid profile",
+            "redirect_uri": "https://client.test",
+            "user_id": "1",
+            **(extra or {}),
+        },
+    )
+    code = dict(url_decode(urlparse.urlparse(rv.location).query))["code"]
+    rv = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "redirect_uri": "https://client.test",
+            "code": code,
+        },
+        headers=create_basic_header("client-id", "client-secret"),
+    )
+    id_token = json.loads(rv.data)["id_token"]
+    return jwt.decode(id_token, key=OctKey.import_key(HMAC_SECRET)).claims
+
+
+def test_auth_time_claim(test_client, server):
+    """The auth_time claim of the ID token is the time of the user
+    authentication, not the time the code was created."""
+    register_oidc_code_grant(server)
+    claims = exchange_code_for_id_token(test_client, {"auth_time": "1000000000"})
+    assert claims["auth_time"] == 1000000000
+
+
+def test_unknown_auth_time_claim(test_client, server):
+    """When get_auth_time returns None, the ID token has no auth_time."""
+
+    class UnknownAuthTimeOpenIDCode(OpenIDCode):
+        def get_auth_time(self, request):
+            return None
+
+    register_oidc_code_grant(server, extension=UnknownAuthTimeOpenIDCode)
+    claims = exchange_code_for_id_token(test_client)
+    assert "auth_time" not in claims
+
+
 def test_pure_code_flow(test_client, server):
     register_oidc_code_grant(
         server,
@@ -652,3 +699,47 @@ def test_default_alg_rs256(test_client, server, app, db, client):
         algorithms=["RS256"],
     )
     assert token.header["alg"] == "RS256"
+
+
+def test_get_auth_time_not_implemented_keeps_auth_time(test_client, server):
+    """Without get_auth_time, the ID token auth_time is the current time."""
+    with pytest.warns(AuthlibDeprecationWarning, match="get_auth_time"):
+
+        class LegacyOpenIDCode(_OpenIDCode):
+            def resolve_client_private_key(self, client):
+                return current_app.config["OAUTH2_JWT_KEY"]
+
+            def get_client_claims(self, client):
+                return {"iss": current_app.config["OAUTH2_JWT_ISS"]}
+
+            def exists_nonce(self, nonce, request):
+                return exists_nonce(nonce, request)
+
+            def generate_user_info(self, user, scopes):
+                return user.generate_user_info(scopes)
+
+    register_oidc_code_grant(server, extension=LegacyOpenIDCode)
+    before = int(time.time())
+    claims = exchange_code_for_id_token(test_client, {"max_age": "3600"})
+    assert claims["auth_time"] >= before
+
+
+def test_denied_does_not_call_get_auth_time(test_client, server):
+    """get_auth_time is not called when the user denies the request."""
+
+    class FailingOpenIDCode(OpenIDCode):
+        def get_auth_time(self, request):
+            raise AssertionError("get_auth_time should not be called")
+
+    register_oidc_code_grant(server, extension=FailingOpenIDCode)
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "code",
+            "client_id": "client-id",
+            "scope": "openid profile",
+            "redirect_uri": "https://client.test",
+        },
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert params["error"] == "access_denied"

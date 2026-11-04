@@ -611,6 +611,34 @@ def test_auth_time_claim(test_client):
     assert claims["auth_time"] == 1000000000
 
 
+def test_auth_time_claim_is_an_integer(test_client, server):
+    """A float returned by get_auth_time becomes an integer auth_time."""
+
+    class FloatAuthTimeGrant(_OpenIDImplicitGrant):
+        def resolve_client_private_key(self, client):
+            return OctKey.import_key(HMAC_SECRET)
+
+        def get_client_claims(self, client):
+            return {"iss": "Authlib", "aud": [client.get_client_id()]}
+
+        def generate_user_info(self, user, scopes):
+            return user.generate_user_info(scopes)
+
+        def exists_nonce(self, nonce, request):
+            return exists_nonce(nonce, request)
+
+        def get_auth_time(self, request):
+            return 1000000000.75
+
+    server._authorization_grants = []
+    server.register_grant(FloatAuthTimeGrant)
+    rv = test_client.post("/oauth/authorize", data=IMPLICIT_PARAMS)
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    claims = validate_claims(params["id_token"], params)
+    assert claims["auth_time"] == 1000000000
+    assert isinstance(claims["auth_time"], int)
+
+
 def test_unknown_auth_time_claim(test_client, server):
     """When get_auth_time returns None, the ID token has no auth_time."""
 

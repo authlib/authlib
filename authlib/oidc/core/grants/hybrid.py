@@ -42,6 +42,7 @@ class OpenIDHybridGrant(OpenIDImplicitGrant):
                     redirect_uri=request.payload.redirect_uri,
                     scope=request.scope,
                     nonce=request.payload.data.get("nonce"),
+                    auth_time=request.auth_time,
                     user_id=request.user.id,
                 )
                 auth_code.save()

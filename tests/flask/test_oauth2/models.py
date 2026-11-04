@@ -107,6 +107,7 @@ def save_authorization_code(code, request):
         redirect_uri=request.payload.redirect_uri,
         scope=request.scope,
         nonce=request.payload.data.get("nonce"),
+        auth_time=getattr(request, "auth_time", None),
         user_id=request.user.id,
         code_challenge=request.payload.data.get("code_challenge"),
         code_challenge_method=request.payload.data.get("code_challenge_method"),

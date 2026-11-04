@@ -17,6 +17,7 @@ from .util import create_half_hash
 from .util import get_auth_time_function
 from .util import has_multiple_response_types
 from .util import is_openid_scope
+from .util import resolve_auth_time
 from .util import validate_nonce
 from .util import validate_request_prompt
 from .util import validate_response_mode
@@ -96,6 +97,8 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
         ``grant.prompt`` is ``"login"``. When it returns ``None``, the user
         must log in again. The value is also the ``auth_time`` claim of the
         ID token. When it is ``None``, the ID token has no ``auth_time``.
+        In the hybrid flow, it is also ``request.auth_time`` in
+        ``save_authorization_code``.
 
         :param request: the authorization request, with its ``user``
         :return: a timestamp, or ``None`` if it is unknown
@@ -130,6 +133,12 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
         return redirect_uri
 
     def create_authorization_response(self, redirect_uri, grant_user):
+        if grant_user:
+            self.request.user = grant_user
+            self.request.auth_time = resolve_auth_time(
+                self, OpenIDImplicitGrant, self.request
+            )
+
         state = self.request.payload.state
         if grant_user:
             params = self.create_granted_params(grant_user)
@@ -189,10 +198,9 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
             )
 
         claims = self.get_compatible_claims(self.request)
-        if get_auth_time := get_auth_time_function(self, OpenIDImplicitGrant):
-            claims.pop("auth_time", None)
-            if (auth_time := get_auth_time(self.request)) is not None:
-                claims["auth_time"] = auth_time
+        claims.pop("auth_time", None)
+        if self.request.auth_time is not None:
+            claims["auth_time"] = self.request.auth_time
 
         nonce = self.request.payload.data.get("nonce")
         if nonce:

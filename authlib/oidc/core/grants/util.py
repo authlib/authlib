@@ -256,6 +256,17 @@ def get_auth_time_function(obj, base):
     return obj.get_auth_time
 
 
+def resolve_auth_time(obj, base, request):
+    """Return the time of the last authentication of the request user, with
+    ``get_auth_time``, as an integer. Without it, return the current time."""
+    get_auth_time = get_auth_time_function(obj, base)
+    if get_auth_time is None:
+        return int(time.time())
+
+    auth_time = get_auth_time(request)
+    return None if auth_time is None else int(auth_time)
+
+
 def _is_authentication_too_old(request, max_age, get_auth_time):
     """Tell if the last authentication of the user is older than ``max_age``."""
     if max_age is None:

@@ -92,10 +92,14 @@ to rewrite our ``AuthorizationCode`` db model::
         redirect_uri = TextField(default='', null=True)
         response_type = TextField(default='')
         scope = TextField(default='', null=True)
-        auth_time = IntegerField(null=False, default=now_timestamp)
+        issued_at = IntegerField(null=False, default=now_timestamp)
 
-        # add nonce
+        # add nonce and auth_time
         nonce = CharField(max_length=120, default='', null=True)
+        auth_time = IntegerField(null=True)
+
+        def get_auth_time(self):
+            return self.auth_time
 
         # ... other fields and methods ...
 
@@ -138,8 +142,10 @@ First, we need to implement the missing methods for ``OpenIDCode``::
         def get_auth_time(self, request):
             return request.framework_request.session.get("auth_time")
 
-Second, since there is one more ``nonce`` value in ``AuthorizationCode`` data,
-we need to save this value into database. In this case, we have to update our
+Second, the ``AuthorizationCode`` data has two more values: the ``nonce``
+parameter, and the time of the user authentication. ``OpenIDCode`` sets this
+time in ``request.auth_time`` with ``get_auth_time``. It becomes the
+``auth_time`` claim of the ID token. Save these values in the
 ``AuthorizationCodeGrant.save_authorization_code`` method::
 
     class AuthorizationCodeGrant(_AuthorizationCodeGrant):
@@ -154,6 +160,7 @@ we need to save this value into database. In this case, we have to update our
                 scope=request.scope,
                 user=request.user,
                 nonce=nonce,
+                auth_time=request.auth_time,
             )
             auth_code.save()
             return auth_code
@@ -262,6 +269,7 @@ is ``save_authorization_code``. You can implement it like this::
                 scope=request.scope,
                 user=request.user,
                 nonce=nonce,
+                auth_time=request.auth_time,
             )
             auth_code.save()
             return auth_code
@@ -318,15 +326,21 @@ in, ``grant.prompt`` is ``"login"``::
 
     def authorize(request):
         try:
-            grant = server.get_consent_grant(request, end_user=request.user)
+            end_user = request.user if request.user.is_authenticated else None
+            grant = server.get_consent_grant(request, end_user=end_user)
         except OAuth2Error as error:
             return server.handle_error_response(request, error)
 
-        if grant.prompt == "login":
+        if request.method == "GET" and grant.prompt == "login":
             return redirect_to_login(request.get_full_path())
         ...
 
 With ``prompt=none``, the server returns a ``login_required`` error instead.
 ``max_age=0`` works like ``prompt=login``: ``grant.prompt`` stays ``"login"``
 for this request, even after the login.
+
+The age of the authentication is measured each time you call
+``get_consent_grant``. Check ``grant.prompt`` when you show the consent page,
+and not when the user submits it. Otherwise, a user who stays on the consent
+page longer than ``max_age`` is sent back to the login page.
 

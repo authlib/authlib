@@ -172,6 +172,27 @@ def test_auth_time_claim(test_client):
     assert token.claims["auth_time"] == 1000000000
 
 
+def test_auth_time_claim_after_code_exchange(test_client):
+    """The ID token of the token endpoint has the auth_time of the
+    authorization request."""
+    rv = test_client.post(
+        "/oauth/authorize", data=dict(HYBRID_PARAMS + [("auth_time", "1000000000")])
+    )
+    code = dict(url_decode(urlparse.urlparse(rv.location).fragment))["code"]
+    rv = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "redirect_uri": "https://client.test",
+            "code": code,
+        },
+        headers=create_basic_header("client-id", "client-secret"),
+    )
+    id_token = json.loads(rv.data)["id_token"]
+    token = jwt.decode(id_token, OctKey.import_key(HMAC_SECRET), algorithms=["HS256"])
+    assert token.claims["auth_time"] == 1000000000
+
+
 def test_invalid_client_id(test_client):
     rv = test_client.post(
         "/oauth/authorize",

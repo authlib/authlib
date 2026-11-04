@@ -124,9 +124,11 @@ First, we need to implement the missing methods for ``OpenIDCode``::
         def get_auth_time(self, request):
             return session.get("auth_time")
 
-Second, since there is one more ``nonce`` value in the ``AuthorizationCode``
-data, we need to save this value into the database. In this case, we have to
-update our :ref:`flask_oauth2_code_grant` ``save_authorization_code`` method::
+Second, the ``AuthorizationCode`` data has two more values: the ``nonce``
+parameter, and the time of the user authentication. ``OpenIDCode`` sets this
+time in ``request.auth_time`` with ``get_auth_time``. It becomes the
+``auth_time`` claim of the ID token. Save these values in the
+:ref:`flask_oauth2_code_grant` ``save_authorization_code`` method::
 
     class AuthorizationCodeGrant(_AuthorizationCodeGrant):
         def save_authorization_code(self, code, request):
@@ -139,6 +141,7 @@ update our :ref:`flask_oauth2_code_grant` ``save_authorization_code`` method::
                 scope=request.scope,
                 user_id=request.user.id,
                 nonce=nonce,
+                auth_time=request.auth_time,
             )
             db.session.add(auth_code)
             db.session.commit()
@@ -255,6 +258,7 @@ is ``save_authorization_code``. You can implement it like this::
                 scope=request.scope,
                 user_id=request.user.id,
                 nonce=nonce,
+                auth_time=request.auth_time,
             )
             db.session.add(item)
             db.session.commit()
@@ -312,12 +316,17 @@ must log in, ``grant.prompt`` is ``"login"``::
         except OAuth2Error as error:
             return server.handle_error_response(request, error)
 
-        if grant.prompt == "login":
+        if request.method == "GET" and grant.prompt == "login":
             return redirect(url_for("login", next=request.url))
         ...
 
 With ``prompt=none``, the server returns a ``login_required`` error instead.
 ``max_age=0`` works like ``prompt=login``: ``grant.prompt`` stays ``"login"``
 for this request, even after the login.
+
+The age of the authentication is measured each time you call
+``get_consent_grant``. Check ``grant.prompt`` when you show the consent page,
+and not when the user submits it. Otherwise, a user who stays on the consent
+page longer than ``max_age`` is sent back to the login page.
 
 Find the `example of OpenID Connect server <https://github.com/authlib/example-oidc-server>`_.
