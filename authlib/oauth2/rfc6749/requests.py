@@ -60,7 +60,7 @@ class BasicOAuth2Payload(OAuth2Payload):
 
 
 class OAuth2Request:
-    def __init__(self, method: str, uri: str, headers=None):
+    def __init__(self, method: str, uri: str, *, headers=None):
         InsecureTransportError.check(uri)
         #: HTTP method
         self.method = method

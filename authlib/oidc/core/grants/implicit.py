@@ -73,13 +73,6 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
         """
         raise NotImplementedError()
 
-    def get_audiences(self, request):
-        """Parse `aud` value for id_token, default value is client id. Developers
-        MAY rewrite this method to provide a customized audience value.
-        """
-        client = request.client
-        return [client.get_client_id()]
-
     def validate_authorization_request(self):
         redirect_uri = super().validate_authorization_request()
         validate_response_mode(self, redirect_uri)

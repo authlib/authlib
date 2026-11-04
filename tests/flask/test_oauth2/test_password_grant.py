@@ -39,18 +39,6 @@ class IDToken(OpenIDToken):
         return user.generate_user_info(scopes)
 
 
-class LegacyIDToken(OpenIDToken):
-    def get_jwt_config(self, grant, client):
-        return {
-            "iss": "Authlib",
-            "key": OctKey.import_key(HMAC_SECRET),
-            "alg": "HS256",
-        }
-
-    def generate_user_info(self, user, scopes):
-        return user.generate_user_info(scopes)
-
-
 class PasswordGrant(_PasswordGrant):
     def authenticate_user(self, username, password):
         user = User.query.filter_by(username=username).first()

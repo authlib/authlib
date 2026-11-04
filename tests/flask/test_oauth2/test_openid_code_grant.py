@@ -82,20 +82,6 @@ class OpenIDCode(_OpenIDCode):
         return user.generate_user_info(scopes)
 
 
-class LegacyOpenIDCode(_OpenIDCode):
-    def get_jwt_config(self, grant, client):
-        key = current_app.config.get("OAUTH2_JWT_KEY")
-        alg = current_app.config.get("OAUTH2_JWT_ALG")
-        iss = current_app.config.get("OAUTH2_JWT_ISS")
-        return dict(key=key, alg=alg, iss=iss, exp=3600)
-
-    def exists_nonce(self, nonce, request):
-        return exists_nonce(nonce, request)
-
-    def generate_user_info(self, user, scopes):
-        return user.generate_user_info(scopes)
-
-
 def register_oidc_code_grant(
     server, require_nonce=False, extension=OpenIDCode, grant_cls=AuthorizationCodeGrant
 ):
