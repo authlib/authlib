@@ -2,6 +2,7 @@ import time
 
 import pytest
 from flask import json
+from joserfc.jwk import ECKey
 from joserfc.jwk import RSAKey
 
 from authlib.oauth2.drafts import IDJAGGrant as _IDJAGGrant
@@ -18,8 +19,12 @@ private_pem = read_file_path("rsa_private.pem")
 public_pem = read_file_path("rsa_public.pem")
 rsa_public = RSAKey.import_key(public_pem)
 
-# Simulated trusted-issuer registry and JTI replay store
-_TRUSTED_ISSUERS = {"https://idp.example.com": rsa_public}
+other_issuer = "https://other-idp.example.com"
+other_key = ECKey.generate_key("P-256", private=True)
+
+# Simulated trusted-issuer registry, users of each issuer and JTI replay store
+_TRUSTED_ISSUERS = {"https://idp.example.com": rsa_public, other_issuer: other_key}
+_ISSUER_USERS = {"https://idp.example.com": {"foo"}, other_issuer: set()}
 _USED_JTIS: set = set()
 
 
@@ -36,6 +41,10 @@ class IDJAGGrant(_IDJAGGrant):
         return key
 
     def authenticate_user(self, subject):
+        issuer = self.request.id_jag_claims["iss"]
+        if subject not in _ISSUER_USERS[issuer]:
+            return None
+
         return User.query.filter_by(username=subject).first()
 
     def check_jti(self, claims, jti):
@@ -114,6 +123,19 @@ def test_valid_id_jag_flow(test_client):
     resp = json.loads(rv.data)
     assert "access_token" in resp
     assert "refresh_token" not in resp
+
+
+def test_subject_of_another_issuer(test_client):
+    """An IdP cannot get an access token for a user of another IdP."""
+    assertion = _sign(key=other_key, issuer=other_issuer, alg="ES256")
+    rv = test_client.post(
+        "/oauth/token",
+        headers=create_basic_header("client-id", "client-secret"),
+        data={"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": assertion},
+    )
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_grant"
+    assert "sub" in resp["error_description"]
 
 
 def test_wrong_typ_header(test_client):

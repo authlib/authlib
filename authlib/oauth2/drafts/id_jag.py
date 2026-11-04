@@ -161,6 +161,7 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
             raise InvalidRequestError("Missing 'assertion' in request")
 
         claims = self._process_assertion_claims(assertion)
+        self.request.id_jag_claims = claims
 
         client_id_claim = claims["client_id"]
         if client.get_client_id() != client_id_claim:
@@ -328,7 +329,19 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
         raise NotImplementedError()
 
     def authenticate_user(self, subject):
-        """Return the user identified by the ``sub`` claim, or *None*."""
+        """Return the user identified by the ``sub`` claim, or *None*.
+
+        Per the ID-JAG draft -06 §3.1, ``sub`` is only unique within its issuer,
+        and within its ``tenant`` for a multi-tenant issuer. When the server
+        trusts several IdPs, resolve the user with the issuer too (§4.1). The
+        verified claims are in ``self.request.id_jag_claims``::
+
+            def authenticate_user(self, subject):
+                issuer = self.request.id_jag_claims["iss"]
+                return User.query.filter_by(issuer=issuer, sub=subject).first()
+
+        :param subject: the ``sub`` claim of the ID-JAG
+        """
         raise NotImplementedError()
 
     def check_jti(self, claims, jti) -> bool:
@@ -338,5 +351,10 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
 
     def check_id_jag_permission(self, client, user, scopes) -> bool:
         """Application policy: return *True* if *client* may act on
-        behalf of *user* for *scopes*."""
+        behalf of *user* for *scopes*.
+
+        The verified claims of the ID-JAG are in
+        ``self.request.id_jag_claims``, for a policy that depends on the
+        issuer or the tenant.
+        """
         raise NotImplementedError()
