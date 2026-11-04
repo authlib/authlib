@@ -1,7 +1,5 @@
 from collections import defaultdict
 
-from authlib.deprecate import deprecate
-
 from .errors import InsecureTransportError
 from .util import normalize_response_type
 
@@ -61,23 +59,14 @@ class BasicOAuth2Payload(OAuth2Payload):
         return self._datalist
 
 
-class OAuth2Request(OAuth2Payload):
-    def __init__(self, method: str, uri: str, body=None, headers=None):
+class OAuth2Request:
+    def __init__(self, method: str, uri: str, headers=None):
         InsecureTransportError.check(uri)
         #: HTTP method
         self.method = method
         self.uri = uri
         #: HTTP headers
         self.headers = headers or {}
-
-        # Store body for backward compatibility but issue deprecation warning if used
-        if body is not None:
-            deprecate(
-                "'body' parameter in OAuth2Request is deprecated. "
-                "Use the payload system instead.",
-                version="1.8",
-            )
-        self._body = body
 
         self.payload = None
 
@@ -95,57 +84,7 @@ class OAuth2Request(OAuth2Payload):
 
     @property
     def form(self):
-        if self._body:
-            return self._body
         raise NotImplementedError()
-
-    @property
-    def data(self):
-        deprecate(
-            "'request.data' is deprecated in favor of 'request.payload.data'",
-            version="1.8",
-        )
-        return self.payload.data
-
-    @property
-    def datalist(self) -> defaultdict[str, list]:
-        deprecate(
-            "'request.datalist' is deprecated in favor of 'request.payload.datalist'",
-            version="1.8",
-        )
-        return self.payload.datalist
-
-    @property
-    def client_id(self) -> str:
-        deprecate(
-            "'request.client_id' is deprecated in favor of 'request.payload.client_id'",
-            version="1.8",
-        )
-        return self.payload.client_id
-
-    @property
-    def response_type(self) -> str:
-        deprecate(
-            "'request.response_type' is deprecated in favor of 'request.payload.response_type'",
-            version="1.8",
-        )
-        return self.payload.response_type
-
-    @property
-    def grant_type(self) -> str:
-        deprecate(
-            "'request.grant_type' is deprecated in favor of 'request.payload.grant_type'",
-            version="1.8",
-        )
-        return self.payload.grant_type
-
-    @property
-    def redirect_uri(self):
-        deprecate(
-            "'request.redirect_uri' is deprecated in favor of 'request.payload.redirect_uri'",
-            version="1.8",
-        )
-        return self.payload.redirect_uri
 
     @property
     def scope(self) -> str:
@@ -156,22 +95,6 @@ class OAuth2Request(OAuth2Payload):
     @scope.setter
     def scope(self, value: str):
         self._scope = value
-
-    @property
-    def state(self):
-        deprecate(
-            "'request.state' is deprecated in favor of 'request.payload.state'",
-            version="1.8",
-        )
-        return self.payload.state
-
-    @property
-    def body(self):
-        deprecate(
-            "'request.body' is deprecated. Use the payload system instead.",
-            version="1.8",
-        )
-        return self._body
 
 
 class JsonPayload:
@@ -186,11 +109,3 @@ class JsonRequest:
         self.uri = uri
         self.headers = headers or {}
         self.payload = None
-
-    @property
-    def data(self):
-        deprecate(
-            "'request.data' is deprecated in favor of 'request.payload.data'",
-            version="1.8",
-        )
-        return self.payload.data

@@ -430,3 +430,9 @@ def test_missing_scope_rejected(test_client, client, monkeypatch):
 
     rv = test_client.post(authorize_url, data={"user_id": "1"})
     assert "error=invalid_scope" in rv.location
+
+
+def test_create_authorization_response_requires_grant(server):
+    """The authorization response needs the grant of the consent page."""
+    with pytest.raises(TypeError, match="get_consent_grant"):
+        server.create_authorization_response(grant_user=None)

@@ -370,18 +370,18 @@ class AuthorizationServer(Hookable):
         :param request: HTTP request instance.
         :param grant_user: if granted, it is resource owner. If denied,
             it is None.
+        :param grant: the grant returned by :meth:`get_consent_grant`
         :returns: Response
+        :raises TypeError: without ``grant``
         """
+        if grant is None:
+            raise TypeError(
+                "create_authorization_response() requires the 'grant' returned "
+                "by get_consent_grant()."
+            )
+
         if not isinstance(request, OAuth2Request):
             request = self.create_oauth2_request(request)
-
-        if not grant:
-            deprecate("The 'grant' parameter will become mandatory.", version="1.8")
-            try:
-                grant = self.get_authorization_grant(request)
-            except UnsupportedResponseTypeError as error:
-                error.state = request.payload.state
-                return self.handle_error_response(request, error)
 
         try:
             redirect_uri = grant.validate_authorization_request()

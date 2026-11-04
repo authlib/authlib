@@ -7,7 +7,6 @@ from joserfc.errors import JoseError
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.security import generate_token
-from authlib.deprecate import deprecate
 
 from ..rfc6749 import InvalidRequestError
 from ..rfc6749 import JsonResponse
@@ -102,26 +101,8 @@ class ClientRegistrationEndpoint:
 
     def generate_client_info(self, request):
         # https://tools.ietf.org/html/rfc7591#section-3.2.1
-        try:
-            client_id = self.generate_client_id(request)
-        except TypeError:  # pragma: no cover
-            client_id = self.generate_client_id()  # type: ignore
-            deprecate(
-                "generate_client_id takes a 'request' parameter. "
-                "It will become mandatory in coming releases",
-                version="1.8",
-            )
-
-        try:
-            client_secret = self.generate_client_secret(request)
-        except TypeError:  # pragma: no cover
-            client_secret = self.generate_client_secret()
-            deprecate(
-                "generate_client_secret takes a 'request' parameter. "
-                "It will become mandatory in coming releases",
-                version="1.8",
-            )
-
+        client_id = self.generate_client_id(request)
+        client_secret = self.generate_client_secret(request)
         client_id_issued_at = int(time.time())
         client_secret_expires_at = 0
         return dict(

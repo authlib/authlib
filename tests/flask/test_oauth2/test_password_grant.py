@@ -3,7 +3,6 @@ from flask import json
 from joserfc.jwk import OctKey
 
 from authlib.common.urls import add_params_to_uri
-from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.oauth2.rfc6749.grants import (
     ResourceOwnerPasswordCredentialsGrant as _PasswordGrant,
 )
@@ -262,23 +261,4 @@ def test_id_token_extension(test_client, server):
     )
     resp = json.loads(rv.data)
     assert "access_token" in resp
-    assert "id_token" in resp
-
-
-def test_deprecated_get_jwt_config(test_client, server):
-    """Using get_jwt_config(self, grant, client) should emit an AuthlibDeprecationWarning."""
-    register_password_grant(server, extensions=[LegacyIDToken()])
-    headers = create_basic_header("client-id", "client-secret")
-    with pytest.warns(AuthlibDeprecationWarning, match="get_jwt_config.*version 1.8"):
-        rv = test_client.post(
-            "/oauth/token",
-            data={
-                "grant_type": "password",
-                "username": "foo",
-                "password": "ok",
-                "scope": "openid profile",
-            },
-            headers=headers,
-        )
-    resp = json.loads(rv.data)
     assert "id_token" in resp

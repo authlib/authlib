@@ -437,37 +437,6 @@ def test_non_string_sub_claim(test_client, server):
     assert resp["error_description"] == "Invalid claim: 'sub'"
 
 
-def test_resolve_client_public_key_with_headers(test_client, server):
-    """The former 'resolve_client_public_key(client, headers)' signature is
-    still supported but deprecated."""
-
-    class JWTClientAuth(JWTBearerClientAssertion):
-        def get_audiences(self):
-            return ["https://provider.test/oauth/token"]
-
-        def validate_jti(self, claims, jti):
-            return True
-
-        def resolve_client_public_key(self, client, headers):
-            return OctKey.import_key(client.client_secret)
-
-    server.register_client_auth_method(
-        JWTClientAuth.CLIENT_AUTH_METHOD, JWTClientAuth()
-    )
-    data = {
-        "grant_type": "client_credentials",
-        "client_assertion_type": JWTBearerClientAssertion.CLIENT_ASSERTION_TYPE,
-        "client_assertion": client_secret_jwt_sign(
-            client_secret=secret_key,
-            client_id="client-id",
-            token_endpoint="https://provider.test/oauth/token",
-        ),
-    }
-    with pytest.warns(AuthlibDeprecationWarning, match="only 'client' parameter"):
-        rv = test_client.post("/oauth/token", data=data)
-    assert "access_token" in json.loads(rv.data)
-
-
 @pytest.mark.filterwarnings(
     "ignore:Using implicit key type is not recommended:joserfc.errors.SecurityWarning"
 )

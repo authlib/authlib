@@ -131,7 +131,7 @@ update our :ref:`flask_oauth2_code_grant` ``save_authorization_code`` method::
             auth_code = AuthorizationCode(
                 code=code,
                 client_id=request.client.client_id,
-                redirect_uri=request.redirect_uri,
+                redirect_uri=request.payload.redirect_uri,
                 scope=request.scope,
                 user_id=request.user.id,
                 nonce=nonce,
@@ -242,7 +242,7 @@ is ``save_authorization_code``. You can implement it like this::
             item = AuthorizationCode(
                 code=code,
                 client_id=request.client.client_id,
-                redirect_uri=request.redirect_uri,
+                redirect_uri=request.payload.redirect_uri,
                 scope=request.scope,
                 user_id=request.user.id,
                 nonce=nonce,

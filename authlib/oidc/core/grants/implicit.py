@@ -185,16 +185,3 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
         id_token = jwt.encode(header, claims, private_key, [alg])
         token["id_token"] = id_token
         return token
-
-    def _compatible_resolve_jwt_config(self, grant, client):
-        if not hasattr(self, "get_jwt_config"):
-            return {}
-        deprecate(
-            "get_jwt_config(self, client) is deprecated and will be removed in version 1.8. "
-            "Use resolve_client_private_key, get_client_claims, get_client_algorithm instead."
-        )
-        try:
-            config = self.get_jwt_config(client)
-        except TypeError:
-            config = self.get_jwt_config()
-        return config

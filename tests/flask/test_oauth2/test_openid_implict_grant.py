@@ -10,15 +10,12 @@ from authlib.common.urls import urlparse
 from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.oauth2.multiple_response_types import MultipleResponseTypes
 from authlib.oauth2.rfc6749 import AuthorizationServer
-from authlib.oauth2.rfc6749.requests import BasicOAuth2Payload
-from authlib.oauth2.rfc6749.requests import OAuth2Request
 from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core.grants import OpenIDImplicitGrant as _OpenIDImplicitGrant
 from authlib.oidc.prompt_create import PromptCreate
 from tests.util import HMAC_SECRET
 from tests.util import parse_form
 
-from .models import Client
 from .models import exists_nonce
 from .oauth2_server import register_form_post
 
@@ -573,71 +570,6 @@ def test_client_metadata_alg_none(test_client, db, client):
     )
     params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
     assert params["error"] == "invalid_request"
-
-
-def test_deprecated_get_jwt_config_signature(user):
-    """Using the old get_jwt_config(self) signature should emit a DeprecationWarning."""
-
-    class DeprecatedImplicitGrant(_OpenIDImplicitGrant):
-        def get_jwt_config(self):
-            return {
-                "key": OctKey.import_key(HMAC_SECRET),
-                "alg": "HS256",
-                "iss": "Authlib",
-                "aud": ["deprecated-client"],
-                "exp": 3600,
-            }
-
-        def generate_user_info(self, user, scopes):
-            return user.generate_user_info(scopes)
-
-        def exists_nonce(self, nonce, request):
-            return exists_nonce(nonce, request)
-
-    client = Client(
-        user_id=user.id,
-        client_id="deprecated-client",
-        client_secret="secret",
-    )
-    client.set_client_metadata(
-        {
-            "redirect_uris": ["https://client.test/callback"],
-            "scope": "openid profile",
-            "token_endpoint_auth_method": "none",
-            "response_types": ["id_token"],
-        }
-    )
-
-    request = OAuth2Request("POST", "https://server.test/authorize")
-    request.payload = BasicOAuth2Payload({"nonce": "test-nonce"})
-    request.client = client
-    request.user = user
-
-    grant = DeprecatedImplicitGrant(request, client)
-    token = {"scope": "openid", "expires_in": 3600}
-
-    with pytest.warns(AuthlibDeprecationWarning, match="get_jwt_config.*version 1.8"):
-        grant.process_implicit_token(token)
-
-
-def test_deprecated_get_audiences(user):
-    """Using get_audiences(self, request) should emit an AuthlibDeprecationWarning."""
-
-    class DeprecatedImplicitGrant(_OpenIDImplicitGrant):
-        def get_client_claims(self, client):
-            return {"iss": "Authlib"}
-
-        def get_audiences(self, request):
-            return ["custom-audience"]
-
-    client = Client(user_id=user.id, client_id="deprecated-client")
-    request = OAuth2Request("POST", "https://server.test/authorize")
-    request.client = client
-    grant = DeprecatedImplicitGrant(request, None)
-
-    with pytest.warns(AuthlibDeprecationWarning, match="get_audiences.*version 1.8"):
-        claims = grant.get_compatible_claims(request)
-    assert claims["aud"] == ["custom-audience"]
 
 
 def test_default_response_mode_is_deprecated():

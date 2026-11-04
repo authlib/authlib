@@ -8,7 +8,6 @@ from joserfc.util import to_bytes
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.encoding import json_loads
-from authlib.deprecate import deprecate
 
 from ..rfc6749 import BaseGrant
 from ..rfc6749 import InvalidClientError
@@ -77,7 +76,7 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
         :return: JWTClaims
         :raise: InvalidGrantError
         """
-        headers, claims = self.extract_assertion(assertion)
+        _, claims = self.extract_assertion(assertion)
         # "iss" is read before the signature and the claims are verified, so it
         # cannot be assumed to be present nor to be a string.
         if "iss" not in claims:
@@ -93,14 +92,7 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
                 description="The client does not exist on this server."
             )
 
-        if hasattr(self, "resolve_client_key"):  # pragma: no cover
-            key = import_any_key(self.resolve_client_key(client, headers, claims))
-            deprecate(
-                "Use resolve_client_public_key instead of resolve_client_key.",
-                version="1.8",
-            )
-        else:
-            key = import_any_key(self.resolve_client_public_key(client))
+        key = import_any_key(self.resolve_client_public_key(client))
 
         try:
             token = jwt.decode(assertion, key)

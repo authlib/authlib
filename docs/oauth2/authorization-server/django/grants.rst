@@ -66,7 +66,7 @@ grant type. Here is how::
             auth_code = AuthorizationCode(
                 code=code,
                 client_id=client.client_id,
-                redirect_uri=request.redirect_uri,
+                redirect_uri=request.payload.redirect_uri,
                 response_type=request.payload.response_type,
                 scope=request.scope,
                 user=request.user,
