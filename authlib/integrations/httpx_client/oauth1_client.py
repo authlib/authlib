@@ -1,4 +1,4 @@
-import typing
+from collections.abc import Generator
 
 from authlib.common.encoding import to_unicode
 from authlib.oauth1 import SIGNATURE_HMAC_SHA1
@@ -21,7 +21,7 @@ class OAuth1Auth(Auth, ClientAuth):
 
     requires_request_body = True
 
-    def auth_flow(self, request: Request) -> typing.Generator[Request, Response, None]:
+    def auth_flow(self, request: Request) -> Generator[Request, Response, None]:
         url, headers, body = self.prepare(
             request.method, str(request.url), request.headers, request.content
         )

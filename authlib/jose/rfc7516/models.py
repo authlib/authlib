@@ -1,8 +1,8 @@
 import os
-from abc import ABCMeta
+from abc import ABC
 
 
-class JWEAlgorithmBase(metaclass=ABCMeta):  # noqa: B024
+class JWEAlgorithmBase(ABC):  # noqa: B024
     """Base interface for all JWE algorithms."""
 
     EXTRA_HEADERS = None
@@ -20,7 +20,7 @@ class JWEAlgorithmBase(metaclass=ABCMeta):  # noqa: B024
         raise NotImplementedError
 
 
-class JWEAlgorithm(JWEAlgorithmBase, metaclass=ABCMeta):
+class JWEAlgorithm(JWEAlgorithmBase):
     """Interface for JWE algorithm conforming to RFC7518.
     JWA specification (RFC7518) SHOULD implement the algorithms for JWE
     with this base implementation.
@@ -33,7 +33,7 @@ class JWEAlgorithm(JWEAlgorithmBase, metaclass=ABCMeta):
         raise NotImplementedError
 
 
-class JWEAlgorithmWithTagAwareKeyAgreement(JWEAlgorithmBase, metaclass=ABCMeta):
+class JWEAlgorithmWithTagAwareKeyAgreement(JWEAlgorithmBase):
     """Interface for JWE algorithm with tag-aware key agreement (in key agreement
     with key wrapping mode).
     ECDH-1PU is an example of such an algorithm.
@@ -123,8 +123,8 @@ class JWESharedHeader(dict):
         if protected:
             obj.update(protected)
         super().__init__(obj)
-        self.protected = protected if protected else {}
-        self.unprotected = unprotected if unprotected else {}
+        self.protected = protected or {}
+        self.unprotected = unprotected or {}
 
     def update_protected(self, addition):
         self.update(addition)
@@ -153,6 +153,6 @@ class JWEHeader(dict):
         if protected:
             obj.update(protected)
         super().__init__(obj)
-        self.protected = protected if protected else {}
-        self.unprotected = unprotected if unprotected else {}
-        self.header = header if header else {}
+        self.protected = protected or {}
+        self.unprotected = unprotected or {}
+        self.header = header or {}
