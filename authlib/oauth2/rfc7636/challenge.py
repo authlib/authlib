@@ -60,6 +60,9 @@ class CodeChallenge:
         self.required = required
 
     def __call__(self, grant):
+        grant.register_authorization_parameters(
+            {"code_challenge": str, "code_challenge_method": str}
+        )
         grant.register_hook(
             self.validate_code_challenge,
             after=grant.validate_authorization_request_payload,

@@ -17,6 +17,22 @@ from ..util import create_half_hash
 
 _warned_servers = weakref.WeakSet()
 
+#: The authorization request parameters of OpenID Connect, with their JSON
+#: types. Per OIDC Core §3.1.2.1, §5.2, §5.5 and §7.2.1.
+OPENID_AUTHORIZATION_PARAMETERS = {
+    "nonce": str,
+    "display": str,
+    "prompt": str,
+    "max_age": (int, float),
+    "ui_locales": str,
+    "claims_locales": str,
+    "id_token_hint": str,
+    "login_hint": str,
+    "acr_values": str,
+    "claims": dict,
+    "registration": dict,
+}
+
 
 def has_multiple_response_types(server):
     """Tell if the MultipleResponseTypes extension is registered on a server."""

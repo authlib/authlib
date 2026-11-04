@@ -283,6 +283,12 @@ def test_invalid_multiple_request_parameters(test_client):
     assert resp["error_description"] == "Multiple 'response_type' in request."
 
 
+def test_repeated_undeclared_parameter(test_client):
+    """A parameter that no grant or extension declares can be repeated."""
+    rv = test_client.get(authorize_url + "&foo=bar&foo=baz")
+    assert rv.data == b"ok"
+
+
 def test_client_secret_post(app, test_client, client, db, server):
     app.config.update({"OAUTH2_REFRESH_TOKEN_GENERATOR": True})
     server.load_config(app.config)

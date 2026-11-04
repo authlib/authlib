@@ -128,6 +128,16 @@ def test_require_nonce(test_client):
     assert "nonce" in rv.location
 
 
+def test_multiple_nonce(test_client):
+    """A repeated nonce gives an invalid_request error."""
+    rv = test_client.get(
+        "/oauth/authorize?response_type=id_token&client_id=client-id"
+        "&scope=openid+profile&nonce=abc&nonce=def"
+    )
+    assert rv.json["error"] == "invalid_request"
+    assert rv.json["error_description"] == "Multiple 'nonce' in request."
+
+
 def test_missing_openid_in_scope(test_client):
     rv = test_client.post(
         "/oauth/authorize",

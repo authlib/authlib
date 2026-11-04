@@ -18,6 +18,7 @@ from authlib.oauth2.rfc6749 import OAuth2Response
 
 from ..models import AuthorizationCodeMixin
 from ._legacy import LegacyMixin
+from .util import OPENID_AUTHORIZATION_PARAMETERS
 from .util import create_half_hash
 from .util import get_auth_time_function
 from .util import is_openid_scope
@@ -220,6 +221,7 @@ class OpenIDCode(OpenIDToken):
             self.set_request_auth_time, before=grant.create_authorization_response
         )
         if is_openid_scope(grant.request.payload.scope):
+            grant.register_authorization_parameters(OPENID_AUTHORIZATION_PARAMETERS)
             grant.register_hook(
                 self.validate_openid_authorization_request,
                 after=grant.validate_authorization_request_payload,
