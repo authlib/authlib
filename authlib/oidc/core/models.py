@@ -1,4 +1,7 @@
 from authlib.oauth2.rfc6749 import AuthorizationCodeMixin as _AuthorizationCodeMixin
+from authlib.oauth2.rfc6749 import (
+    AuthorizationSessionMixin as _AuthorizationSessionMixin,
+)
 
 
 class AuthorizationCodeMixin(_AuthorizationCodeMixin):
@@ -27,3 +30,13 @@ class AuthorizationCodeMixin(_AuthorizationCodeMixin):
 
         """
         return None
+
+
+class AuthorizationSessionMixin(_AuthorizationSessionMixin):
+    """The authorization session of OpenID Connect, based on
+    :class:`~authlib.oauth2.rfc6749.AuthorizationSessionMixin`.
+
+    The time of the ``"login"`` interaction becomes the ``auth_time`` claim of
+    the ID token. :meth:`get_interaction_time` also takes
+    ``"select_account"``, the time the user selected their account.
+    """

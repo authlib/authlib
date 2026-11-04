@@ -11,13 +11,11 @@ Added
 ~~~~~
 
 - The OpenID Connect grants enforce the ``max_age`` parameter and the
-  ``default_max_age`` client metadata. Implement ``get_auth_time(request)`` in
-  ``OpenIDCode``, ``OpenIDImplicitGrant`` and ``OpenIDHybridGrant``. It returns
-  the time of the last authentication of the user. When this authentication
-  is too old, ``grant.prompt`` is ``"login"``. With ``prompt=none``, the server
-  returns a ``login_required`` error instead. ``max_age=0`` works like
-  ``prompt=login``, and an invalid ``max_age`` gives an ``invalid_request``
-  error.
+  ``default_max_age`` client metadata, with the login time of the
+  authorization session. When the last login is too old, ``"login"`` is added
+  to ``grant.interactions``, and with ``prompt=none`` the server returns
+  ``login_required``. ``max_age=0`` works like ``prompt=login``, and an
+  invalid ``max_age`` gives an ``invalid_request`` error.
 - The ``StepUpAuthentication`` extension of RFC 9470 enforces ``max_age`` for
   the requests without the ``openid`` scope too. The ``acr_values`` parameter
   and the rest of RFC 9470 are not supported yet.
@@ -28,16 +26,15 @@ Added
 Fixed
 ~~~~~
 
-- The ``auth_time`` claim of the ID token is the time of the user
-  authentication, from ``get_auth_time``. It used to be the time the ID token
-  or the authorization code was created. In the code and hybrid flows, store
+- The ``auth_time`` claim of the ID token is the login time of the
+  authorization session. It used to be the time the ID token or the
+  authorization code was created. In the code and hybrid flows, store
   ``request.auth_time`` in ``save_authorization_code``. When the time is
   unknown, the ID token has no ``auth_time``.
 
 Deprecated
 ~~~~~~~~~~
 
-- Not implementing ``get_auth_time`` in ``OpenIDCode``, ``OpenIDImplicitGrant``
-  and ``OpenIDHybridGrant`` is deprecated. Until then, ``max_age`` is only
-  enforced when it is ``0``, and ``auth_time`` is the current time. It will be
-  required in version 1.11.
+- Using the OpenID Connect grants without an authorization session is
+  deprecated. Until then, ``max_age`` is only enforced when it is ``0``, and
+  ``auth_time`` is the current time. It will be required in version 1.11.

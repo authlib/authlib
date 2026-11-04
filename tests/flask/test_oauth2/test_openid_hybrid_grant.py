@@ -26,7 +26,6 @@ from tests.util import parse_form
 from .models import AuthorizationCode
 from .models import CodeGrantMixin
 from .models import exists_nonce
-from .models import get_auth_time
 from .models import save_authorization_code
 from .oauth2_server import create_basic_header
 from .oauth2_server import register_form_post
@@ -58,9 +57,6 @@ def server(server):
         def generate_user_info(self, user, scopes):
             return user.generate_user_info(scopes)
 
-        def get_auth_time(self, request):
-            return get_auth_time(request)
-
     class OpenIDHybridGrant(IDTokenConfigMixin, _OpenIDHybridGrant):
         def save_authorization_code(self, code, request):
             return save_authorization_code(code, request)
@@ -71,12 +67,8 @@ def server(server):
         def generate_user_info(self, user, scopes):
             return user.generate_user_info(scopes)
 
-        def get_auth_time(self, request):
-            return get_auth_time(request)
-
     server.register_grant(OpenIDHybridGrant)
     server.register_grant(AuthorizationCodeGrant, [OpenIDCode()])
-
     return server
 
 

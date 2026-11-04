@@ -22,7 +22,9 @@ authorization server::
 
 It reads the time of the last login of the user, and the time the request
 started, from the :class:`~authlib.oauth2.rfc6749.AuthorizationSessionMixin`
-that you pass to ``get_consent_grant``.
+that you pass to ``get_consent_grant``. The OpenID Connect guides of the
+:ref:`Flask <flask_odic_max_age>` and :ref:`Django <django_oidc_max_age>`
+integrations show how to implement it.
 
 When the user must log in, ``"login"`` is in ``grant.interactions``, before
 the other interactions except ``"create"`` (:ref:`specs/prompt_create`).

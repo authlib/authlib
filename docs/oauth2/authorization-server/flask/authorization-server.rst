@@ -204,7 +204,8 @@ more complex demo in https://github.com/authlib/example-oauth2-server.
 To let Authlib know if the user must give their consent, pass an
 :class:`~authlib.oauth2.rfc6749.AuthorizationSessionMixin` to
 ``get_consent_grant`` instead of the user. Its ``is_consent_needed`` method
-adds ``"consent"`` to ``grant.interactions``.
+adds ``"consent"`` to ``grant.interactions``. :ref:`flask_odic_max_age` shows a
+complete example.
 
 The token endpoint is much easier::
 

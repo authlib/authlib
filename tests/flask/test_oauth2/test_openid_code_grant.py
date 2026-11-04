@@ -17,15 +17,16 @@ from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.oauth2.rfc6749.grants import (
     AuthorizationCodeGrant as _AuthorizationCodeGrant,
 )
+from authlib.oauth2.rfc9470 import StepUpAuthentication
 from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core.grants import OpenIDCode as _OpenIDCode
 from authlib.oidc.prompt_create import PromptCreate
 from tests.util import HMAC_SECRET
 from tests.util import read_file_path
 
+from .models import AuthorizationSession
 from .models import CodeGrantMixin
 from .models import exists_nonce
-from .models import get_auth_time
 from .models import get_request_time
 from .models import save_authorization_code
 from .oauth2_server import create_basic_header
@@ -59,6 +60,25 @@ def server(server, app):
     return server
 
 
+@pytest.fixture
+def request_time(monkeypatch):
+    """Keep the start time of the authorization requests in the session."""
+    monkeypatch.setattr(
+        AuthorizationSession,
+        "get_request_time",
+        lambda self, request: get_request_time(request),
+    )
+
+
+def unknown_auth_time(monkeypatch):
+    """Make the login time of the authorization sessions unknown."""
+    monkeypatch.setattr(
+        AuthorizationSession,
+        "get_interaction_time",
+        lambda self, request, interaction: None,
+    )
+
+
 class AuthorizationCodeGrant(CodeGrantMixin, _AuthorizationCodeGrant):
     def save_authorization_code(self, code, request):
         return save_authorization_code(code, request)
@@ -82,9 +102,6 @@ class OpenIDCode(_OpenIDCode):
 
     def generate_user_info(self, user, scopes):
         return user.generate_user_info(scopes)
-
-    def get_auth_time(self, request):
-        return get_auth_time(request)
 
 
 def register_oidc_code_grant(
@@ -181,14 +198,10 @@ def test_auth_time_claim(test_client, server):
     assert claims["auth_time"] == 1000000000
 
 
-def test_unknown_auth_time_claim(test_client, server):
-    """When get_auth_time returns None, the ID token has no auth_time."""
-
-    class UnknownAuthTimeOpenIDCode(OpenIDCode):
-        def get_auth_time(self, request):
-            return None
-
-    register_oidc_code_grant(server, extension=UnknownAuthTimeOpenIDCode)
+def test_unknown_auth_time_claim(test_client, server, monkeypatch):
+    """When the login time is unknown, the ID token has no auth_time."""
+    unknown_auth_time(monkeypatch)
+    register_oidc_code_grant(server)
     claims = exchange_code_for_id_token(test_client)
     assert "auth_time" not in claims
 
@@ -535,14 +548,10 @@ def test_max_age_overrides_default_max_age(test_client, server, db, client):
     assert rv.data == b"ok"
 
 
-def test_max_age_unknown_auth_time(test_client, server):
-    """When get_auth_time returns None, max_age asks for a login."""
-
-    class UnknownAuthTimeOpenIDCode(OpenIDCode):
-        def get_auth_time(self, request):
-            return None
-
-    register_oidc_code_grant(server, extension=UnknownAuthTimeOpenIDCode)
+def test_max_age_unknown_auth_time(test_client, server, monkeypatch):
+    """When the login time is unknown, max_age asks for a login."""
+    unknown_auth_time(monkeypatch)
+    register_oidc_code_grant(server)
     rv = authorize_max_age(test_client, 3600, int(time.time()))
     assert rv.data == b"login"
 
@@ -550,25 +559,14 @@ def test_max_age_unknown_auth_time(test_client, server):
     assert rv.data == b"ok"
 
 
-def test_get_auth_time_not_implemented(test_client, server):
-    """Without get_auth_time, max_age is not enforced, except max_age=0."""
-    with pytest.warns(AuthlibDeprecationWarning, match="get_auth_time"):
+@pytest.mark.parametrize("authorization_session", [None], indirect=True)
+def test_without_authorization_session(test_client, server, authorization_session):
+    """Without an authorization session, max_age is not enforced, except
+    max_age=0, and a deprecation warning is shown."""
+    register_oidc_code_grant(server)
+    with pytest.warns(AuthlibDeprecationWarning, match="authorization session"):
+        rv = authorize_max_age(test_client, 3600, int(time.time()) - 7200)
 
-        class LegacyOpenIDCode(_OpenIDCode):
-            def resolve_client_private_key(self, client):
-                return current_app.config["OAUTH2_JWT_KEY"]
-
-            def get_client_claims(self, client):
-                return {"iss": current_app.config["OAUTH2_JWT_ISS"]}
-
-            def exists_nonce(self, nonce, request):
-                return exists_nonce(nonce, request)
-
-            def generate_user_info(self, user, scopes):
-                return user.generate_user_info(scopes)
-
-    register_oidc_code_grant(server, extension=LegacyOpenIDCode)
-    rv = authorize_max_age(test_client, 3600, int(time.time()) - 7200)
     assert rv.data == b"ok"
 
     rv = authorize_max_age(test_client, 0, int(time.time()))
@@ -753,37 +751,30 @@ def test_default_alg_rs256(test_client, server, app, db, client):
     assert token.header["alg"] == "RS256"
 
 
-def test_get_auth_time_not_implemented_keeps_auth_time(test_client, server):
-    """Without get_auth_time, the ID token auth_time is the current time."""
-    with pytest.warns(AuthlibDeprecationWarning, match="get_auth_time"):
-
-        class LegacyOpenIDCode(_OpenIDCode):
-            def resolve_client_private_key(self, client):
-                return current_app.config["OAUTH2_JWT_KEY"]
-
-            def get_client_claims(self, client):
-                return {"iss": current_app.config["OAUTH2_JWT_ISS"]}
-
-            def exists_nonce(self, nonce, request):
-                return exists_nonce(nonce, request)
-
-            def generate_user_info(self, user, scopes):
-                return user.generate_user_info(scopes)
-
-    register_oidc_code_grant(server, extension=LegacyOpenIDCode)
+@pytest.mark.parametrize("authorization_session", [None], indirect=True)
+def test_without_authorization_session_keeps_auth_time(
+    test_client, server, authorization_session
+):
+    """Without an authorization session, the ID token auth_time is the
+    current time."""
+    register_oidc_code_grant(server)
     before = int(time.time())
-    claims = exchange_code_for_id_token(test_client, {"max_age": "3600"})
+    with pytest.warns(AuthlibDeprecationWarning, match="authorization session"):
+        claims = exchange_code_for_id_token(test_client, {"max_age": "3600"})
+
     assert claims["auth_time"] >= before
 
 
-def test_denied_does_not_call_get_auth_time(test_client, server):
-    """get_auth_time is not called when the user denies the request."""
+def test_denied_does_not_read_auth_time(test_client, server, monkeypatch):
+    """The login time is not read when the user denies the request."""
 
-    class FailingOpenIDCode(OpenIDCode):
-        def get_auth_time(self, request):
-            raise AssertionError("get_auth_time should not be called")
+    def get_interaction_time(self, request, interaction):
+        raise AssertionError("the login time should not be read")
 
-    register_oidc_code_grant(server, extension=FailingOpenIDCode)
+    monkeypatch.setattr(
+        AuthorizationSession, "get_interaction_time", get_interaction_time
+    )
+    register_oidc_code_grant(server)
     rv = test_client.post(
         "/oauth/authorize",
         data={
@@ -797,16 +788,11 @@ def test_denied_does_not_call_get_auth_time(test_client, server):
     assert params["error"] == "access_denied"
 
 
-class RequestTimeOpenIDCode(OpenIDCode):
-    def get_request_time(self, request):
-        return get_request_time(request)
-
-
 @pytest.mark.parametrize("params", [{"prompt": "login"}, {"max_age": 0}])
-def test_login_after_request_start(test_client, server, params):
+def test_login_after_request_start(test_client, server, params, request_time):
     """With get_request_time, a login after the start of the request
     satisfies prompt=login and max_age=0."""
-    register_oidc_code_grant(server, extension=RequestTimeOpenIDCode)
+    register_oidc_code_grant(server)
     rv = authorize_max_age(
         test_client, params.get("max_age"), int(time.time()) - 60, params.get("prompt")
     )
@@ -826,10 +812,10 @@ def shift_request_times(test_client, seconds):
         }
 
 
-def test_login_for_another_request(test_client, server):
+def test_login_for_another_request(test_client, server, request_time):
     """A login for one authorization request does not satisfy prompt=login in
     another one."""
-    register_oidc_code_grant(server, extension=RequestTimeOpenIDCode)
+    register_oidc_code_grant(server)
     auth_time = int(time.time()) - 60
     rv = authorize_max_age(test_client, None, auth_time, "login")
     assert rv.data == b"login"
@@ -846,10 +832,10 @@ def test_login_for_another_request(test_client, server):
     assert rv.data == b"login"
 
 
-def test_max_age_from_request_start(test_client, server):
+def test_max_age_from_request_start(test_client, server, request_time):
     """max_age is measured from the start of the request, so a user can stay
     on the consent page longer than max_age."""
-    register_oidc_code_grant(server, extension=RequestTimeOpenIDCode)
+    register_oidc_code_grant(server)
     rv = authorize_max_age(test_client, 60, int(time.time()) - 30)
     assert rv.data == b"ok"
 
@@ -861,10 +847,10 @@ def test_max_age_from_request_start(test_client, server):
     assert rv.data == b"login"
 
 
-def test_login_after_anonymous_request_start(test_client, server):
+def test_login_after_anonymous_request_start(test_client, server, request_time):
     """The start of the request is kept when the user is not logged in yet, so
     one login is enough."""
-    register_oidc_code_grant(server, extension=RequestTimeOpenIDCode)
+    register_oidc_code_grant(server)
     rv = test_client.get(
         "/oauth/authorize?" + url_encode([*PROMPT_PARAMS, ("prompt", "login")])
     )
@@ -872,6 +858,20 @@ def test_login_after_anonymous_request_start(test_client, server):
 
     shift_request_times(test_client, 60)
     rv = authorize_max_age(test_client, None, int(time.time()) - 30, "login")
+    assert rv.data == b"ok"
+
+
+def test_account_selection_by_anonymous_login(test_client, server, request_time):
+    """The start of the request is kept from the first visit of an anonymous
+    user, and their login satisfies prompt=select_account."""
+    register_oidc_code_grant(server)
+    rv = test_client.get(
+        "/oauth/authorize?" + url_encode([*PROMPT_PARAMS, ("prompt", "select_account")])
+    )
+    assert rv.data == b"login"
+
+    shift_request_times(test_client, 60)
+    rv = authorize_max_age(test_client, None, int(time.time()) - 30, "select_account")
     assert rv.data == b"ok"
 
 
@@ -888,3 +888,41 @@ def test_prompt_none_with_custom_consent_validation(test_client, server):
     rv = test_client.get("/oauth/authorize?" + query)
     params = dict(url_decode(urlparse.urlparse(rv.location).query))
     assert params["error"] == "login_required"
+
+
+def test_consent_after_request_start(test_client, server, monkeypatch, request_time):
+    """prompt=consent is satisfied by a consent given after the start of the
+    request."""
+    consent_time = {"value": int(time.time()) - 60}
+    monkeypatch.setattr(
+        AuthorizationSession,
+        "get_interaction_time",
+        lambda self, request, interaction: (
+            consent_time["value"] if interaction == "consent" else int(time.time())
+        ),
+    )
+    register_oidc_code_grant(server)
+    query = url_encode(PROMPT_PARAMS + [("user_id", "1"), ("prompt", "consent")])
+    rv = test_client.get("/oauth/authorize?" + query)
+    assert rv.data == b"consent"
+
+    consent_time["value"] = int(time.time())
+    rv = test_client.get("/oauth/authorize?" + query)
+    assert rv.data == b"ok"
+
+
+@pytest.mark.parametrize("prompt_create_first", [True, False])
+def test_prompt_create_with_max_age(test_client, server, prompt_create_first):
+    """For an anonymous user, create comes before login, whatever the order
+    of the extensions."""
+    register_oidc_code_grant(server)
+    extensions = [PromptCreate(), StepUpAuthentication()]
+    if not prompt_create_first:
+        extensions.reverse()
+
+    for extension in extensions:
+        server.register_extension(extension)
+
+    query = url_encode(PROMPT_PARAMS + [("prompt", "create"), ("max_age", "60")])
+    rv = test_client.get("/oauth/authorize?" + query)
+    assert rv.data == b"create"

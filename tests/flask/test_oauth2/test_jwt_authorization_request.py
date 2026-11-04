@@ -21,7 +21,6 @@ from tests.util import read_file_path
 from .models import Client
 from .models import CodeGrantMixin
 from .models import exists_nonce
-from .models import get_auth_time
 from .models import save_authorization_code
 
 authorize_url = "/oauth/authorize"
@@ -51,9 +50,6 @@ def server(server):
     class OpenIDCode(_OpenIDCode):
         def exists_nonce(self, nonce, request):
             return exists_nonce(nonce, request)
-
-        def get_auth_time(self, request):
-            return get_auth_time(request)
 
     server.register_grant(
         AuthorizationCodeGrant, [CodeChallenge(required=False), OpenIDCode()]
