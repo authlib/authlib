@@ -45,7 +45,11 @@ def is_openid_scope(scope):
 
 
 def validate_request_prompt(
-    grant, redirect_uri, redirect_fragment=False, get_auth_time=None
+    grant,
+    redirect_uri,
+    redirect_fragment=False,
+    get_auth_time=None,
+    get_request_time=None,
 ):
     """Validate the ``prompt`` and ``max_age`` parameters, and set ``grant.prompt``.
 
@@ -58,6 +62,10 @@ def validate_request_prompt(
     :param get_auth_time: a function that takes the request and returns the
         time of the last authentication of its user. Without it, ``max_age``
         is only applied when it is ``0``.
+    :param get_request_time: a function that takes the request and returns
+        the time the authorization request started. With it, a login after
+        this time satisfies ``prompt=login``, and ``max_age`` is measured
+        from this time.
     :raises InvalidRequestError: if ``prompt`` contains ``none`` with another
         value, or if ``max_age`` is not a non-negative integer
     :raises LoginRequiredError: if ``prompt`` is ``none`` and the user must
@@ -74,13 +82,11 @@ def validate_request_prompt(
             redirect_fragment=redirect_fragment,
         )
 
-    end_user = grant.request.user
     max_age = _get_max_age(grant, redirect_uri, redirect_fragment)
-    if (
-        not end_user
-        or "login" in prompts
-        or _is_authentication_too_old(grant.request, max_age, get_auth_time)
-    ):
+    login_required = _is_login_required(
+        grant.request, prompts, max_age, get_auth_time, get_request_time
+    )
+    if not grant.request.user or login_required:
         if "none" in prompts:
             raise LoginRequiredError(
                 redirect_uri=redirect_uri, redirect_fragment=redirect_fragment
@@ -283,20 +289,31 @@ def resolve_auth_time(obj, base, request):
     return None if auth_time is None else int(auth_time)
 
 
-def _is_authentication_too_old(request, max_age, get_auth_time):
-    """Tell if the last authentication of the user is older than ``max_age``."""
-    if max_age is None:
-        return False
+def _is_login_required(request, prompts, max_age, get_auth_time, get_request_time):
+    """Tell if the user must log in because of ``prompt=login`` or ``max_age``.
 
+    The request time is read even without a user, so that it is kept from
+    the first visit, before the login."""
     # OIDC Core §3.1.2.1: max_age=0 is equivalent to prompt=login.
-    if max_age == 0:
-        return True
+    fresh_login = "login" in prompts or max_age == 0
+    if not fresh_login and max_age is None:
+        return False
 
     if get_auth_time is None:
-        return False
+        return fresh_login
+
+    request_time = get_request_time(request) if get_request_time else None
+    if not request.user or (fresh_login and request_time is None):
+        return True
 
     auth_time = get_auth_time(request)
     if auth_time is None:
         return True
 
-    return time.time() - auth_time > max_age
+    if request_time is None:
+        return time.time() - auth_time > max_age
+
+    if fresh_login:
+        return int(auth_time) < int(request_time)
+
+    return request_time - auth_time > max_age

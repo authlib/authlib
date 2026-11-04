@@ -19,6 +19,7 @@ from tests.util import parse_form
 
 from .models import exists_nonce
 from .models import get_auth_time
+from .models import get_request_time
 from .oauth2_server import register_form_post
 
 authorize_url = "/oauth/authorize?response_type=token&client_id=client-id"
@@ -740,3 +741,36 @@ def test_get_auth_time_not_implemented(test_client, server):
     params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
     claims = validate_claims(params["id_token"], params)
     assert claims["auth_time"] >= before
+
+
+def test_login_after_request_start(test_client, monkeypatch):
+    """With get_request_time, a login after the start of the request
+    satisfies prompt=login."""
+    monkeypatch.setattr(
+        _OpenIDImplicitGrant,
+        "get_request_time",
+        lambda self, request: get_request_time(request),
+    )
+    params = {
+        "response_type": "id_token",
+        "client_id": "client-id",
+        "scope": "openid profile",
+        "state": "bar",
+        "nonce": "abc",
+        "redirect_uri": "https://client.test/callback",
+        "prompt": "login",
+        "user_id": "1",
+    }
+    rv = test_client.get(
+        add_params_to_uri(
+            "/oauth/authorize", {**params, "auth_time": str(int(time.time()) - 60)}
+        )
+    )
+    assert rv.data == b"login"
+
+    rv = test_client.get(
+        add_params_to_uri(
+            "/oauth/authorize", {**params, "auth_time": str(int(time.time()))}
+        )
+    )
+    assert rv.data == b"ok"

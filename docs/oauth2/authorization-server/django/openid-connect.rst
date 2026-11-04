@@ -336,11 +336,76 @@ in, ``grant.prompt`` is ``"login"``::
         ...
 
 With ``prompt=none``, the server returns a ``login_required`` error instead.
-``max_age=0`` works like ``prompt=login``: ``grant.prompt`` stays ``"login"``
-for this request, even after the login.
+``max_age=0`` works like ``prompt=login``.
 
-The age of the authentication is measured each time you call
-``get_consent_grant``. Check ``grant.prompt`` when you show the consent page,
-and not when the user submits it. Otherwise, a user who stays on the consent
-page longer than ``max_age`` is sent back to the login page.
+By default, ``grant.prompt`` stays ``"login"`` with ``prompt=login`` and
+``max_age=0``, even after the login. To fix this, implement
+``get_request_time`` along with ``get_auth_time``. It returns the time the
+authorization request started. A login after this time satisfies
+``prompt=login`` and ``max_age=0``, and ``max_age`` is measured from this
+time.
+
+Store the time in the session::
+
+    import time
+
+    class MyOpenIDCode(OpenIDCode):
+        def get_request_time(self, request):
+            session = request.framework_request.session
+            now = int(time.time())
+            times = {
+                key: start
+                for key, start in session.get("request_times", {}).items()
+                if now - start <= 600
+            }
+            times.setdefault(request.authorization_key, now)
+            session["request_times"] = times
+            return times[request.authorization_key]
+
+Implement it in ``OpenIDCode``, ``OpenIDImplicitGrant`` and
+``OpenIDHybridGrant``. It is called from the first visit, before the user logs
+in. ``request.authorization_key`` is a hash of the authorization request
+parameters. It is the same before and after the login, and when the user
+submits the consent form. Two authorization requests with the same parameters
+have the same key. Clients that send a unique ``state``, ``nonce`` or
+``code_challenge`` avoid this.
+
+Keep the time on the server side, for instance in the session. Do not read it
+from a request parameter or a form field. A user could send an old time and
+skip the login.
+
+Remove the time when the authorization request ends, when the user accepts or
+denies it::
+
+    response = server.create_authorization_response(
+        request, grant=grant, grant_user=user
+    )
+    times = request.session.get("request_times", {})
+    times.pop(grant.request.authorization_key, None)
+    request.session["request_times"] = times
+    return response
+
+Otherwise, the same authorization request sent again later would reuse the
+old time, and the user would not have to log in. The example also drops the
+times older than 10 minutes. They come from requests that never end, for
+instance when the user leaves the login page. This keeps the session small.
+
+The time must still be in the session when the user comes back from the login:
+
+- If your login view clears or replaces the session, copy ``request_times``
+  into the new session.
+- A cross-site ``POST`` to the authorization endpoint comes without the
+  session cookie when it is ``SameSite=Lax``. Redirect such requests to a
+  ``GET`` with the same parameters first, or keep the times in a server-side
+  cache.
+
+A login does not satisfy ``prompt=consent`` or ``prompt=select_account``.
+With ``prompt=login consent``, ``grant.prompt`` is ``"consent"`` after the
+login. To handle ``prompt=consent``, compare the date of the last consent of
+the user with the time the request started.
+
+Without ``get_request_time``, the age of the authentication is measured each
+time you call ``get_consent_grant``. Check ``grant.prompt`` when you show the
+consent page, and not when the user submits it. Otherwise, a user who stays
+on the consent page longer than ``max_age`` is sent back to the login page.
 

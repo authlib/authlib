@@ -87,6 +87,16 @@ def test_multiple_code_challenge(test_client):
     assert resp["error_description"] == "Multiple 'code_challenge' in request."
 
 
+def test_authorization_key_with_code_challenge(app, server):
+    """The code_challenge parameter is part of the authorization key."""
+    keys = set()
+    for challenge in ("a" * 43, "b" * 43):
+        with app.test_request_context(f"{authorize_url}&code_challenge={challenge}"):
+            keys.add(server.get_consent_grant().request.authorization_key)
+
+    assert len(keys) == 2
+
+
 def test_trusted_client_without_code_challenge(test_client, db, client):
     client.client_secret = "client-secret"
     client.set_client_metadata(

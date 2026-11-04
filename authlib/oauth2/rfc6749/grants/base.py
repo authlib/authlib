@@ -1,3 +1,6 @@
+import hashlib
+import json
+
 from authlib.common.hooks import Hookable
 from authlib.consts import default_json_headers
 
@@ -189,6 +192,21 @@ class AuthorizationEndpointMixin(Hookable):
                 raise InvalidRequestError(
                     f"Multiple '{param}' in request.", state=request.payload.state
                 )
+
+    def get_authorization_key(self):
+        """Return a hash of the authorization request parameters.
+
+        It is the same for all the HTTP requests of one authorization
+        request, for instance before and after a login. The parameters that
+        are not in :attr:`authorization_parameters`, such as the fields of a
+        consent form, do not change it.
+        """
+        data = self.request.payload.data
+        parameters = {
+            name: data[name] for name in self.authorization_parameters if name in data
+        }
+        message = json.dumps(parameters, sort_keys=True)
+        return hashlib.sha256(message.encode()).hexdigest()
 
     def validate_authorization_request_payload(self, redirect_uri):
         """Validate the requested scope of an authorization request."""

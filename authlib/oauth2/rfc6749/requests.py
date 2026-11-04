@@ -70,6 +70,10 @@ class OAuth2Request:
 
         self.payload = None
 
+        #: A hash of the authorization request parameters. It is the same for
+        #: all the HTTP requests of one authorization request.
+        self.authorization_key = None
+
         self.client = None
         self.auth_method = None
         self.user = None

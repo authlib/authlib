@@ -230,7 +230,7 @@ def test_openid_code_on_custom_grant(monkeypatch):
 
     monkeypatch.setattr(
         "authlib.oidc.core.grants.code.validate_request_prompt",
-        lambda grant, redirect_uri, get_auth_time: calls.append(
+        lambda grant, redirect_uri, **kwargs: calls.append(
             ("validate_request_prompt", redirect_uri)
         ),
     )
@@ -269,3 +269,64 @@ def test_max_age_invalid_value(max_age):
     grant = create_max_age_grant(max_age)
     with pytest.raises(InvalidRequestError):
         validate_request_prompt(grant, None, get_auth_time=lambda request: 0)
+
+
+def validate_prompt(prompt=None, max_age=None, auth_time=0, request_time=None):
+    """Validate a request with a logged user, and return ``grant.prompt``."""
+    data = {"prompt": prompt, "max_age": max_age}
+    payload = types.SimpleNamespace(
+        data={k: v for k, v in data.items() if v is not None}
+    )
+    request = types.SimpleNamespace(payload=payload, user=object(), client=None)
+    grant = types.SimpleNamespace(request=request, prompt=None)
+    validate_request_prompt(
+        grant,
+        None,
+        get_auth_time=lambda request: auth_time,
+        get_request_time=lambda request: request_time,
+    )
+    return grant.prompt
+
+
+@pytest.mark.parametrize("params", [{"prompt": "login"}, {"max_age": 0}])
+def test_login_after_request_time(params):
+    """A login after the start of the request satisfies prompt=login and
+    max_age=0."""
+    assert validate_prompt(**params, auth_time=1000, request_time=1000) is None
+    assert validate_prompt(**params, auth_time=1000, request_time=999.5) is None
+    assert validate_prompt(**params, auth_time=999, request_time=1000) == "login"
+
+
+@pytest.mark.parametrize("params", [{"prompt": "login"}, {"max_age": 0}])
+def test_login_without_request_time(params):
+    """Without the request time, prompt=login and max_age=0 always ask for a
+    login."""
+    assert validate_prompt(**params, auth_time=10**12) == "login"
+
+
+def test_max_age_from_request_time():
+    """max_age is measured from the start of the request."""
+    assert validate_prompt(max_age=60, auth_time=1000, request_time=1060) is None
+    assert validate_prompt(max_age=60, auth_time=1000, request_time=1061) == "login"
+
+
+def test_unknown_auth_time_with_request_time():
+    """When the authentication time is unknown, the user must log in."""
+    assert validate_prompt(prompt="login", auth_time=None, request_time=0) == "login"
+    assert validate_prompt(max_age=60, auth_time=None, request_time=0) == "login"
+
+
+def test_request_time_without_auth_time():
+    """Without get_auth_time, the request time is not used."""
+    payload = types.SimpleNamespace(data={"prompt": "login"})
+    request = types.SimpleNamespace(payload=payload, user=object(), client=None)
+    grant = types.SimpleNamespace(request=request, prompt=None)
+    validate_request_prompt(grant, None, get_request_time=lambda request: 0)
+    assert grant.prompt == "login"
+
+
+@pytest.mark.parametrize("prompt", ["consent", "select_account"])
+def test_other_prompt_after_login(prompt):
+    """After the login, the other prompt values still apply."""
+    result = validate_prompt(f"login {prompt}", auth_time=1000, request_time=1000)
+    assert result == prompt
