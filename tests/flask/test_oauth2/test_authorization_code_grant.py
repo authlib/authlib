@@ -289,6 +289,47 @@ def test_repeated_undeclared_parameter(test_client):
     assert rv.data == b"ok"
 
 
+def get_authorization_key(app, server, url, method="GET", data=None):
+    """Return the authorization key of a request to the authorization
+    endpoint."""
+    with app.test_request_context(url, method=method, data=data):
+        grant = server.get_consent_grant()
+
+    return grant.request.authorization_key
+
+
+def test_authorization_key(app, server):
+    """The authorization key is the same for the HTTP requests of one
+    authorization request."""
+    url = authorize_url + "&scope=profile&state=bar"
+    key = get_authorization_key(app, server, url)
+
+    assert get_authorization_key(app, server, url + "&foo=bar") == key
+    assert get_authorization_key(app, server, url, "POST", {"user_id": "1"}) == key
+    assert (
+        get_authorization_key(
+            app,
+            server,
+            "/oauth/authorize",
+            "POST",
+            {
+                "state": "bar",
+                "scope": "profile",
+                "client_id": "client-id",
+                "response_type": "code",
+            },
+        )
+        == key
+    )
+
+
+def test_authorization_key_differs(app, server):
+    """Two authorization requests with different parameters have different
+    authorization keys."""
+    key = get_authorization_key(app, server, authorize_url + "&state=bar")
+    assert get_authorization_key(app, server, authorize_url + "&state=baz") != key
+
+
 def test_client_secret_post(app, test_client, client, db, server):
     app.config.update({"OAUTH2_REFRESH_TOKEN_GENERATOR": True})
     server.load_config(app.config)

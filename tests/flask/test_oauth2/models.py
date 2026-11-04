@@ -1,5 +1,6 @@
 import time
 
+from flask import session
 from flask_sqlalchemy import SQLAlchemy
 
 from authlib.integrations.sqla_oauth2 import OAuth2AuthorizationCodeMixin
@@ -130,3 +131,17 @@ def get_auth_time(request):
     """Return the 'auth_time' request parameter, or the current time."""
     auth_time = request.framework_request.values.get("auth_time")
     return int(auth_time) if auth_time else int(time.time())
+
+
+def get_request_time(request):
+    """Return the start time of the authorization request, kept in the
+    session."""
+    now = int(time.time())
+    times = {
+        key: start
+        for key, start in session.get("request_times", {}).items()
+        if now - start <= 600
+    }
+    times.setdefault(request.authorization_key, now)
+    session["request_times"] = times
+    return times[request.authorization_key]

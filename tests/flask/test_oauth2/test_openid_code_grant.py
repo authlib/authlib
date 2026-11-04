@@ -26,6 +26,7 @@ from tests.util import read_file_path
 from .models import CodeGrantMixin
 from .models import exists_nonce
 from .models import get_auth_time
+from .models import get_request_time
 from .models import save_authorization_code
 from .oauth2_server import create_basic_header
 
@@ -766,3 +767,81 @@ def test_denied_does_not_call_get_auth_time(test_client, server):
     )
     params = dict(url_decode(urlparse.urlparse(rv.location).query))
     assert params["error"] == "access_denied"
+
+
+class RequestTimeOpenIDCode(OpenIDCode):
+    def get_request_time(self, request):
+        return get_request_time(request)
+
+
+@pytest.mark.parametrize("params", [{"prompt": "login"}, {"max_age": 0}])
+def test_login_after_request_start(test_client, server, params):
+    """With get_request_time, a login after the start of the request
+    satisfies prompt=login and max_age=0."""
+    register_oidc_code_grant(server, extension=RequestTimeOpenIDCode)
+    rv = authorize_max_age(
+        test_client, params.get("max_age"), int(time.time()) - 60, params.get("prompt")
+    )
+    assert rv.data == b"login"
+
+    rv = authorize_max_age(
+        test_client, params.get("max_age"), int(time.time()), params.get("prompt")
+    )
+    assert rv.data == b"ok"
+
+
+def shift_request_times(test_client, seconds):
+    """Move the start of the stored authorization requests back in time."""
+    with test_client.session_transaction() as session:
+        session["request_times"] = {
+            key: value - seconds for key, value in session["request_times"].items()
+        }
+
+
+def test_login_for_another_request(test_client, server):
+    """A login for one authorization request does not satisfy prompt=login in
+    another one."""
+    register_oidc_code_grant(server, extension=RequestTimeOpenIDCode)
+    auth_time = int(time.time()) - 60
+    rv = authorize_max_age(test_client, None, auth_time, "login")
+    assert rv.data == b"login"
+
+    shift_request_times(test_client, 120)
+    rv = authorize_max_age(test_client, None, auth_time, "login")
+    assert rv.data == b"ok"
+
+    params = [(k, "baz" if k == "state" else v) for k, v in PROMPT_PARAMS]
+    query = url_encode(
+        [*params, ("user_id", "1"), ("auth_time", str(auth_time)), ("prompt", "login")]
+    )
+    rv = test_client.get("/oauth/authorize?" + query)
+    assert rv.data == b"login"
+
+
+def test_max_age_from_request_start(test_client, server):
+    """max_age is measured from the start of the request, so a user can stay
+    on the consent page longer than max_age."""
+    register_oidc_code_grant(server, extension=RequestTimeOpenIDCode)
+    rv = authorize_max_age(test_client, 60, int(time.time()) - 30)
+    assert rv.data == b"ok"
+
+    shift_request_times(test_client, 100)
+    rv = authorize_max_age(test_client, 60, int(time.time()) - 130)
+    assert rv.data == b"ok"
+
+    rv = authorize_max_age(test_client, 60, int(time.time()) - 170)
+    assert rv.data == b"login"
+
+
+def test_login_after_anonymous_request_start(test_client, server):
+    """The start of the request is kept when the user is not logged in yet, so
+    one login is enough."""
+    register_oidc_code_grant(server, extension=RequestTimeOpenIDCode)
+    rv = test_client.get(
+        "/oauth/authorize?" + url_encode([*PROMPT_PARAMS, ("prompt", "login")])
+    )
+    assert rv.data == b"login"
+
+    shift_request_times(test_client, 60)
+    rv = authorize_max_age(test_client, None, int(time.time()) - 30, "login")
+    assert rv.data == b"ok"

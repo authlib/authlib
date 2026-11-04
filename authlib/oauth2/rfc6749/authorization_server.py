@@ -286,6 +286,7 @@ class AuthorizationServer(Hookable):
 
             grant = self.get_authorization_grant(request)
             grant.validate_no_multiple_request_parameter(request)
+            request.authorization_key = grant.get_authorization_key()
             grant.validate_consent_request()
 
         except OAuth2Error as error:

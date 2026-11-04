@@ -185,6 +185,26 @@ class OpenIDCode(OpenIDToken):
         """
         raise NotImplementedError()
 
+    def get_request_time(self, request):
+        """Return the time the authorization request started, as a Unix
+        timestamp. Developers MAY implement this method, along with
+        ``get_auth_time``. Return the same time for all the HTTP requests of
+        one authorization request, for instance before and after a login.
+        ``request.authorization_key`` identifies the authorization request.
+        Keep the time on the server side, and remove it when the request
+        ends. The OpenID Connect guides of the Flask and Django integrations
+        show how.
+
+        With it, a login after this time satisfies ``prompt=login`` and
+        ``max_age=0``, and ``max_age`` is measured from this time. Without
+        it, these requests ask for a login each time, and ``max_age`` is
+        measured from the current time.
+
+        :param request: the authorization request
+        :return: a timestamp, or ``None`` if it is unknown
+        """
+        return None
+
     def validate_openid_authorization_request(self, grant, redirect_uri):
         validate_nonce(grant.request, self.exists_nonce, self.require_nonce)
 
@@ -213,6 +233,7 @@ class OpenIDCode(OpenIDToken):
             grant,
             redirect_uri,
             get_auth_time=get_auth_time_function(self, OpenIDCode),
+            get_request_time=self.get_request_time,
         )
 
     def __call__(self, grant):
