@@ -78,8 +78,8 @@ class _TestIDJAGGrant(IDJAGGrant):
             raise InvalidGrantError(description="Untrusted issuer")
         return self._issuer_key
 
-    def authenticate_user(self, subject):
-        return self._users.get(subject)
+    def resolve_user(self, claims):
+        return self._users.get(claims["sub"])
 
     def check_jti(self, claims, jti):
         if jti in self._jti_store:
@@ -87,7 +87,7 @@ class _TestIDJAGGrant(IDJAGGrant):
         self._jti_store.add(jti)
         return True
 
-    def check_id_jag_permission(self, client, user, scopes):
+    def check_id_jag_permission(self, client, user, scopes, claims):
         return self._allow_permission
 
     def validate_requested_scope(self):

@@ -1,4 +1,5 @@
 import time
+import warnings
 
 import pytest
 from flask import json
@@ -30,8 +31,8 @@ _ISSUER_USERS = {"https://idp.example.com": {"foo"}, other_issuer: set()}
 _USED_JTIS: set = set()
 
 
-class IDJAGGrant(_IDJAGGrant):
-    """Concrete ID-JAG grant wired to the Flask test models."""
+class _Hooks:
+    """ID-JAG hooks wired to the Flask test models, except the user."""
 
     def get_audiences(self):
         return ["https://provider.test/token"]
@@ -42,21 +43,24 @@ class IDJAGGrant(_IDJAGGrant):
             raise InvalidGrantError(description="Untrusted issuer")
         return key
 
-    def authenticate_user(self, subject):
-        issuer = self.request.id_jag_claims["iss"]
-        if subject not in _ISSUER_USERS[issuer]:
-            return None
-
-        return User.query.filter_by(username=subject).first()
-
     def check_jti(self, claims, jti):
         if jti in _USED_JTIS:
             return False
         _USED_JTIS.add(jti)
         return True
 
-    def check_id_jag_permission(self, client, user, scopes):
+    def check_id_jag_permission(self, client, user, scopes, claims):
         return True
+
+
+class IDJAGGrant(_Hooks, _IDJAGGrant):
+    """Concrete ID-JAG grant wired to the Flask test models."""
+
+    def resolve_user(self, claims):
+        if claims["sub"] not in _ISSUER_USERS[claims["iss"]]:
+            return None
+
+        return User.query.filter_by(username=claims["sub"]).first()
 
 
 # -- fixtures ---------------------------------------------------------------
@@ -299,7 +303,7 @@ def test_jti_replay_rejected(test_client):
 
 def test_policy_denial(test_client, server):
     class DenyGrant(IDJAGGrant):
-        def check_id_jag_permission(self, client, user, scopes):
+        def check_id_jag_permission(self, client, user, scopes, claims):
             return False
 
     server._token_grants.clear()
@@ -471,7 +475,7 @@ def test_scope_claim_is_the_default_scope(test_client, server, read_write_client
     received = []
 
     class RecordingGrant(IDJAGGrant):
-        def check_id_jag_permission(self, client, user, scopes):
+        def check_id_jag_permission(self, client, user, scopes, claims):
             received.append(scopes)
             return True
 
@@ -510,3 +514,72 @@ def test_invalid_scope_claim_type(test_client, read_write_client, claim):
     assert response.json["error"] == "invalid_grant"
     assert "scope" in response.json["error_description"]
     assert Token.query.count() == 0
+
+
+@pytest.mark.parametrize("claim", [["acme"], 42])
+def test_invalid_tenant_claim_type(test_client, claim):
+    """A tenant claim that is not a string is rejected."""
+    response = _request_token(test_client, _sign(claims={"tenant": claim}))
+    assert response.status_code == 400
+    assert response.json["error"] == "invalid_grant"
+    assert "tenant" in response.json["error_description"]
+
+
+def test_permission_receives_claims(test_client, server):
+    """The policy receives the verified claims of the ID-JAG, whatever the
+    name of the argument."""
+    received = []
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", AuthlibDeprecationWarning)
+
+        class RecordingGrant(IDJAGGrant):
+            def check_id_jag_permission(self, client, user, scopes, id_jag, /):
+                received.append(id_jag)
+                return True
+
+    server._token_grants.clear()
+    server.register_grant(RecordingGrant)
+
+    response = _request_token(test_client, _sign(claims={"tenant": "acme"}))
+    assert response.status_code == 200
+    assert received[0]["tenant"] == "acme"
+
+
+def test_authenticate_user_is_deprecated(test_client, server):
+    """A grant that only implements authenticate_user still works."""
+    with pytest.warns(AuthlibDeprecationWarning, match="resolve_user"):
+
+        class LegacyGrant(_Hooks, _IDJAGGrant):
+            def authenticate_user(self, subject):
+                return User.query.filter_by(username=subject).first()
+
+    server._token_grants.clear()
+    server.register_grant(LegacyGrant)
+
+    response = _request_token(test_client, _sign())
+    assert response.status_code == 200
+
+
+def test_check_id_jag_permission_without_claims_is_deprecated(test_client, server):
+    """A policy without the claims argument still works."""
+    with pytest.warns(AuthlibDeprecationWarning, match="check_id_jag_permission"):
+
+        class LegacyGrant(IDJAGGrant):
+            def check_id_jag_permission(self, client, user, scopes):
+                return True
+
+    server._token_grants.clear()
+    server.register_grant(LegacyGrant)
+
+    response = _request_token(test_client, _sign())
+    assert response.status_code == 200
+
+
+def test_resolve_user_is_required():
+    """A grant without resolve_user cannot resolve the user."""
+
+    class IncompleteGrant(_Hooks, _IDJAGGrant):
+        pass
+
+    with pytest.raises(NotImplementedError):
+        IncompleteGrant(None, None).resolve_user({"sub": "foo"})
