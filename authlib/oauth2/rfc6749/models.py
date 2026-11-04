@@ -259,9 +259,9 @@ class AuthorizationSessionMixin:
     which interactions the user must go through::
 
         class AuthorizationSession(AuthorizationSessionMixin):
-            def __init__(self, session, user):
-                self.session = session
+            def __init__(self, user, session):
                 self.user = user
+                self.session = session
 
             def get_user(self):
                 return self.user
@@ -272,7 +272,10 @@ class AuthorizationSessionMixin:
                 return None
 
 
-        grant = server.get_consent_grant(session=AuthorizationSession(session, user))
+        grant = server.get_consent_grant(session=AuthorizationSession(user, session))
+
+    :class:`~authlib.oauth2.AuthorizationSession` implements it with the session
+    of the web framework.
     """
 
     def get_user(self):

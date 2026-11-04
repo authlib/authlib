@@ -27,7 +27,6 @@ from tests.util import read_file_path
 from .models import AuthorizationSession
 from .models import CodeGrantMixin
 from .models import exists_nonce
-from .models import get_request_time
 from .models import save_authorization_code
 from .oauth2_server import SupportedPromptValues
 from .oauth2_server import create_basic_header
@@ -59,16 +58,6 @@ def server(server, app):
         }
     )
     return server
-
-
-@pytest.fixture
-def request_time(monkeypatch):
-    """Keep the start time of the authorization requests in the session."""
-    monkeypatch.setattr(
-        AuthorizationSession,
-        "get_request_time",
-        lambda self, request: get_request_time(request),
-    )
 
 
 def unknown_auth_time(monkeypatch):
@@ -895,8 +884,9 @@ def test_login_after_request_start(test_client, server, params, request_time):
 def shift_request_times(test_client, seconds):
     """Move the start of the stored authorization requests back in time."""
     with test_client.session_transaction() as session:
-        session["request_times"] = {
-            key: value - seconds for key, value in session["request_times"].items()
+        session["authlib_request_times"] = {
+            key: value - seconds
+            for key, value in session["authlib_request_times"].items()
         }
 
 

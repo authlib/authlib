@@ -18,7 +18,6 @@ from tests.util import parse_form
 
 from .models import AuthorizationSession
 from .models import exists_nonce
-from .models import get_request_time
 from .oauth2_server import SupportedPromptValues
 from .oauth2_server import register_form_post
 
@@ -695,14 +694,9 @@ def test_without_authorization_session(test_client, authorization_session):
     assert claims["auth_time"] >= before
 
 
-def test_login_after_request_start(test_client, monkeypatch):
+def test_login_after_request_start(test_client, request_time):
     """With get_request_time, a login after the start of the request
     satisfies prompt=login."""
-    monkeypatch.setattr(
-        AuthorizationSession,
-        "get_request_time",
-        lambda self, request: get_request_time(request),
-    )
     params = {
         "response_type": "id_token",
         "client_id": "client-id",

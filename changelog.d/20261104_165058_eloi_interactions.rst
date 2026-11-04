@@ -13,7 +13,9 @@ Added
   happened after the request started, so the user is not asked again and
   again. A login also counts as an account selection. ``is_consent_needed``
   tells if the user must give their consent, and ``end_request`` is called
-  when the authorization request ends. The session is only written when the user must go through an interaction,
+  when the authorization request ends. ``authlib.oauth2.AuthorizationSession``
+  keeps the start time of the requests in the session of the web framework.
+  The session is only written when the user must go through an interaction,
   or when a rule needs the start time. With the OpenID Connect ``prompt=none``,
   it is not written.
 - With ``prompt=none``, the OpenID Connect grants return ``consent_required``
