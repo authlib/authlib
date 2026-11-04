@@ -35,6 +35,24 @@ class AsyncMockDispatch:
         await response(scope, receive, send)
 
 
+def _set_default_content_type(headers, value):
+    """Set ``Content-Type`` unless the caller already provided one.
+
+    Accepts a dict or a list of ``(name, value)`` byte pairs, matching the
+    two shapes callers pass to the dispatch helpers. Returns a dict that
+    ``starlette.responses.Response`` accepts.
+    """
+    if isinstance(headers, list):
+        normalized = {}
+        for name, val in headers:
+            normalized[name.decode("latin-1")] = val.decode("latin-1")
+        headers = normalized
+    if not any(name.lower() == "content-type" for name in headers):
+        headers = dict(headers)
+        headers["Content-Type"] = value
+    return headers
+
+
 class AsyncPathMapDispatch:
     def __init__(self, path_maps, side_effects=None):
         self.path_maps = path_maps
@@ -53,11 +71,13 @@ class AsyncPathMapDispatch:
         headers = rv.get("headers", {})
         if isinstance(body, dict):
             body = json.dumps(body).encode()
-            headers["Content-Type"] = "application/json"
+            headers = _set_default_content_type(headers, "application/json")
         else:
             if isinstance(body, str):
                 body = body.encode()
-            headers["Content-Type"] = "application/x-www-form-urlencoded"
+            headers = _set_default_content_type(
+                headers, "application/x-www-form-urlencoded"
+            )
 
         response = ASGIResponse(
             status_code=status_code,
