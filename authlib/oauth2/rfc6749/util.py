@@ -49,7 +49,7 @@ def extract_basic_authorization(headers):
 
     try:
         query = to_unicode(base64.b64decode(auth_token))
-    except (binascii.Error, TypeError):
+    except (binascii.Error, TypeError, UnicodeDecodeError):
         return None, None
     if ":" in query:
         username, password = query.split(":", 1)
