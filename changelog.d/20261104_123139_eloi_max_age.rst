@@ -18,6 +18,9 @@ Added
   returns a ``login_required`` error instead. ``max_age=0`` works like
   ``prompt=login``, and an invalid ``max_age`` gives an ``invalid_request``
   error.
+- The ``StepUpAuthentication`` extension of RFC 9470 enforces ``max_age`` for
+  the requests without the ``openid`` scope too. The ``acr_values`` parameter
+  and the rest of RFC 9470 are not supported yet.
 - The ``framework_request`` property of the Flask and Django OAuth 2.0
   requests gives the request of the framework.
 - ``OAuth2ClientMixin`` has a ``default_max_age`` property.

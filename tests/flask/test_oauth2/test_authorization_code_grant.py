@@ -1,3 +1,5 @@
+import time
+
 import pytest
 from flask import json
 
@@ -6,6 +8,7 @@ from authlib.common.urls import urlparse
 from authlib.oauth2.rfc6749.grants import (
     AuthorizationCodeGrant as _AuthorizationCodeGrant,
 )
+from authlib.oauth2.rfc9470 import StepUpAuthentication
 
 from .models import AuthorizationCode
 from .models import AuthorizationSession
@@ -538,6 +541,19 @@ def test_consent_needed(test_client, monkeypatch):
     assert rv.data == b"consent"
 
     rv = test_client.get(authorize_url)
+    assert rv.data == b"ok"
+
+
+def test_step_up_authentication(test_client, server):
+    """StepUpAuthentication applies max_age to the OAuth requests."""
+    server.register_extension(StepUpAuthentication())
+    old = int(time.time()) - 7200
+    rv = test_client.get(authorize_url + f"&user_id=1&max_age=60&auth_time={old}")
+    assert rv.data == b"login"
+
+    rv = test_client.get(
+        authorize_url + f"&user_id=1&max_age=60&auth_time={old + 7200}"
+    )
     assert rv.data == b"ok"
 
 
