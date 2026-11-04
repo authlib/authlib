@@ -5,8 +5,10 @@ import pytest
 
 from authlib.common.urls import url_decode
 from authlib.common.urls import urlparse
+from authlib.oauth2 import AuthorizationSession
 from authlib.oauth2.rfc6749 import errors
 from authlib.oauth2.rfc6749 import grants
+from authlib.oauth2.rfc9470 import StepUpAuthentication
 
 from .models import Client
 from .models import CodeGrantMixin
@@ -203,3 +205,17 @@ def get_token_response(factory, server):
     assert resp.status_code == 200
     data = json.loads(resp.content)
     return data
+
+
+def test_get_consent_grant_with_session(factory, server, user):
+    """The Django authorization session keeps the start time of the request
+    in the Django session."""
+    server.register_extension(StepUpAuthentication())
+    request = factory.get(
+        "/authorize?response_type=code&client_id=client-id&max_age=60"
+    )
+    request.session = factory.session
+    authorization_session = AuthorizationSession(user, request.session)
+    grant = server.get_consent_grant(request, session=authorization_session)
+    key = grant.request.authorization_key
+    assert request.session["authlib_request_times"] == {key: grant.request.request_time}

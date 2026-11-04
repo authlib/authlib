@@ -19,6 +19,7 @@ from ..models import AuthorizationCodeMixin
 from ._legacy import LegacyMixin
 from .util import OPENID_AUTHORIZATION_PARAMETERS
 from .util import create_half_hash
+from .util import ignore_request_time
 from .util import is_openid_scope
 from .util import resolve_auth_time
 from .util import validate_nonce
@@ -202,6 +203,9 @@ class OpenIDCode(OpenIDToken):
             grant.register_hook(
                 self.validate_openid_authorization_request,
                 after=grant.validate_authorization_request_payload,
+            )
+            grant.register_hook(
+                ignore_request_time, before=grant.validate_consent_request
             )
             grant.register_hook(
                 self.validate_openid_prompt,

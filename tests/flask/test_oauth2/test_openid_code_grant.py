@@ -27,7 +27,6 @@ from tests.util import read_file_path
 from .models import AuthorizationSession
 from .models import CodeGrantMixin
 from .models import exists_nonce
-from .models import get_request_time
 from .models import save_authorization_code
 from .oauth2_server import SupportedPromptValues
 from .oauth2_server import create_basic_header
@@ -59,16 +58,6 @@ def server(server, app):
         }
     )
     return server
-
-
-@pytest.fixture
-def request_time(monkeypatch):
-    """Keep the start time of the authorization requests in the session."""
-    monkeypatch.setattr(
-        AuthorizationSession,
-        "get_request_time",
-        lambda self, request: get_request_time(request),
-    )
 
 
 def unknown_auth_time(monkeypatch):
@@ -895,8 +884,9 @@ def test_login_after_request_start(test_client, server, params, request_time):
 def shift_request_times(test_client, seconds):
     """Move the start of the stored authorization requests back in time."""
     with test_client.session_transaction() as session:
-        session["request_times"] = {
-            key: value - seconds for key, value in session["request_times"].items()
+        session["authlib_request_times"] = {
+            key: value - seconds
+            for key, value in session["authlib_request_times"].items()
         }
 
 
@@ -1001,8 +991,9 @@ def test_interaction_needed(
     rv = test_client.get("/oauth/authorize?" + query)
     assert rv.data == interaction
 
-    query = url_encode(PROMPT_PARAMS + [("user_id", "1"), ("prompt", "none")])
-    rv = test_client.get("/oauth/authorize?" + query)
+    auth_time = str(int(time.time()) - 60)
+    params = [("user_id", "1"), ("auth_time", auth_time), ("prompt", "none")]
+    rv = test_client.get("/oauth/authorize?" + url_encode(PROMPT_PARAMS + params))
     params = dict(url_decode(urlparse.urlparse(rv.location).query))
     assert params["error"] == error
     assert params["state"] == "bar"
@@ -1044,3 +1035,101 @@ def test_prompt_create_with_max_age(test_client, server, prompt_create_first):
     query = url_encode(PROMPT_PARAMS + [("prompt", "create"), ("max_age", "60")])
     rv = test_client.get("/oauth/authorize?" + query)
     assert rv.data == b"create"
+
+
+@pytest.mark.parametrize(
+    "params,read",
+    [
+        ([], True),
+        ([("user_id", "1")], False),
+        ([("prompt", "none")], False),
+        ([("prompt", "none"), ("max_age", "60")], False),
+        ([("prompt", "login")], True),
+        ([("prompt", "consent")], True),
+        ([("prompt", "select_account")], True),
+        ([("max_age", "60")], True),
+        ([("user_id", "1"), ("prompt", "login")], True),
+        ([("user_id", "1"), ("max_age", "60")], True),
+        ([("user_id", "1"), ("prompt", "none"), ("max_age", "60")], False),
+    ],
+)
+def test_request_time_read_when_needed(test_client, server, monkeypatch, params, read):
+    """The start time of the request is read on the first visit of an
+    anonymous user, and when a rule needs it. It is not read with
+    prompt=none."""
+    calls = []
+    monkeypatch.setattr(
+        AuthorizationSession,
+        "get_request_time",
+        lambda self, request: calls.append(request.authorization_key),
+    )
+    register_oidc_code_grant(server)
+    test_client.get("/oauth/authorize?" + url_encode(PROMPT_PARAMS + params))
+    assert bool(calls) == read
+
+
+def test_request_time_read_for_account_selection(test_client, server, monkeypatch):
+    """The start time of the request is read when the account selection is
+    needed."""
+    calls = []
+    monkeypatch.setattr(
+        AuthorizationSession,
+        "get_request_time",
+        lambda self, request: calls.append(request.authorization_key),
+    )
+    monkeypatch.setattr(
+        AuthorizationSession, "is_account_selection_needed", lambda self, r: True
+    )
+    register_oidc_code_grant(server)
+    rv = test_client.get(
+        "/oauth/authorize?" + url_encode(PROMPT_PARAMS + [("user_id", "1")])
+    )
+    assert rv.data == b"select_account"
+    assert calls
+
+
+def test_request_time_not_read_by_step_up_with_prompt_none(
+    test_client, server, monkeypatch
+):
+    """With prompt=none, StepUpAuthentication does not read the start time of
+    the request either."""
+    calls = []
+    monkeypatch.setattr(
+        AuthorizationSession,
+        "get_request_time",
+        lambda self, request: calls.append(request.authorization_key),
+    )
+    register_oidc_code_grant(server)
+    server.register_extension(StepUpAuthentication())
+    params = [("user_id", "1"), ("prompt", "none"), ("max_age", "3600")]
+    rv = test_client.get("/oauth/authorize?" + url_encode(PROMPT_PARAMS + params))
+    assert rv.data == b"ok"
+    assert calls == []
+
+
+def test_request_time_not_read_with_prompt_none_by_earlier_extension(
+    test_client, server, monkeypatch
+):
+    """With prompt=none, the start time is not read, also by an extension
+    registered before OpenIDCode."""
+    calls = []
+    monkeypatch.setattr(
+        AuthorizationSession,
+        "get_request_time",
+        lambda self, request: calls.append(request.authorization_key),
+    )
+
+    class ReadRequestTime:
+        def __call__(self, grant):
+            grant.register_hook(
+                lambda grant, redirect_uri: grant.request.request_time,
+                after=grant.validate_consent_request,
+            )
+
+    server.register_grant(
+        AuthorizationCodeGrant, [ReadRequestTime(), OpenIDCode(require_nonce=False)]
+    )
+    params = [("user_id", "1"), ("prompt", "none")]
+    rv = test_client.get("/oauth/authorize?" + url_encode(PROMPT_PARAMS + params))
+    assert rv.data == b"ok"
+    assert calls == []

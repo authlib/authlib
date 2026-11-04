@@ -6,6 +6,7 @@ from flask_sqlalchemy import SQLAlchemy
 from authlib.integrations.sqla_oauth2 import OAuth2AuthorizationCodeMixin
 from authlib.integrations.sqla_oauth2 import OAuth2ClientMixin
 from authlib.integrations.sqla_oauth2 import OAuth2TokenMixin
+from authlib.oauth2 import AuthorizationSession as DefaultAuthorizationSession
 from authlib.oidc.core import AuthorizationSessionMixin
 from authlib.oidc.core import UserInfo
 
@@ -134,20 +135,6 @@ def get_auth_time(request):
     return int(auth_time) if auth_time else int(time.time())
 
 
-def get_request_time(request):
-    """Return the start time of the authorization request, kept in the
-    session."""
-    now = int(time.time())
-    times = {
-        key: start
-        for key, start in session.get("request_times", {}).items()
-        if now - start <= 600
-    }
-    times.setdefault(request.authorization_key, now)
-    session["request_times"] = times
-    return times[request.authorization_key]
-
-
 class AuthorizationSession(AuthorizationSessionMixin):
     """An authorization session whose login time is the 'auth_time' request
     parameter."""
@@ -163,3 +150,11 @@ class AuthorizationSession(AuthorizationSessionMixin):
             return get_auth_time(request)
 
         return None
+
+
+class StoredAuthorizationSession(DefaultAuthorizationSession, AuthorizationSession):
+    """An authorization session that keeps the start time of the requests in
+    the Flask session."""
+
+    def __init__(self, user):
+        super().__init__(user, session)

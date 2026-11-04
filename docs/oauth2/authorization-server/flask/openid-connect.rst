@@ -281,13 +281,10 @@ methods, you can create shared functions for them.
 Authorization Session
 ---------------------
 
-A client can ask for a recent authentication of the user, with
-``prompt=login``, with the ``max_age`` parameter or with the
-``default_max_age`` client metadata. It can also ask for a new consent with
-``prompt=consent``, or for an account selection with
-``prompt=select_account``. To apply these parameters, Authlib needs facts
-about the session of the user. Give them with an
-:class:`~authlib.oidc.core.AuthorizationSessionMixin`.
+A client can ask for a recent login with ``prompt=login`` or ``max_age``, or
+for a new consent with ``prompt=consent``. Authlib applies these rules with an
+:class:`~authlib.oauth2.AuthorizationSession`.
+:ref:`authorization_session` explains the rules and the pitfalls.
 
 Store the time of the login in the session::
 
@@ -298,39 +295,16 @@ Store the time of the login in the session::
         session["user_id"] = user.id
         session["auth_time"] = int(time.time())
 
-Then implement the authorization session::
+Subclass the authorization session. It keeps the start time of the requests
+in the Flask session. Give the time of the interactions, and tell if the user
+must give their consent::
 
-    import time
-    from flask import session
-    from authlib.oidc.core import AuthorizationSessionMixin
+    from authlib.oauth2 import AuthorizationSession
 
-    class AuthorizationSession(AuthorizationSessionMixin):
-        def __init__(self, user):
-            self.user = user
-
-        def get_user(self):
-            return self.user
-
-        def get_request_time(self, request):
-            now = int(time.time())
-            stored = session.get("request_times", {})
-            times = {
-                key: start for key, start in stored.items() if now - start <= 600
-            }
-            times.setdefault(request.authorization_key, now)
-            if times != stored:
-                session["request_times"] = times
-
-            return times[request.authorization_key]
-
-        def end_request(self, request):
-            times = session.get("request_times", {})
-            times.pop(request.authorization_key, None)
-            session["request_times"] = times
-
+    class MyAuthorizationSession(AuthorizationSession):
         def get_interaction_time(self, request, interaction):
             if interaction == "login":
-                return session.get("auth_time")
+                return self.session.get("auth_time")
             if interaction == "consent":
                 consent = get_consent(self.user, request.client)
                 return consent.issued_at.timestamp() if consent else None
@@ -346,7 +320,7 @@ interaction, such as a login, it is in ``grant.interactions``, and
 
     @app.route("/oauth/authorize", methods=["GET", "POST"])
     def authorize():
-        authorization_session = AuthorizationSession(current_user())
+        authorization_session = MyAuthorizationSession(current_user(), session)
         try:
             grant = server.get_consent_grant(session=authorization_session)
         except OAuth2Error as error:
@@ -355,62 +329,5 @@ interaction, such as a login, it is in ``grant.interactions``, and
         if request.method == "GET" and grant.prompt == "login":
             return redirect(url_for("login", next=request.url))
         ...
-
-The interactions come in this order: ``"login"``, ``"select_account"`` and
-``"consent"``. A login after the start of the request also counts as an
-account selection, so an anonymous user only has to log in. With
-``prompt=none``, the server returns an error instead, such as
-``login_required`` or ``consent_required``.
-
-The time of the login must come from a real authentication, with a password
-or another factor. Do not update it when the user switches to another account
-or resumes a session. It becomes the ``auth_time`` claim of the ID token.
-
-An interaction that the client asks for is done when it happened after the
-authorization request started: a login after this time satisfies
-``prompt=login`` and ``max_age=0``, and a consent after this time satisfies
-``prompt=consent``. ``max_age`` is measured from this time. Without
-``get_request_time``, these interactions are asked again and again, and the
-age of the authentication is measured each time you call
-``get_consent_grant``.
-
-``get_consent_grant`` calls ``get_request_time`` once per HTTP request, from
-the first visit, before the user logs in.
-``request.authorization_key`` is a hash of the authorization request
-parameters. It is the same before and after the login, and when the user
-submits the consent form. Two authorization requests with the same parameters
-have the same key. Clients that send a unique ``state``, ``nonce`` or
-``code_challenge`` avoid this.
-
-Keep the time on the server side, for instance in the session. Do not read it
-from a request parameter or a form field. A user could send an old time and
-skip the login. Authlib calls ``end_request`` when the request ends: when the
-user accepts or denies it, and when ``get_consent_grant`` raises an error.
-Otherwise, the same authorization request sent again later would reuse the
-old time, and the user would not have to log in. The example also drops the
-times older than 10 minutes. They come from requests that never end, for
-instance when the user leaves the login page. This keeps the session small.
-
-The time must still be in the session when the user comes back from the login:
-
-- If your login view clears or replaces the session, copy ``request_times``
-  into the new session.
-- A cross-site ``POST`` to the authorization endpoint comes without the
-  session cookie when it is ``SameSite=Lax``. Redirect such requests to a
-  ``GET`` with the same parameters first, or keep the times in a server-side
-  cache.
-
-``is_consent_needed`` tells if the user must give their consent, according to
-the consents you store: there is none, it was revoked, or it does not cover
-the requested scope. A client can still ask for a consent with
-``prompt=consent``. ``is_account_selection_needed`` works the same way for the
-account selection.
-
-Without an authorization session, ``max_age`` is ignored, except
-``max_age=0``, and the ``auth_time`` claim is the current time. This is
-deprecated.
-
-The :ref:`specs/rfc9470` extension applies ``max_age`` to the requests without
-the ``openid`` scope too.
 
 Find the `example of OpenID Connect server <https://github.com/authlib/example-oidc-server>`_.

@@ -13,7 +13,11 @@ Added
   happened after the request started, so the user is not asked again and
   again. A login also counts as an account selection. ``is_consent_needed``
   tells if the user must give their consent, and ``end_request`` is called
-  when the authorization request ends.
+  when the authorization request ends. ``authlib.oauth2.AuthorizationSession``
+  keeps the start time of the requests in the session of the web framework.
+  The session is only written when the user must go through an interaction,
+  or when a rule needs the start time. With the OpenID Connect ``prompt=none``,
+  it is not written.
 - With ``prompt=none``, the OpenID Connect grants return ``consent_required``
   or ``account_selection_required`` when the authorization session needs the
   consent or the account selection of the user. :issue:`740`
@@ -30,8 +34,7 @@ Changed
 - ``get_consent_grant`` calls the new ``validate_interactions`` method of the
   grant after ``validate_consent_request``. With ``prompt=none``, the
   ``consent_required`` and ``account_selection_required`` errors are raised
-  there. It also sets ``request.request_time`` from the authorization
-  session. If you override ``get_consent_grant``, do the same.
+  there. If you override ``get_consent_grant``, call it too.
 
 Deprecated
 ~~~~~~~~~~

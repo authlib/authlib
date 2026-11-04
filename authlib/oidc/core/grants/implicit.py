@@ -16,6 +16,7 @@ from ._legacy import LegacyMixin
 from .util import OPENID_AUTHORIZATION_PARAMETERS
 from .util import create_half_hash
 from .util import has_multiple_response_types
+from .util import ignore_request_time
 from .util import is_openid_scope
 from .util import resolve_auth_time
 from .util import validate_nonce
@@ -98,6 +99,7 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
         return redirect_uri
 
     def validate_consent_request(self):
+        ignore_request_time(self)
         redirect_uri = self.validate_authorization_request()
         self.redirect_uri = redirect_uri
         validate_request_prompt(self, redirect_uri, redirect_fragment=True)

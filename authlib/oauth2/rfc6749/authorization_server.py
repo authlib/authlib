@@ -315,10 +315,12 @@ class AuthorizationServer(Hookable):
             grant.validate_no_multiple_request_parameter(request)
             request.authorization_key = grant.get_authorization_key()
             if session is not None:
-                request.request_time = session.get_request_time(request)
+                request._request_time_loader = session.get_request_time
 
             grant.validate_consent_request()
             grant.validate_interactions()
+            if grant.interactions:
+                _keep_request_time(request)
 
         except OAuth2Error as error:
             # REQUIRED if a "state" parameter was present in the client
@@ -536,3 +538,10 @@ def _create_grant(grant_cls, extensions, request, server):
         for ext in extensions:
             ext(grant)
     return grant
+
+
+def _keep_request_time(request):
+    """Read the start time of the request from the authorization session, so
+    that the session keeps it until the user comes back from the
+    interactions."""
+    return request.request_time

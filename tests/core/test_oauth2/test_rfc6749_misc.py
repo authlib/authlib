@@ -176,3 +176,25 @@ def test_authorization_session_defaults():
     assert not session.is_consent_needed(request)
     assert session.end_request(request) is None
     assert not session.is_interaction_done(request, "login")
+
+
+def test_request_time_loader_error():
+    """When the authorization session fails to give the start time, the next
+    read tries again."""
+    request = OAuth2Request("GET", "https://server.test/authorize")
+    calls = []
+
+    def loader(request):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("store down")
+
+        return 1000
+
+    request._request_time_loader = loader
+    with pytest.raises(RuntimeError):
+        assert request.request_time
+
+    assert request.request_time == 1000
+    assert request.request_time == 1000
+    assert len(calls) == 2

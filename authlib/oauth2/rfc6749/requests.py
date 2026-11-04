@@ -74,9 +74,8 @@ class OAuth2Request:
         #: all the HTTP requests of one authorization request.
         self.authorization_key = None
 
-        #: The time the authorization request started, as given by the
-        #: authorization session, or ``None``.
-        self.request_time = None
+        self._request_time = None
+        self._request_time_loader = None
 
         self.client = None
         self.auth_method = None
@@ -85,6 +84,21 @@ class OAuth2Request:
         self.refresh_token = None
         self.credential = None
         self._scope = None
+
+    @property
+    def request_time(self):
+        """The time the authorization request started, or ``None``. The
+        authorization session gives it on first use."""
+        if self._request_time_loader is not None:
+            self._request_time = self._request_time_loader(self)
+            self._request_time_loader = None
+
+        return self._request_time
+
+    @request_time.setter
+    def request_time(self, value):
+        self._request_time_loader = None
+        self._request_time = value
 
     @property
     def args(self):
