@@ -54,7 +54,9 @@ dev = [
     "prek>=0.1.3",
     "pytest>=8.2",
     "pytest-asyncio>=0.21",
+    "pytest-cov>=7.1.0",
     "pytest-env>=1.0",
+    "pytest-xdist>=3.8.0",
     "scriv[toml]>=1.8.0",
     "tox-uv >= 1.16.0",
 ]

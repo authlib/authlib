@@ -45,12 +45,7 @@ jobs:
       run: uv sync --python ${{ matrix.python }} --group clients --group jose
 
     - name: Test with coverage
-      run: uv run coverage run --source=authlib -m pytest tests
-
-    - name: Report coverage
-      run: |
-        uv run coverage report
-        uv run coverage xml
+      run: uv run pytest tests -n auto --cov=authlib --cov-report=term --cov-report=xml
 
     - name: Check diff coverage for modified files
       if: github.event_name == 'pull_request'
@@ -93,7 +88,7 @@ jobs:
       run: uv sync --python 3.11 --resolution lowest-direct --upgrade --group clients --group jose
 
     - name: Test
-      run: uv run --no-sync pytest tests
+      run: uv run --no-sync pytest tests -n auto
 
     - name: Minimize cache
       run: uv cache prune --ci
