@@ -419,7 +419,8 @@ The time must still be in the session when the user comes back from the login:
 ``is_consent_needed`` tells if the user must give their consent, according to
 the consents you store: there is none, it was revoked, or it does not cover
 the requested scope. A client can still ask for a consent with
-``prompt=consent``.
+``prompt=consent``. ``is_account_selection_needed`` works the same way for the
+account selection.
 
 Without an authorization session, ``max_age`` is ignored, except
 ``max_age=0``, and the ``auth_time`` claim is the current time. This is

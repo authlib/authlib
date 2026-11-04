@@ -890,6 +890,36 @@ def test_prompt_none_with_custom_consent_validation(test_client, server):
     assert params["error"] == "login_required"
 
 
+@pytest.mark.parametrize(
+    "method,interaction,error",
+    [
+        ("is_consent_needed", b"consent", "consent_required"),
+        (
+            "is_account_selection_needed",
+            b"select_account",
+            "account_selection_required",
+        ),
+    ],
+)
+def test_interaction_needed(
+    test_client, server, monkeypatch, method, interaction, error
+):
+    """When the authorization session needs the consent or the account
+    selection of the user, it is an interaction. With prompt=none, the server
+    returns an error instead."""
+    monkeypatch.setattr(AuthorizationSession, method, lambda self, request: True)
+    register_oidc_code_grant(server)
+    query = url_encode(PROMPT_PARAMS + [("user_id", "1")])
+    rv = test_client.get("/oauth/authorize?" + query)
+    assert rv.data == interaction
+
+    query = url_encode(PROMPT_PARAMS + [("user_id", "1"), ("prompt", "none")])
+    rv = test_client.get("/oauth/authorize?" + query)
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert params["error"] == error
+    assert params["state"] == "bar"
+
+
 def test_consent_after_request_start(test_client, server, monkeypatch, request_time):
     """prompt=consent is satisfied by a consent given after the start of the
     request."""

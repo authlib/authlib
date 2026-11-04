@@ -310,7 +310,8 @@ def _is_account_selection_required(request, session, prompts):
     if not request.user:
         return False
 
-    if "select_account" not in prompts:
+    is_needed = getattr(session, "is_account_selection_needed", None)
+    if "select_account" not in prompts and not (is_needed and is_needed(request)):
         return False
 
     return not (

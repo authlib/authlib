@@ -255,8 +255,9 @@ def test_openid_code_on_custom_grant(monkeypatch):
 class FixedSession(AuthorizationSessionMixin):
     """An authorization session with fixed times."""
 
-    def __init__(self, request_time=None, **times):
+    def __init__(self, request_time=None, account_selection_needed=False, **times):
         self.request_time = request_time
+        self.account_selection_needed = account_selection_needed
         self.times = times
 
     def get_user(self):
@@ -267,6 +268,9 @@ class FixedSession(AuthorizationSessionMixin):
 
     def get_interaction_time(self, request, interaction):
         return self.times.get(interaction)
+
+    def is_account_selection_needed(self, request):
+        return self.account_selection_needed
 
 
 def validate_prompt(
@@ -332,6 +336,18 @@ def test_max_age_invalid_value(max_age):
     invalid_request."""
     with pytest.raises(InvalidRequestError):
         validate_prompt(max_age=max_age, session=FixedSession())
+
+
+def test_account_selection_needed():
+    """The authorization session can require the account selection. It is
+    done when the user selects an account or logs in after the request
+    started."""
+    session = FixedSession(1000, login=0, account_selection_needed=True)
+    assert validate_prompt(session=session) == ["select_account"]
+
+    for times in [{"select_account": 1000, "login": 0}, {"login": 1000}]:
+        session = FixedSession(1000, account_selection_needed=True, **times)
+        assert validate_prompt(session=session) == []
 
 
 @pytest.mark.parametrize(

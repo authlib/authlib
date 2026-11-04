@@ -726,3 +726,15 @@ def test_login_after_request_start(test_client, monkeypatch):
         )
     )
     assert rv.data == b"ok"
+
+
+def test_consent_required(test_client, monkeypatch):
+    """With prompt=none, a needed consent gives consent_required in the
+    fragment."""
+    monkeypatch.setattr(
+        AuthorizationSession, "is_consent_needed", lambda self, request: True
+    )
+    query = {**IMPLICIT_PARAMS, "prompt": "none"}
+    rv = test_client.get(add_params_to_uri("/oauth/authorize", query))
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["error"] == "consent_required"

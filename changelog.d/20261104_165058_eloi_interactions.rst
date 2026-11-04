@@ -14,6 +14,9 @@ Added
   again. A login also counts as an account selection. ``is_consent_needed``
   tells if the user must give their consent, and ``end_request`` is called
   when the authorization request ends.
+- With ``prompt=none``, the OpenID Connect grants return ``consent_required``
+  or ``account_selection_required`` when the authorization session needs the
+  consent or the account selection of the user. :issue:`740`
 - ``request.authorization_key`` is a hash of the authorization request
   parameters. It is the same for all the HTTP requests of one authorization
   request, for instance before and after a login.
@@ -26,7 +29,8 @@ Changed
   ``"select_account"`` instead of ``"consent"``.
 - ``get_consent_grant`` calls the new ``validate_interactions`` method of the
   grant after ``validate_consent_request``. With ``prompt=none``, the
-  ``consent_required`` error is raised there. It also sets ``request.request_time`` from the authorization
+  ``consent_required`` and ``account_selection_required`` errors are raised
+  there. It also sets ``request.request_time`` from the authorization
   session. If you override ``get_consent_grant``, do the same.
 
 Deprecated
