@@ -301,6 +301,7 @@ class AuthorizationServer(Hookable):
             grant.validate_no_multiple_request_parameter(request)
             request.authorization_key = grant.get_authorization_key()
             grant.validate_consent_request()
+            grant.validate_interactions()
 
         except OAuth2Error as error:
             # REQUIRED if a "state" parameter was present in the client

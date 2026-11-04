@@ -320,8 +320,12 @@ must log in, ``grant.prompt`` is ``"login"``::
             return redirect(url_for("login", next=request.url))
         ...
 
-With ``prompt=none``, the server returns a ``login_required`` error instead.
-``max_age=0`` works like ``prompt=login``.
+``grant.prompt`` is the first of ``grant.interactions``, the list of the
+interactions the user must go through, in this order: ``"login"``,
+``"consent"`` and ``"select_account"``.
+
+With ``prompt=none``, the server returns an error instead, such as
+``login_required``. ``max_age=0`` works like ``prompt=login``.
 
 By default, ``grant.prompt`` stays ``"login"`` with ``prompt=login`` and
 ``max_age=0``, even after the login. To fix this, implement

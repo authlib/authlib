@@ -24,6 +24,7 @@ from .util import get_auth_time_function
 from .util import is_openid_scope
 from .util import resolve_auth_time
 from .util import validate_nonce
+from .util import validate_prompt_none
 from .util import validate_request_prompt
 
 log = logging.getLogger(__name__)
@@ -229,12 +230,22 @@ class OpenIDCode(OpenIDToken):
         :param grant: the grant that validates the authorization request
         :param redirect_uri: the redirect URI of the authorization request
         """
+        grant.redirect_uri = redirect_uri
         validate_request_prompt(
             grant,
             redirect_uri,
             get_auth_time=get_auth_time_function(self, OpenIDCode),
             get_request_time=self.get_request_time,
         )
+
+    def validate_openid_interactions(self, grant, result):
+        """Return an error when ``prompt`` is ``none`` and the user must go
+        through an interaction.
+
+        :param grant: the grant that validates the authorization request
+        :param result: the result of ``validate_interactions``
+        """
+        validate_prompt_none(grant)
 
     def __call__(self, grant):
         grant.register_hook(self.process_token, after=grant.create_token_response)
@@ -250,4 +261,8 @@ class OpenIDCode(OpenIDToken):
             grant.register_hook(
                 self.validate_openid_prompt,
                 after=grant.validate_consent_request,
+            )
+            grant.register_hook(
+                self.validate_openid_interactions,
+                after=grant.validate_interactions,
             )

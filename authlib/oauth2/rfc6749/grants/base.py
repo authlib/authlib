@@ -3,11 +3,14 @@ import json
 
 from authlib.common.hooks import Hookable
 from authlib.consts import default_json_headers
+from authlib.deprecate import deprecate
 
 from ..errors import InvalidRequestError
 from ..errors import InvalidScopeError
 from ..requests import OAuth2Request
 from ..util import normalize_response_type
+
+_UNSET = object()
 
 
 class BaseGrant(Hookable):
@@ -25,7 +28,11 @@ class BaseGrant(Hookable):
 
     def __init__(self, request: OAuth2Request, server):
         super().__init__()
-        self.prompt = None
+        #: The interactions the user must go through before the
+        #: authorization response, in order, such as ``"login"`` or
+        #: ``"consent"``. Extensions add theirs while the request is validated.
+        self.interactions = []
+        self._prompt = _UNSET
         self.redirect_uri = None
         self.request = request
         self.server = server
@@ -33,6 +40,23 @@ class BaseGrant(Hookable):
     @property
     def client(self):
         return self.request.client
+
+    @property
+    def prompt(self):
+        """The first of the :attr:`interactions`, or ``None``."""
+        if self._prompt is not _UNSET:
+            return self._prompt
+
+        return self.interactions[0] if self.interactions else None
+
+    @prompt.setter
+    def prompt(self, value):
+        deprecate(
+            "Setting 'grant.prompt' is deprecated. Read 'grant.interactions' "
+            "instead, and keep your own values in your own attributes.",
+            version="1.11",
+        )
+        self._prompt = value
 
     def generate_token(
         self,
@@ -215,6 +239,14 @@ class AuthorizationEndpointMixin(Hookable):
         redirect_uri = self.validate_authorization_request()
         self.redirect_uri = redirect_uri
         return redirect_uri
+
+    def validate_interactions(self):
+        """Check the :attr:`interactions` of the request.
+
+        It runs after :meth:`validate_consent_request`, once the extensions
+        have added their interactions. It does nothing by default.
+        Extensions can check the interactions here.
+        """
 
     def validate_authorization_request(self):
         raise NotImplementedError()

@@ -20,6 +20,7 @@ from .util import has_multiple_response_types
 from .util import is_openid_scope
 from .util import resolve_auth_time
 from .util import validate_nonce
+from .util import validate_prompt_none
 from .util import validate_request_prompt
 from .util import validate_response_mode
 
@@ -149,6 +150,7 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
 
     def validate_consent_request(self):
         redirect_uri = self.validate_authorization_request()
+        self.redirect_uri = redirect_uri
         validate_request_prompt(
             self,
             redirect_uri,
@@ -157,6 +159,10 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
             get_request_time=self.get_request_time,
         )
         return redirect_uri
+
+    def validate_interactions(self):
+        super().validate_interactions()
+        validate_prompt_none(self, redirect_fragment=True)
 
     def create_authorization_response(self, redirect_uri, grant_user):
         if grant_user:

@@ -26,9 +26,10 @@ Register the :class:`PromptCreate` extension on your authorization server::
     authorization_server.register_extension(PromptCreate())
 
 It applies to the OpenID Connect code, implicit and hybrid flows. When the
-authorization request contains ``prompt=create``, ``grant.prompt`` is
-``"create"``. Show the account creation page in your authorization
-endpoint::
+authorization request of an anonymous user contains ``prompt=create``,
+``"create"`` is the first of ``grant.interactions``, before ``"login"``, and
+``grant.prompt`` is ``"create"``. Show the account creation page in your
+authorization endpoint::
 
     @app.route("/oauth/authorize")
     def authorize():
@@ -37,12 +38,11 @@ endpoint::
             return render_template("register.html", grant=grant)
         ...
 
-``create`` takes precedence over ``login``, ``consent`` and
-``select_account``. ``grant.prompt`` is ``"create"`` as long as the request
-contains ``prompt=create``, even when the user is logged in. So after the
-account creation, do not send the user back to the same authorization URL, or
-the registration page shows again. Finish the authorization request instead,
-or remember in the session that the registration is done.
+For a logged-in user, ``create`` is ignored. The other interactions, such as
+a login required by ``max_age``, still apply. So log the user in at the end of
+the account creation, and send them back to the authorization URL. If you
+want to show the account creation page to logged-in users too, read the
+``prompt`` parameter of the request.
 
 The flow is only successful when the client gets an ID Token (Initiating User
 Registration via OpenID Connect 1.0 §4.1).

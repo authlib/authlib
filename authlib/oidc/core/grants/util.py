@@ -12,10 +12,19 @@ from authlib.oauth2.rfc6749 import AuthorizationResponse
 from authlib.oauth2.rfc6749 import InvalidRequestError
 from authlib.oauth2.rfc6749 import scope_to_list
 
+from ..errors import AccountSelectionRequiredError
+from ..errors import ConsentRequiredError
+from ..errors import InteractionRequiredError
 from ..errors import LoginRequiredError
 from ..util import create_half_hash
 
 _warned_servers = weakref.WeakSet()
+
+_INTERACTION_ERRORS = {
+    "login": LoginRequiredError,
+    "select_account": AccountSelectionRequiredError,
+    "consent": ConsentRequiredError,
+}
 
 #: The authorization request parameters of OpenID Connect, with their JSON
 #: types. Per OIDC Core §3.1.2.1, §5.2, §5.5 and §7.2.1.
@@ -44,6 +53,15 @@ def is_openid_scope(scope):
     return scopes and "openid" in scopes
 
 
+def get_prompt_values(request):
+    """Return the values of the ``prompt`` parameter of a request, as a list.
+
+    :param request: the authorization request
+    """
+    prompt = request.payload.data.get("prompt")
+    return prompt.split() if prompt else []
+
+
 def validate_request_prompt(
     grant,
     redirect_uri,
@@ -51,10 +69,12 @@ def validate_request_prompt(
     get_auth_time=None,
     get_request_time=None,
 ):
-    """Validate the ``prompt`` and ``max_age`` parameters, and set ``grant.prompt``.
+    """Validate the ``prompt`` and ``max_age`` parameters, and add the
+    interactions they ask for to ``grant.interactions``, in this order:
+    ``"login"``, ``"consent"`` and ``"select_account"``.
 
-    ``grant.prompt`` is ``"login"`` when the user must log in, for instance
-    when their last authentication is older than ``max_age``.
+    ``"login"`` is added when the user must log in, for instance when their
+    last authentication is older than ``max_age``.
 
     :param grant: the grant that validates the authorization request
     :param redirect_uri: the redirect URI of the authorization request
@@ -68,11 +88,8 @@ def validate_request_prompt(
         from this time.
     :raises InvalidRequestError: if ``prompt`` contains ``none`` with another
         value, or if ``max_age`` is not a non-negative integer
-    :raises LoginRequiredError: if ``prompt`` is ``none`` and the user must
-        log in
     """
-    prompt = grant.request.payload.data.get("prompt")
-    prompts = prompt.split() if prompt else []
+    prompts = get_prompt_values(grant.request)
     if "none" in prompts and len(prompts) > 1:
         # If this parameter contains none with any other value,
         # an error is returned
@@ -87,20 +104,41 @@ def validate_request_prompt(
         grant.request, prompts, max_age, get_auth_time, get_request_time
     )
     if not grant.request.user or login_required:
-        if "none" in prompts:
-            raise LoginRequiredError(
-                redirect_uri=redirect_uri, redirect_fragment=redirect_fragment
-            )
-
-        grant.prompt = "login"
-        return grant
+        grant.interactions.append("login")
 
     if "consent" in prompts:
-        grant.prompt = "consent"
-    elif "select_account" in prompts:
-        grant.prompt = "select_account"
+        grant.interactions.append("consent")
+
+    if "select_account" in prompts:
+        grant.interactions.append("select_account")
 
     return grant
+
+
+def validate_prompt_none(grant, redirect_fragment=False):
+    """Raise an error when ``prompt`` is ``none`` and the user must go
+    through an interaction.
+
+    Per OIDC Core §3.1.2.1, with ``prompt=none`` the server MUST NOT display
+    any authentication or consent user interface. The error tells which
+    interaction is needed (OIDC Core §3.1.2.6).
+
+    :param grant: the grant that validates the authorization request
+    :param redirect_fragment: whether errors are redirected in the fragment
+    :raises LoginRequiredError: if the user must log in
+    :raises AccountSelectionRequiredError: if the user must select an account
+    :raises ConsentRequiredError: if the user must give their consent
+    :raises InteractionRequiredError: for any other interaction
+    """
+    if not grant.interactions or "none" not in get_prompt_values(grant.request):
+        return
+
+    error_class = _INTERACTION_ERRORS.get(
+        grant.interactions[0], InteractionRequiredError
+    )
+    raise error_class(
+        redirect_uri=grant.redirect_uri, redirect_fragment=redirect_fragment
+    )
 
 
 def validate_response_mode(grant, redirect_uri):

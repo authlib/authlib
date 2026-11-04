@@ -350,17 +350,45 @@ PROMPT_PARAMS = [
 ]
 
 
-@pytest.mark.parametrize("user_params", [[], [("user_id", "1")]])
 @pytest.mark.parametrize(
     "prompt", ["create", "login create", "consent create", "select_account create"]
 )
-def test_prompt_create(test_client, server, user_params, prompt):
-    """With PromptCreate, the grant prompt is 'create'."""
+def test_prompt_create(test_client, server, prompt):
+    """With PromptCreate, the grant prompt is 'create' for an anonymous
+    user."""
     register_oidc_code_grant(server)
     server.register_extension(PromptCreate())
-    query = url_encode(PROMPT_PARAMS + user_params + [("prompt", prompt)])
+    query = url_encode(PROMPT_PARAMS + [("prompt", prompt)])
     rv = test_client.get("/oauth/authorize?" + query)
     assert rv.data == b"create"
+
+
+@pytest.mark.parametrize(
+    "prompt,expected",
+    [
+        ("create", b"ok"),
+        ("consent create", b"consent"),
+        ("select_account create", b"select_account"),
+        ("login create", b"login"),
+    ],
+)
+def test_prompt_create_with_logged_user(test_client, server, prompt, expected):
+    """For a logged-in user, PromptCreate does not change the
+    interactions."""
+    register_oidc_code_grant(server)
+    server.register_extension(PromptCreate())
+    query = url_encode(PROMPT_PARAMS + [("user_id", "1"), ("prompt", prompt)])
+    rv = test_client.get("/oauth/authorize?" + query)
+    assert rv.data == expected
+
+
+def test_prompt_create_does_not_skip_max_age(test_client, server):
+    """When a logged-in user must log in again because of max_age, the grant
+    prompt stays 'login'."""
+    register_oidc_code_grant(server)
+    server.register_extension(PromptCreate())
+    rv = authorize_max_age(test_client, 60, int(time.time()) - 7200, "create")
+    assert rv.data == b"login"
 
 
 def test_prompt_create_with_none(test_client, server):
@@ -845,3 +873,18 @@ def test_login_after_anonymous_request_start(test_client, server):
     shift_request_times(test_client, 60)
     rv = authorize_max_age(test_client, None, int(time.time()) - 30, "login")
     assert rv.data == b"ok"
+
+
+def test_prompt_none_with_custom_consent_validation(test_client, server):
+    """With prompt=none, login_required is redirected to the client, also
+    when the grant validates the consent request without calling super()."""
+
+    class CustomGrant(AuthorizationCodeGrant):
+        def validate_consent_request(self):
+            return self.validate_authorization_request()
+
+    register_oidc_code_grant(server, grant_cls=CustomGrant)
+    query = url_encode(PROMPT_PARAMS + [("prompt", "none")])
+    rv = test_client.get("/oauth/authorize?" + query)
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert params["error"] == "login_required"

@@ -253,14 +253,14 @@ def create_max_age_grant(max_age):
     """Return a grant whose request has a logged user and a max_age."""
     payload = types.SimpleNamespace(data={"max_age": max_age})
     request = types.SimpleNamespace(payload=payload, user=object(), client=None)
-    return types.SimpleNamespace(request=request, prompt=None)
+    return types.SimpleNamespace(request=request, interactions=[])
 
 
 def test_max_age_integer():
     """An integer max_age, as in a request object, is enforced."""
     grant = create_max_age_grant(3600)
     validate_request_prompt(grant, None, get_auth_time=lambda request: 0)
-    assert grant.prompt == "login"
+    assert grant.interactions == ["login"]
 
 
 @pytest.mark.parametrize("max_age", [-1, True, 1.5])
@@ -272,20 +272,21 @@ def test_max_age_invalid_value(max_age):
 
 
 def validate_prompt(prompt=None, max_age=None, auth_time=0, request_time=None):
-    """Validate a request with a logged user, and return ``grant.prompt``."""
+    """Validate a request with a logged user, and return the first
+    interaction."""
     data = {"prompt": prompt, "max_age": max_age}
     payload = types.SimpleNamespace(
         data={k: v for k, v in data.items() if v is not None}
     )
     request = types.SimpleNamespace(payload=payload, user=object(), client=None)
-    grant = types.SimpleNamespace(request=request, prompt=None)
+    grant = types.SimpleNamespace(request=request, interactions=[])
     validate_request_prompt(
         grant,
         None,
         get_auth_time=lambda request: auth_time,
         get_request_time=lambda request: request_time,
     )
-    return grant.prompt
+    return grant.interactions[0] if grant.interactions else None
 
 
 @pytest.mark.parametrize("params", [{"prompt": "login"}, {"max_age": 0}])
@@ -320,9 +321,9 @@ def test_request_time_without_auth_time():
     """Without get_auth_time, the request time is not used."""
     payload = types.SimpleNamespace(data={"prompt": "login"})
     request = types.SimpleNamespace(payload=payload, user=object(), client=None)
-    grant = types.SimpleNamespace(request=request, prompt=None)
+    grant = types.SimpleNamespace(request=request, interactions=[])
     validate_request_prompt(grant, None, get_request_time=lambda request: 0)
-    assert grant.prompt == "login"
+    assert grant.interactions == ["login"]
 
 
 @pytest.mark.parametrize("prompt", ["consent", "select_account"])
@@ -330,3 +331,22 @@ def test_other_prompt_after_login(prompt):
     """After the login, the other prompt values still apply."""
     result = validate_prompt(f"login {prompt}", auth_time=1000, request_time=1000)
     assert result == prompt
+
+
+@pytest.mark.parametrize(
+    "user,prompt,interactions",
+    [
+        (None, "select_account login consent", ["login", "consent", "select_account"]),
+        (object(), "select_account consent", ["consent", "select_account"]),
+        (object(), "none", []),
+        (None, "none", ["login"]),
+    ],
+)
+def test_interactions(user, prompt, interactions):
+    """The interactions are listed in order: login, consent, then account
+    selection, as in the released ``grant.prompt``."""
+    payload = types.SimpleNamespace(data={"prompt": prompt})
+    request = types.SimpleNamespace(payload=payload, user=user, client=None)
+    grant = types.SimpleNamespace(request=request, interactions=[])
+    validate_request_prompt(grant, None, get_auth_time=lambda request: 0)
+    assert grant.interactions == interactions
