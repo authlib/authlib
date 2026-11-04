@@ -9,6 +9,8 @@ from .errors import InvalidScopeError
 from .errors import OAuth2Error
 from .errors import UnsupportedGrantTypeError
 from .errors import UnsupportedResponseTypeError
+from .grants.base import AuthorizationEndpointMixin
+from .grants.base import validate_no_repeated_parameter
 from .requests import JsonRequest
 from .requests import OAuth2Request
 from .responses import AuthorizationResponse
@@ -171,6 +173,16 @@ class AuthorizationServer(Hookable):
         """
         self._authorization_parameters.update(parameters)
 
+    @property
+    def authorization_parameters(self):
+        """The authorization request parameters known before a grant is
+        chosen, with their JSON types: those of RFC 6749 and of the server
+        extensions."""
+        return {
+            **AuthorizationEndpointMixin.AUTHORIZATION_PARAMETERS,
+            **self._authorization_parameters,
+        }
+
     def get_error_uri(self, request, error):
         """Return a URI for the given error, framework may implement this method."""
         return None
@@ -283,6 +295,7 @@ class AuthorizationServer(Hookable):
 
         try:
             request.user = end_user
+            validate_no_repeated_parameter(request, self.authorization_parameters)
 
             grant = self.get_authorization_grant(request)
             grant.validate_no_multiple_request_parameter(request)

@@ -139,8 +139,8 @@ class AuthorizationEndpointMixin(Hookable):
         """The authorization request parameters of this grant, of its
         extensions and of the server extensions, with their JSON types."""
         return {
+            **self.server.authorization_parameters,
             **self.AUTHORIZATION_PARAMETERS,
-            **self.server._authorization_parameters,
             **self._extension_authorization_parameters,
         }
 
@@ -186,12 +186,7 @@ class AuthorizationEndpointMixin(Hookable):
 
         It checks the parameters in :attr:`authorization_parameters`.
         """
-        datalist = request.payload.datalist
-        for param in self.authorization_parameters:
-            if len(datalist.get(param, [])) > 1:
-                raise InvalidRequestError(
-                    f"Multiple '{param}' in request.", state=request.payload.state
-                )
+        validate_no_repeated_parameter(request, self.authorization_parameters)
 
     def get_authorization_key(self):
         """Return a hash of the authorization request parameters.
@@ -226,3 +221,19 @@ class AuthorizationEndpointMixin(Hookable):
 
     def create_authorization_response(self, redirect_uri: str, grant_user):
         raise NotImplementedError()
+
+
+def validate_no_repeated_parameter(request: OAuth2Request, parameters):
+    """Check that the request does not repeat one of the parameters.
+    Per :rfc:`6749#section-3.1`.
+
+    :param request: the authorization request
+    :param parameters: the names of the parameters to check
+    :raises InvalidRequestError: if a parameter is repeated
+    """
+    datalist = request.payload.datalist
+    for param in parameters:
+        if len(datalist.get(param, [])) > 1:
+            raise InvalidRequestError(
+                f"Multiple '{param}' in request.", state=request.payload.state
+            )
