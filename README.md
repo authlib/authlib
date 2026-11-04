@@ -62,6 +62,8 @@ Generic, spec-compliant implementation to build clients and providers:
   - [RFC9101: The OAuth 2.0 Authorization Framework: JWT-Secured Authorization Request (JAR)](https://docs.authlib.org/en/stable/oauth2/specs/rfc9101.html)
   - [RFC9207: OAuth 2.0 Authorization Server Issuer Identification](https://docs.authlib.org/en/stable/oauth2/specs/rfc9207.html)
   - [RFC9728: OAuth 2.0 Protected Resource Metadata](https://docs.authlib.org/en/stable/oauth2/specs/rfc9728.html)
+  - [OAuth 2.0 Multiple Response Type Encoding Practices](https://docs.authlib.org/en/stable/oauth2/specs/multiple-response-types.html)
+  - [OAuth 2.0 Form Post Response Mode](https://docs.authlib.org/en/stable/oauth2/specs/form-post.html)
 - [Javascript Object Signing and Encryption](https://docs.authlib.org/en/stable/jose/index.html)
   - [RFC7515: JSON Web Signature](https://docs.authlib.org/en/stable/jose/jws.html)
   - [RFC7516: JSON Web Encryption](https://docs.authlib.org/en/stable/jose/jwe.html)

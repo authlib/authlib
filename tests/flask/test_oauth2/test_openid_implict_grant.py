@@ -20,6 +20,7 @@ from tests.util import parse_form
 
 from .models import Client
 from .models import exists_nonce
+from .oauth2_server import register_form_post
 
 authorize_url = "/oauth/authorize?response_type=token&client_id=client-id"
 
@@ -380,8 +381,12 @@ def test_response_mode_deprecated_once(test_client):
     assert len(record) == 1
 
 
-def test_response_mode_form_post(test_client):
-    with deprecated_response_mode():
+@pytest.mark.parametrize("registered", [True, False])
+def test_response_mode_form_post(test_client, server, registered):
+    if registered:
+        register_form_post(server)
+
+    with nullcontext() if registered else deprecated_response_mode():
         rv = test_client.post(
             "/oauth/authorize",
             data={
@@ -407,8 +412,12 @@ def test_response_mode_form_post(test_client):
 
 
 @pytest.mark.parametrize("user_id", ["1", None])
-def test_response_mode_form_post_values(test_client, user_id):
+@pytest.mark.parametrize("registered", [True, False])
+def test_response_mode_form_post_values(test_client, server, user_id, registered):
     """The client receives the form_post values unchanged."""
+    if registered:
+        register_form_post(server)
+
     state = "a b&c\"<>%'"
     data = {
         "response_type": "id_token",
@@ -422,7 +431,7 @@ def test_response_mode_form_post_values(test_client, user_id):
     if user_id:
         data["user_id"] = user_id
 
-    with deprecated_response_mode():
+    with nullcontext() if registered else deprecated_response_mode():
         rv = test_client.post("/oauth/authorize", data=data)
 
     form = parse_form(rv.data)
@@ -442,9 +451,8 @@ def test_response_mode_form_post_values(test_client, user_id):
     ],
 )
 @pytest.mark.parametrize("user_id", ["1", None])
-@pytest.mark.parametrize(
-    "default_response_mode,registered", [(False, False), (True, False), (True, True)]
-)
+@pytest.mark.parametrize("default_response_mode", [False, True])
+@pytest.mark.parametrize("registered", [False, True])
 def test_response_mode_form_post_non_http_redirect_uri(
     test_client,
     server,
@@ -485,13 +493,17 @@ def test_response_mode_form_post_non_http_redirect_uri(
     if user_id:
         data["user_id"] = user_id
     if default_response_mode:
-        monkeypatch.setattr(_OpenIDImplicitGrant, "DEFAULT_RESPONSE_MODE", "form_post")
+        monkeypatch.setattr(_OpenIDImplicitGrant, "RESPONSE_MODE", "form_post")
         del data["response_mode"]
 
     if registered:
-        server.register_extension(MultipleResponseTypes())
+        register_form_post(server)
 
-    with nullcontext() if default_response_mode else deprecated_response_mode():
+    with (
+        nullcontext()
+        if default_response_mode or registered
+        else deprecated_response_mode()
+    ):
         rv = test_client.post("/oauth/authorize", data=data)
 
     assert rv.status_code == 400
@@ -626,3 +638,13 @@ def test_deprecated_get_audiences(user):
     with pytest.warns(AuthlibDeprecationWarning, match="get_audiences.*version 1.8"):
         claims = grant.get_compatible_claims(request)
     assert claims["aud"] == ["custom-audience"]
+
+
+def test_default_response_mode_is_deprecated():
+    """DEFAULT_RESPONSE_MODE still sets the response mode, with a deprecation."""
+    with pytest.warns(AuthlibDeprecationWarning, match="DEFAULT_RESPONSE_MODE"):
+
+        class FormPostGrant(_OpenIDImplicitGrant):
+            DEFAULT_RESPONSE_MODE = "form_post"
+
+    assert FormPostGrant.RESPONSE_MODE == "form_post"

@@ -27,6 +27,7 @@ from .models import CodeGrantMixin
 from .models import exists_nonce
 from .models import save_authorization_code
 from .oauth2_server import create_basic_header
+from .oauth2_server import register_form_post
 
 
 class IDTokenConfigMixin:
@@ -460,8 +461,12 @@ def test_response_mode_unsupported(
     assert "code" not in params
 
 
-def test_response_mode_form_post(test_client):
-    with deprecated_response_mode():
+@pytest.mark.parametrize("registered", [True, False])
+def test_response_mode_form_post(test_client, server, registered):
+    if registered:
+        register_form_post(server)
+
+    with nullcontext() if registered else deprecated_response_mode():
         rv = test_client.post(
             "/oauth/authorize",
             data={
@@ -482,8 +487,12 @@ def test_response_mode_form_post(test_client):
 
 
 @pytest.mark.parametrize("user_id", ["1", None])
-def test_response_mode_form_post_values(test_client, user_id):
+@pytest.mark.parametrize("registered", [True, False])
+def test_response_mode_form_post_values(test_client, server, user_id, registered):
     """The client receives the form_post values unchanged."""
+    if registered:
+        register_form_post(server)
+
     state = "a b&c\"<>%'"
     data = {
         "client_id": "client-id",
@@ -497,7 +506,7 @@ def test_response_mode_form_post_values(test_client, user_id):
     if user_id:
         data["user_id"] = user_id
 
-    with deprecated_response_mode():
+    with nullcontext() if registered else deprecated_response_mode():
         rv = test_client.post("/oauth/authorize", data=data)
 
     assert rv.headers["Cache-Control"] == "no-store"
@@ -520,8 +529,17 @@ def test_response_mode_form_post_values(test_client, user_id):
 )
 @pytest.mark.parametrize("user_id", ["1", None])
 @pytest.mark.parametrize("default_response_mode", [False, True])
+@pytest.mark.parametrize("registered", [False, True])
 def test_response_mode_form_post_non_http_redirect_uri(
-    test_client, db, client, monkeypatch, redirect_uri, user_id, default_response_mode
+    test_client,
+    server,
+    db,
+    client,
+    monkeypatch,
+    redirect_uri,
+    user_id,
+    default_response_mode,
+    registered,
 ):
     """A form_post response must not target a non-HTTP redirect URI.
 
@@ -552,10 +570,17 @@ def test_response_mode_form_post_non_http_redirect_uri(
     if user_id:
         data["user_id"] = user_id
     if default_response_mode:
-        monkeypatch.setattr(_OpenIDHybridGrant, "DEFAULT_RESPONSE_MODE", "form_post")
+        monkeypatch.setattr(_OpenIDHybridGrant, "RESPONSE_MODE", "form_post")
         del data["response_mode"]
 
-    with nullcontext() if default_response_mode else deprecated_response_mode():
+    if registered:
+        register_form_post(server)
+
+    with (
+        nullcontext()
+        if default_response_mode or registered
+        else deprecated_response_mode()
+    ):
         rv = test_client.post("/oauth/authorize", data=data)
 
     assert rv.status_code == 400

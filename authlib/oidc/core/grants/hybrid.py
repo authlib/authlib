@@ -20,7 +20,6 @@ class OpenIDHybridGrant(OpenIDImplicitGrant):
 
     RESPONSE_TYPES = {"code id_token", "code token", "code id_token token"}
     GRANT_TYPE = "code"
-    DEFAULT_RESPONSE_MODE = "fragment"
 
     def generate_authorization_code(self):
         """ "The method to generate "code" value for authorization code data.

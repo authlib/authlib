@@ -49,12 +49,11 @@ default is ``query`` and ``fragment``, per :rfc:`8414#section-2`::
         def get_server_metadata(self):
             return {"response_modes_supported": ["query", "fragment"]}
 
-Other specifications define more response modes. Pass them to the extension
-as :class:`ResponseMode` instances::
+Other specifications define more response modes, such as :ref:`form_post
+<specs/form_post>`. Pass them to the extension as :class:`ResponseMode`
+instances::
 
-    authorization_server.register_extension(
-        MyMultipleResponseTypes([MyResponseMode()])
-    )
+    authorization_server.register_extension(MyMultipleResponseTypes([FormPost()]))
 
 API Reference
 -------------
