@@ -13,13 +13,13 @@ from authlib.oauth2.multiple_response_types import MultipleResponseTypes
 from authlib.oauth2.rfc6749 import AuthorizationServer
 from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core.grants import OpenIDImplicitGrant as _OpenIDImplicitGrant
-from authlib.oidc.prompt_create import PromptCreate
 from tests.util import HMAC_SECRET
 from tests.util import parse_form
 
+from .models import AuthorizationSession
 from .models import exists_nonce
-from .models import get_auth_time
 from .models import get_request_time
+from .oauth2_server import SupportedPromptValues
 from .oauth2_server import register_form_post
 
 authorize_url = "/oauth/authorize?response_type=token&client_id=client-id"
@@ -41,9 +41,6 @@ def server(server):
 
         def generate_user_info(self, user, scopes):
             return user.generate_user_info(scopes)
-
-        def get_auth_time(self, request):
-            return get_auth_time(request)
 
         def exists_nonce(self, nonce, request):
             return exists_nonce(nonce, request)
@@ -94,8 +91,8 @@ def test_consent_view(test_client):
 
 
 def test_prompt_create(test_client, server):
-    """PromptCreate sets the grant prompt to 'create' in the implicit flow."""
-    server.register_extension(PromptCreate())
+    """PromptValues sets the grant prompt to 'create' in the implicit flow."""
+    server.register_extension(SupportedPromptValues())
     rv = test_client.get(
         add_params_to_uri(
             "/oauth/authorize",
@@ -595,9 +592,6 @@ def test_default_response_mode_is_deprecated():
         class FormPostGrant(_OpenIDImplicitGrant):
             DEFAULT_RESPONSE_MODE = "form_post"
 
-            def get_auth_time(self, request):
-                return None
-
     assert FormPostGrant.RESPONSE_MODE == "form_post"
 
 
@@ -622,27 +616,13 @@ def test_auth_time_claim(test_client):
     assert claims["auth_time"] == 1000000000
 
 
-def test_auth_time_claim_is_an_integer(test_client, server):
-    """A float returned by get_auth_time becomes an integer auth_time."""
-
-    class FloatAuthTimeGrant(_OpenIDImplicitGrant):
-        def resolve_client_private_key(self, client):
-            return OctKey.import_key(HMAC_SECRET)
-
-        def get_client_claims(self, client):
-            return {"iss": "Authlib", "aud": [client.get_client_id()]}
-
-        def generate_user_info(self, user, scopes):
-            return user.generate_user_info(scopes)
-
-        def exists_nonce(self, nonce, request):
-            return exists_nonce(nonce, request)
-
-        def get_auth_time(self, request):
-            return 1000000000.75
-
-    server._authorization_grants = []
-    server.register_grant(FloatAuthTimeGrant)
+def test_auth_time_claim_is_an_integer(test_client, monkeypatch):
+    """A float login time becomes an integer auth_time."""
+    monkeypatch.setattr(
+        AuthorizationSession,
+        "get_interaction_time",
+        lambda self, request, interaction: 1000000000.75,
+    )
     rv = test_client.post("/oauth/authorize", data=IMPLICIT_PARAMS)
     params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
     claims = validate_claims(params["id_token"], params)
@@ -650,27 +630,13 @@ def test_auth_time_claim_is_an_integer(test_client, server):
     assert isinstance(claims["auth_time"], int)
 
 
-def test_unknown_auth_time_claim(test_client, server):
-    """When get_auth_time returns None, the ID token has no auth_time."""
-
-    class UnknownAuthTimeGrant(_OpenIDImplicitGrant):
-        def resolve_client_private_key(self, client):
-            return OctKey.import_key(HMAC_SECRET)
-
-        def get_client_claims(self, client):
-            return {"iss": "Authlib", "aud": [client.get_client_id()]}
-
-        def generate_user_info(self, user, scopes):
-            return user.generate_user_info(scopes)
-
-        def exists_nonce(self, nonce, request):
-            return exists_nonce(nonce, request)
-
-        def get_auth_time(self, request):
-            return None
-
-    server._authorization_grants = []
-    server.register_grant(UnknownAuthTimeGrant)
+def test_unknown_auth_time_claim(test_client, monkeypatch):
+    """When the login time is unknown, the ID token has no auth_time."""
+    monkeypatch.setattr(
+        AuthorizationSession,
+        "get_interaction_time",
+        lambda self, request, interaction: None,
+    )
     rv = test_client.post("/oauth/authorize", data=IMPLICIT_PARAMS)
     params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
     claims = validate_claims(params["id_token"], params)
@@ -712,28 +678,14 @@ def test_max_age_invalid(test_client):
     assert params["error"] == "invalid_request"
 
 
-def test_get_auth_time_not_implemented(test_client, server):
-    """Without get_auth_time, a deprecation is emitted and the auth_time
-    claim is the current time."""
-    with pytest.warns(AuthlibDeprecationWarning, match="get_auth_time"):
-
-        class LegacyGrant(_OpenIDImplicitGrant):
-            def resolve_client_private_key(self, client):
-                return OctKey.import_key(HMAC_SECRET)
-
-            def get_client_claims(self, client):
-                return {"iss": "Authlib", "aud": [client.get_client_id()]}
-
-            def generate_user_info(self, user, scopes):
-                return user.generate_user_info(scopes)
-
-            def exists_nonce(self, nonce, request):
-                return exists_nonce(nonce, request)
-
-    server._authorization_grants = []
-    server.register_grant(LegacyGrant)
+@pytest.mark.parametrize("authorization_session", [None], indirect=True)
+def test_without_authorization_session(test_client, authorization_session):
+    """Without an authorization session, a deprecation is emitted and the
+    auth_time claim is the current time."""
     query = {**IMPLICIT_PARAMS, "max_age": "3600", "auth_time": "1000000000"}
-    rv = test_client.get(add_params_to_uri("/oauth/authorize", query))
+    with pytest.warns(AuthlibDeprecationWarning, match="authorization session"):
+        rv = test_client.get(add_params_to_uri("/oauth/authorize", query))
+
     assert rv.data == b"ok"
 
     before = int(time.time())
@@ -747,7 +699,7 @@ def test_login_after_request_start(test_client, monkeypatch):
     """With get_request_time, a login after the start of the request
     satisfies prompt=login."""
     monkeypatch.setattr(
-        _OpenIDImplicitGrant,
+        AuthorizationSession,
         "get_request_time",
         lambda self, request: get_request_time(request),
     )
@@ -774,3 +726,15 @@ def test_login_after_request_start(test_client, monkeypatch):
         )
     )
     assert rv.data == b"ok"
+
+
+def test_consent_required(test_client, monkeypatch):
+    """With prompt=none, a needed consent gives consent_required in the
+    fragment."""
+    monkeypatch.setattr(
+        AuthorizationSession, "is_consent_needed", lambda self, request: True
+    )
+    query = {**IMPLICIT_PARAMS, "prompt": "none"}
+    rv = test_client.get(add_params_to_uri("/oauth/authorize", query))
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["error"] == "consent_required"

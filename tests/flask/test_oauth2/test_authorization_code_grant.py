@@ -1,3 +1,5 @@
+import time
+
 import pytest
 from flask import json
 
@@ -6,9 +8,12 @@ from authlib.common.urls import urlparse
 from authlib.oauth2.rfc6749.grants import (
     AuthorizationCodeGrant as _AuthorizationCodeGrant,
 )
+from authlib.oauth2.rfc9470 import StepUpAuthentication
 
 from .models import AuthorizationCode
+from .models import AuthorizationSession
 from .models import CodeGrantMixin
+from .models import User
 from .models import db
 from .models import save_authorization_code
 from .oauth2_server import create_basic_header
@@ -483,3 +488,88 @@ def test_create_authorization_response_requires_grant(server):
     """The authorization response needs the grant of the consent page."""
     with pytest.raises(TypeError, match="get_consent_grant"):
         server.create_authorization_response(grant_user=None)
+
+
+def test_session_user_mismatch(app, server, monkeypatch):
+    """The end user and the user of the authorization session must be the
+    same. The request still ends when the granted user differs."""
+    ended = []
+    monkeypatch.setattr(
+        AuthorizationSession, "end_request", lambda self, request: ended.append(1)
+    )
+    session = AuthorizationSession(db.session.get(User, 1))
+    with app.test_request_context(authorize_url):
+        with pytest.raises(ValueError, match="end_user"):
+            server.get_consent_grant(end_user=object(), session=session)
+
+        grant = server.get_consent_grant(session=session)
+        with pytest.raises(ValueError, match="grant_user"):
+            server.create_authorization_response(grant=grant, grant_user=object())
+
+    assert ended == [1]
+
+
+@pytest.mark.parametrize("user_id", ["1", ""])
+def test_end_request(test_client, monkeypatch, user_id):
+    """The authorization session is told when the request ends, when the
+    user accepts or denies it, and on errors."""
+    keys = []
+    monkeypatch.setattr(
+        AuthorizationSession,
+        "end_request",
+        lambda self, request: keys.append(request.authorization_key),
+    )
+    test_client.get(authorize_url)
+    assert keys == []
+
+    test_client.post(authorize_url, data={"user_id": user_id})
+    assert len(keys) == 1
+    assert keys[0]
+
+    test_client.get("/oauth/authorize?response_type=foo&client_id=client-id")
+    assert len(keys) == 2
+    assert keys[1] is None
+
+
+def test_consent_needed(test_client, monkeypatch):
+    """When the authorization session needs a consent, consent is an
+    interaction of the request."""
+    monkeypatch.setattr(
+        AuthorizationSession, "is_consent_needed", lambda self, request: True
+    )
+    rv = test_client.get(authorize_url + "&user_id=1")
+    assert rv.data == b"consent"
+
+    rv = test_client.get(authorize_url)
+    assert rv.data == b"ok"
+
+
+def test_step_up_authentication(test_client, server):
+    """StepUpAuthentication applies max_age to the OAuth requests."""
+    server.register_extension(StepUpAuthentication())
+    old = int(time.time()) - 7200
+    rv = test_client.get(authorize_url + f"&user_id=1&max_age=60&auth_time={old}")
+    assert rv.data == b"login"
+
+    rv = test_client.get(
+        authorize_url + f"&user_id=1&max_age=60&auth_time={old + 7200}"
+    )
+    assert rv.data == b"ok"
+
+
+def test_end_request_on_any_error(test_client, monkeypatch):
+    """The authorization session is told when the request ends, also on an
+    unexpected error."""
+    ended = []
+    monkeypatch.setattr(
+        AuthorizationSession, "end_request", lambda self, request: ended.append(1)
+    )
+
+    def is_consent_needed(self, request):
+        raise RuntimeError("database down")
+
+    monkeypatch.setattr(AuthorizationSession, "is_consent_needed", is_consent_needed)
+    with pytest.raises(RuntimeError):
+        test_client.get(authorize_url + "&user_id=1")
+
+    assert ended == [1]

@@ -6,6 +6,7 @@ from flask_sqlalchemy import SQLAlchemy
 from authlib.integrations.sqla_oauth2 import OAuth2AuthorizationCodeMixin
 from authlib.integrations.sqla_oauth2 import OAuth2ClientMixin
 from authlib.integrations.sqla_oauth2 import OAuth2TokenMixin
+from authlib.oidc.core import AuthorizationSessionMixin
 from authlib.oidc.core import UserInfo
 
 db = SQLAlchemy()
@@ -145,3 +146,20 @@ def get_request_time(request):
     times.setdefault(request.authorization_key, now)
     session["request_times"] = times
     return times[request.authorization_key]
+
+
+class AuthorizationSession(AuthorizationSessionMixin):
+    """An authorization session whose login time is the 'auth_time' request
+    parameter."""
+
+    def __init__(self, user):
+        self.user = user
+
+    def get_user(self):
+        return self.user
+
+    def get_interaction_time(self, request, interaction):
+        if interaction == "login":
+            return get_auth_time(request)
+
+        return None

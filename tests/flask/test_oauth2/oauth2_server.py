@@ -1,6 +1,7 @@
 import base64
 
 from flask import Flask
+from flask import current_app
 from flask import request
 
 from authlib.common.encoding import to_bytes
@@ -12,11 +13,28 @@ from authlib.integrations.sqla_oauth2 import create_save_token_func
 from authlib.oauth2 import OAuth2Error
 from authlib.oauth2.form_post import FormPost
 from authlib.oauth2.multiple_response_types import MultipleResponseTypes
+from authlib.oidc.prompt_create import PromptValues
 
+from .models import AuthorizationSession
 from .models import Client
 from .models import Token
 from .models import User
 from .models import db
+
+
+class SupportedPromptValues(PromptValues):
+    """PromptValues with all the prompt values, including 'create'."""
+
+    def get_server_metadata(self):
+        return {
+            "prompt_values_supported": [
+                "none",
+                "login",
+                "consent",
+                "select_account",
+                "create",
+            ]
+        }
 
 
 def token_generator(client, grant_type, user=None, scope=None):
@@ -44,8 +62,14 @@ def create_authorization_server(app, lazy=False):
         else:
             end_user = None
 
+        session_class = current_app.config.get(
+            "AUTHORIZATION_SESSION", AuthorizationSession
+        )
         try:
-            grant = server.get_consent_grant(end_user=end_user)
+            if session_class:
+                grant = server.get_consent_grant(session=session_class(end_user))
+            else:
+                grant = server.get_consent_grant(end_user=end_user)
         except OAuth2Error as error:
             return server.handle_error_response(request, error)
 

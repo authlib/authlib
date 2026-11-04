@@ -11,11 +11,23 @@ from authlib.oauth2.multiple_response_types import MultipleResponseTypes
 from authlib.oauth2.rfc6749 import AuthorizationResponse
 from authlib.oauth2.rfc6749 import InvalidRequestError
 from authlib.oauth2.rfc6749 import scope_to_list
+from authlib.oauth2.rfc9470 import get_max_age
+from authlib.oauth2.rfc9470 import is_login_required
 
+from ..errors import AccountSelectionRequiredError
+from ..errors import ConsentRequiredError
+from ..errors import InteractionRequiredError
 from ..errors import LoginRequiredError
 from ..util import create_half_hash
 
 _warned_servers = weakref.WeakSet()
+_warned_session_servers = weakref.WeakSet()
+
+_INTERACTION_ERRORS = {
+    "login": LoginRequiredError,
+    "select_account": AccountSelectionRequiredError,
+    "consent": ConsentRequiredError,
+}
 
 #: The authorization request parameters of OpenID Connect, with their JSON
 #: types. Per OIDC Core §3.1.2.1, §5.2, §5.5 and §7.2.1.
@@ -23,7 +35,7 @@ OPENID_AUTHORIZATION_PARAMETERS = {
     "nonce": str,
     "display": str,
     "prompt": str,
-    "max_age": (int, float),
+    "max_age": int,
     "ui_locales": str,
     "claims_locales": str,
     "id_token_hint": str,
@@ -44,35 +56,36 @@ def is_openid_scope(scope):
     return scopes and "openid" in scopes
 
 
-def validate_request_prompt(
-    grant,
-    redirect_uri,
-    redirect_fragment=False,
-    get_auth_time=None,
-    get_request_time=None,
-):
-    """Validate the ``prompt`` and ``max_age`` parameters, and set ``grant.prompt``.
+def get_prompt_values(request):
+    """Return the values of the ``prompt`` parameter of a request, as a list.
 
-    ``grant.prompt`` is ``"login"`` when the user must log in, for instance
-    when their last authentication is older than ``max_age``.
+    :param request: the authorization request
+    """
+    prompt = request.payload.data.get("prompt")
+    return prompt.split() if prompt else []
+
+
+def validate_request_prompt(grant, redirect_uri, redirect_fragment=False):
+    """Validate the ``prompt`` and ``max_age`` parameters, and add the
+    interactions they ask for to ``grant.interactions``, in this order:
+    ``"login"``, ``"select_account"`` and ``"consent"``.
+
+    An interaction that ``prompt`` asks for is not added when the user went
+    through it after the request started. A login after the start of the
+    request also counts as an account selection, so an anonymous user only
+    has to log in. ``"login"`` is also added when the
+    authentication of the user is older than ``max_age`` or the
+    ``default_max_age`` client metadata. These times come from the
+    authorization session of the grant. Without it, only ``max_age=0`` is
+    applied.
 
     :param grant: the grant that validates the authorization request
     :param redirect_uri: the redirect URI of the authorization request
     :param redirect_fragment: whether errors are redirected in the fragment
-    :param get_auth_time: a function that takes the request and returns the
-        time of the last authentication of its user. Without it, ``max_age``
-        is only applied when it is ``0``.
-    :param get_request_time: a function that takes the request and returns
-        the time the authorization request started. With it, a login after
-        this time satisfies ``prompt=login``, and ``max_age`` is measured
-        from this time.
     :raises InvalidRequestError: if ``prompt`` contains ``none`` with another
         value, or if ``max_age`` is not a non-negative integer
-    :raises LoginRequiredError: if ``prompt`` is ``none`` and the user must
-        log in
     """
-    prompt = grant.request.payload.data.get("prompt")
-    prompts = prompt.split() if prompt else []
+    prompts = get_prompt_values(grant.request)
     if "none" in prompts and len(prompts) > 1:
         # If this parameter contains none with any other value,
         # an error is returned
@@ -82,25 +95,77 @@ def validate_request_prompt(
             redirect_fragment=redirect_fragment,
         )
 
-    max_age = _get_max_age(grant, redirect_uri, redirect_fragment)
-    login_required = _is_login_required(
-        grant.request, prompts, max_age, get_auth_time, get_request_time
-    )
-    if not grant.request.user or login_required:
-        if "none" in prompts:
-            raise LoginRequiredError(
-                redirect_uri=redirect_uri, redirect_fragment=redirect_fragment
-            )
+    max_age = get_max_age(grant.request, redirect_uri, redirect_fragment)
+    if max_age is None:
+        # OIDC Registration §2: the max_age request parameter overrides the
+        # default_max_age client metadata.
+        value = getattr(grant.request.client, "default_max_age", None)
+        if _is_non_negative_number(value):
+            max_age = value
 
-        grant.prompt = "login"
-        return grant
+    request = grant.request
+    session = grant.authorization_session
+    if session is None:
+        _warn_missing_authorization_session(grant.server)
+        # OIDC Core §3.1.2.1: max_age=0 is equivalent to prompt=login.
+        login_required = "login" in prompts or max_age == 0
+        consent_required = "consent" in prompts
+        account_selection_required = "select_account" in prompts and bool(request.user)
+    else:
+        login_required = is_login_required(
+            request, session, max_age=max_age, fresh_login="login" in prompts
+        )
+        consent_required = "consent" in prompts and (
+            not request.user or not session.is_interaction_done(request, "consent")
+        )
+        account_selection_required = _is_account_selection_required(
+            request, session, prompts
+        )
 
-    if "consent" in prompts:
-        grant.prompt = "consent"
-    elif "select_account" in prompts:
-        grant.prompt = "select_account"
+    login_required = login_required or not request.user
+    # OIDC Core §3.1.2.1: with prompt=none, the server MUST NOT display an
+    # authentication user interface.
+    if login_required and "none" in prompts:
+        raise LoginRequiredError(
+            redirect_uri=redirect_uri, redirect_fragment=redirect_fragment
+        )
+
+    if login_required:
+        grant.interactions.append("login")
+
+    if account_selection_required:
+        grant.interactions.append("select_account")
+
+    if consent_required:
+        grant.interactions.append("consent")
 
     return grant
+
+
+def validate_prompt_none(grant, redirect_fragment=False):
+    """Raise an error when ``prompt`` is ``none`` and the user must go
+    through an interaction.
+
+    Per OIDC Core §3.1.2.1, with ``prompt=none`` the server MUST NOT display
+    any authentication or consent user interface. The error tells which
+    interaction is needed (OIDC Core §3.1.2.6).
+
+    :param grant: the grant that validates the authorization request
+    :param redirect_fragment: whether errors are redirected in the fragment
+    :raises LoginRequiredError: if the user must log in
+    :raises AccountSelectionRequiredError: if the user must select an account
+    :raises ConsentRequiredError: if the user must give their consent
+    :raises InteractionRequiredError: for any other interaction
+    """
+    if not grant.interactions or "none" not in get_prompt_values(grant.request):
+        return
+
+    error_class = _INTERACTION_ERRORS.get(
+        grant.interactions[0], InteractionRequiredError
+    )
+    raise error_class(
+        redirect_uri=grant.redirect_uri, redirect_fragment=redirect_fragment
+    )
 
 
 def validate_response_mode(grant, redirect_uri):
@@ -232,36 +297,6 @@ def create_response_mode_response(redirect_uri, params, response_mode):
     return response
 
 
-def _get_max_age(grant, redirect_uri, redirect_fragment):
-    """Return the maximum authentication age of the request, or ``None``."""
-    max_age = grant.request.payload.data.get("max_age")
-    # RFC 6749 §3.1: parameters sent without a value MUST be treated as if
-    # they were omitted from the request.
-    # OIDC Registration §2: the max_age request parameter overrides the
-    # default_max_age client metadata.
-    if max_age is None or max_age == "":
-        default_max_age = getattr(grant.request.client, "default_max_age", None)
-        if _is_non_negative_number(default_max_age):
-            return default_max_age
-
-        return None
-
-    if isinstance(max_age, str) and max_age.isascii() and max_age.isdigit():
-        try:
-            return int(max_age)
-        except ValueError:
-            pass
-
-    elif isinstance(max_age, int) and _is_non_negative_number(max_age):
-        return max_age
-
-    raise InvalidRequestError(
-        "Invalid 'max_age' parameter.",
-        redirect_uri=redirect_uri,
-        redirect_fragment=redirect_fragment,
-    )
-
-
 def _is_non_negative_number(value):
     """Tell if a value is a number of seconds."""
     return (
@@ -269,51 +304,45 @@ def _is_non_negative_number(value):
     )
 
 
-def get_auth_time_function(obj, base):
-    """Return the ``get_auth_time`` method of a grant or extension, or ``None``
-    if it does not override the one of ``base``."""
-    if type(obj).get_auth_time is base.get_auth_time:
-        return None
-
-    return obj.get_auth_time
-
-
-def resolve_auth_time(obj, base, request):
-    """Return the time of the last authentication of the request user, with
-    ``get_auth_time``, as an integer. Without it, return the current time."""
-    get_auth_time = get_auth_time_function(obj, base)
-    if get_auth_time is None:
-        return int(time.time())
-
-    auth_time = get_auth_time(request)
-    return None if auth_time is None else int(auth_time)
-
-
-def _is_login_required(request, prompts, max_age, get_auth_time, get_request_time):
-    """Tell if the user must log in because of ``prompt=login`` or ``max_age``.
-
-    The request time is read even without a user, so that it is kept from
-    the first visit, before the login."""
-    # OIDC Core §3.1.2.1: max_age=0 is equivalent to prompt=login.
-    fresh_login = "login" in prompts or max_age == 0
-    if not fresh_login and max_age is None:
+def _is_account_selection_required(request, session, prompts):
+    """Tell if the user must select an account. An anonymous user selects
+    their account when they log in."""
+    if not request.user:
         return False
 
-    if get_auth_time is None:
-        return fresh_login
+    is_needed = getattr(session, "is_account_selection_needed", None)
+    if "select_account" not in prompts and not (is_needed and is_needed(request)):
+        return False
 
-    request_time = get_request_time(request) if get_request_time else None
-    if not request.user or (fresh_login and request_time is None):
-        return True
+    return not (
+        session.is_interaction_done(request, "select_account")
+        or session.is_interaction_done(request, "login")
+    )
 
-    auth_time = get_auth_time(request)
-    if auth_time is None:
-        return True
 
-    if request_time is None:
-        return time.time() - auth_time > max_age
+def _warn_missing_authorization_session(server):
+    """Warn once per server that the OpenID Connect grants need an
+    authorization session."""
+    if server in _warned_session_servers:
+        return
 
-    if fresh_login:
-        return int(auth_time) < int(request_time)
+    _warned_session_servers.add(server)
+    deprecate(
+        "Using the OpenID Connect grants without an authorization session is "
+        "deprecated. Pass an 'AuthorizationSessionMixin' to "
+        "'get_consent_grant(session=...)', to enforce 'max_age' and to set the "
+        "'auth_time' claim.",
+        version="1.11",
+    )
 
-    return request_time - auth_time > max_age
+
+def resolve_auth_time(grant):
+    """Return the time of the last authentication of the user, as an
+    integer, from the authorization session. Without it, return the current
+    time."""
+    session = grant.authorization_session
+    if session is None:
+        return int(time.time())
+
+    auth_time = session.get_interaction_time(grant.request, "login")
+    return None if auth_time is None else int(auth_time)

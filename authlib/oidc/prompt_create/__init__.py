@@ -7,9 +7,9 @@ https://openid.net/specs/openid-connect-prompt-create-1_0.html
 """
 
 from .discovery import OpenIDProviderMetadata
-from .prompt import PromptCreate
+from .prompt import PromptValues
 
 __all__ = [
     "OpenIDProviderMetadata",
-    "PromptCreate",
+    "PromptValues",
 ]

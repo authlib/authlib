@@ -36,6 +36,7 @@ from .grants import RefreshTokenGrant
 from .grants import ResourceOwnerPasswordCredentialsGrant
 from .grants import TokenEndpointMixin
 from .models import AuthorizationCodeMixin
+from .models import AuthorizationSessionMixin
 from .models import ClientMixin
 from .models import TokenMixin
 from .requests import JsonPayload
@@ -82,6 +83,7 @@ __all__ = [
     "MismatchingStateException",
     "ClientMixin",
     "AuthorizationCodeMixin",
+    "AuthorizationSessionMixin",
     "TokenMixin",
     "ClientAuthentication",
     "AuthorizationServer",

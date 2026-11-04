@@ -286,21 +286,39 @@ class AuthorizationServer(Hookable):
             redirect_uri=redirect_uri,
         )
 
-    def get_consent_grant(self, request=None, end_user=None):
+    def get_consent_grant(self, request=None, end_user=None, session=None):
         """Validate current HTTP request for authorization page. This page
         is designed for resource owner to grant or deny the authorization.
+
+        :param request: HTTP request instance
+        :param end_user: the logged-in user, or ``None``
+        :param session: an
+            :class:`~authlib.oauth2.rfc6749.AuthorizationSessionMixin`. Its
+            user replaces ``end_user``.
+        :raises ValueError: if ``end_user`` is not the user of ``session``
         """
         request = self.create_oauth2_request(request)
-        grant = None
+        if session is not None:
+            user = session.get_user()
+            if end_user is not None and end_user != user:
+                raise ValueError("'end_user' is not the user of the 'session'.")
 
+            end_user = user
+
+        grant = None
         try:
             request.user = end_user
             validate_no_repeated_parameter(request, self.authorization_parameters)
 
             grant = self.get_authorization_grant(request)
+            grant.authorization_session = session
             grant.validate_no_multiple_request_parameter(request)
             request.authorization_key = grant.get_authorization_key()
+            if session is not None:
+                request.request_time = session.get_request_time(request)
+
             grant.validate_consent_request()
+            grant.validate_interactions()
 
         except OAuth2Error as error:
             # REQUIRED if a "state" parameter was present in the client
@@ -308,6 +326,15 @@ class AuthorizationServer(Hookable):
             # client.
             error.state = request.payload.state
             _set_error_response_mode(error, grant)
+            if session is not None:
+                session.end_request(request)
+
+            raise
+
+        except Exception:
+            if session is not None:
+                session.end_request(request)
+
             raise
 
         return grant
@@ -398,6 +425,8 @@ class AuthorizationServer(Hookable):
         :param grant: the grant returned by :meth:`get_consent_grant`
         :returns: Response
         :raises TypeError: without ``grant``
+        :raises ValueError: if ``grant_user`` is not the user of the
+            authorization session
         """
         if grant is None:
             raise TypeError(
@@ -405,19 +434,31 @@ class AuthorizationServer(Hookable):
                 "by get_consent_grant()."
             )
 
-        if not isinstance(request, OAuth2Request):
-            request = self.create_oauth2_request(request)
-
+        session = grant.authorization_session
         try:
-            redirect_uri = grant.validate_authorization_request()
-            result = grant.create_authorization_response(redirect_uri, grant_user)
-            response = self._send_response(result)
-        except OAuth2Error as error:
-            error.state = request.payload.state
-            _set_error_response_mode(error, grant)
-            response = self.handle_error_response(request, error)
+            if session is not None and grant_user is not None:
+                if grant_user != grant.request.user:
+                    raise ValueError(
+                        "'grant_user' is not the user of the authorization session."
+                    )
 
-        grant.execute_hook("after_authorization_response", response)
+            if not isinstance(request, OAuth2Request):
+                request = self.create_oauth2_request(request)
+
+            try:
+                redirect_uri = grant.validate_authorization_request()
+                result = grant.create_authorization_response(redirect_uri, grant_user)
+                response = self._send_response(result)
+            except OAuth2Error as error:
+                error.state = request.payload.state
+                _set_error_response_mode(error, grant)
+                response = self.handle_error_response(request, error)
+
+            grant.execute_hook("after_authorization_response", response)
+        finally:
+            if session is not None:
+                session.end_request(grant.request)
+
         return response
 
     def create_token_response(self, request=None):

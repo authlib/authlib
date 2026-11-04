@@ -3,11 +3,14 @@ import time
 
 import pytest
 
+from authlib.deprecate import AuthlibDeprecationWarning
+from authlib.oauth2.rfc6749 import AuthorizationSessionMixin
 from authlib.oauth2.rfc6749 import OAuth2Token
 from authlib.oauth2.rfc6749 import errors
 from authlib.oauth2.rfc6749 import parameters
 from authlib.oauth2.rfc6749 import util
 from authlib.oauth2.rfc6749.grants.base import AuthorizationEndpointMixin
+from authlib.oauth2.rfc6749.grants.base import BaseGrant
 from authlib.oauth2.rfc6749.requests import BasicOAuth2Payload
 from authlib.oauth2.rfc6749.requests import OAuth2Request
 
@@ -139,3 +142,37 @@ def test_oauth2token_is_expired_with_valid_token():
     future = int(time.time()) + 7200
     token = OAuth2Token({"access_token": "a", "expires_at": future})
     assert token.is_expired() is False
+
+
+def test_grant_prompt_is_the_first_interaction():
+    """grant.prompt is the first interaction, or None."""
+    grant = BaseGrant(None, None)
+    assert grant.interactions == []
+    assert grant.prompt is None
+
+    grant.interactions.extend(["login", "consent"])
+    assert grant.prompt == "login"
+
+
+def test_grant_prompt_setter_is_deprecated():
+    """Setting grant.prompt is deprecated. It changes grant.prompt only, not
+    grant.interactions."""
+    grant = BaseGrant(None, None)
+    grant.interactions.append("login")
+    with pytest.warns(AuthlibDeprecationWarning, match="grant.interactions"):
+        grant.prompt = "none"
+
+    assert grant.prompt == "none"
+    assert grant.interactions == ["login"]
+
+
+def test_authorization_session_defaults():
+    """By default, an authorization session knows no time, needs no consent,
+    and no interaction is done."""
+    session = AuthorizationSessionMixin()
+    request = OAuth2Request("GET", "https://server.test/authorize")
+    assert session.get_request_time(request) is None
+    assert session.get_interaction_time(request, "login") is None
+    assert not session.is_consent_needed(request)
+    assert session.end_request(request) is None
+    assert not session.is_interaction_done(request, "login")

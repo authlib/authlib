@@ -12,7 +12,6 @@ import logging
 from joserfc import jwt
 
 from authlib._joserfc_helpers import import_any_key
-from authlib.deprecate import deprecate
 from authlib.oauth2.rfc6749 import OAuth2Request
 from authlib.oauth2.rfc6749 import OAuth2Response
 
@@ -20,10 +19,10 @@ from ..models import AuthorizationCodeMixin
 from ._legacy import LegacyMixin
 from .util import OPENID_AUTHORIZATION_PARAMETERS
 from .util import create_half_hash
-from .util import get_auth_time_function
 from .util import is_openid_scope
 from .util import resolve_auth_time
 from .util import validate_nonce
+from .util import validate_prompt_none
 from .util import validate_request_prompt
 
 log = logging.getLogger(__name__)
@@ -127,27 +126,18 @@ class OpenIDCode(OpenIDToken):
             def generate_user_info(self, user, scope):
                 return {...}
 
-            def get_auth_time(self, request):
-                return request.framework_request.session.get("auth_time")
-
     The register this extension with AuthorizationCodeGrant::
 
         authorization_server.register_grant(
             AuthorizationCodeGrant, extensions=[MyOpenIDCode()]
         )
+
+    Also pass an :class:`~authlib.oauth2.rfc6749.AuthorizationSessionMixin`
+    to ``get_consent_grant``. It gives the time of the user authentication.
     """
 
     def __init__(self, require_nonce=False):
         self.require_nonce = require_nonce
-
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        if cls.get_auth_time is OpenIDCode.get_auth_time:
-            deprecate(
-                "Not implementing 'OpenIDCode.get_auth_time' is deprecated. "
-                "Implement it to enforce the 'max_age' parameter.",
-                version="1.11",
-            )
 
     def exists_nonce(self, nonce, request):
         """Check if the given nonce is existing in your database. Developers
@@ -165,52 +155,13 @@ class OpenIDCode(OpenIDToken):
         """
         raise NotImplementedError()
 
-    def get_auth_time(self, request):
-        """Return the time of the last authentication of the user, as a Unix
-        timestamp. Developers MUST implement this method in subclass. The
-        value usually comes from the user session, e.g. with Django::
-
-            def get_auth_time(self, request):
-                return request.framework_request.session.get("auth_time")
-
-        When the authentication is older than the ``max_age`` parameter,
-        ``grant.prompt`` is ``"login"``. When it returns ``None``, the user
-        must log in again. The value is also ``request.auth_time`` in
-        ``save_authorization_code``. Store it with the authorization code,
-        and return it in its ``get_auth_time`` method. It becomes the
-        ``auth_time`` claim of the ID token.
-
-        :param request: the authorization request, with its ``user``
-        :return: a timestamp, or ``None`` if it is unknown
-        """
-        raise NotImplementedError()
-
-    def get_request_time(self, request):
-        """Return the time the authorization request started, as a Unix
-        timestamp. Developers MAY implement this method, along with
-        ``get_auth_time``. Return the same time for all the HTTP requests of
-        one authorization request, for instance before and after a login.
-        ``request.authorization_key`` identifies the authorization request.
-        Keep the time on the server side, and remove it when the request
-        ends. The OpenID Connect guides of the Flask and Django integrations
-        show how.
-
-        With it, a login after this time satisfies ``prompt=login`` and
-        ``max_age=0``, and ``max_age`` is measured from this time. Without
-        it, these requests ask for a login each time, and ``max_age`` is
-        measured from the current time.
-
-        :param request: the authorization request
-        :return: a timestamp, or ``None`` if it is unknown
-        """
-        return None
-
     def validate_openid_authorization_request(self, grant, redirect_uri):
         validate_nonce(grant.request, self.exists_nonce, self.require_nonce)
 
     def set_request_auth_time(self, grant, redirect_uri, grant_user):
-        """Set ``request.auth_time`` with :meth:`get_auth_time`, so that
-        ``save_authorization_code`` can store it.
+        """Set ``request.auth_time`` with the login time of the authorization
+        session, so that ``save_authorization_code`` can store it. It becomes
+        the ``auth_time`` claim of the ID token.
 
         :param grant: the grant that creates the authorization response
         :param redirect_uri: the redirect URI of the authorization request
@@ -221,7 +172,7 @@ class OpenIDCode(OpenIDToken):
             return
 
         grant.request.user = grant_user
-        grant.request.auth_time = resolve_auth_time(self, OpenIDCode, grant.request)
+        grant.request.auth_time = resolve_auth_time(grant)
 
     def validate_openid_prompt(self, grant, redirect_uri):
         """Validate the ``prompt`` and ``max_age`` parameters of the request.
@@ -229,12 +180,17 @@ class OpenIDCode(OpenIDToken):
         :param grant: the grant that validates the authorization request
         :param redirect_uri: the redirect URI of the authorization request
         """
-        validate_request_prompt(
-            grant,
-            redirect_uri,
-            get_auth_time=get_auth_time_function(self, OpenIDCode),
-            get_request_time=self.get_request_time,
-        )
+        grant.redirect_uri = redirect_uri
+        validate_request_prompt(grant, redirect_uri)
+
+    def validate_openid_interactions(self, grant, result):
+        """Return an error when ``prompt`` is ``none`` and the user must go
+        through an interaction.
+
+        :param grant: the grant that validates the authorization request
+        :param result: the result of ``validate_interactions``
+        """
+        validate_prompt_none(grant)
 
     def __call__(self, grant):
         grant.register_hook(self.process_token, after=grant.create_token_response)
@@ -250,4 +206,8 @@ class OpenIDCode(OpenIDToken):
             grant.register_hook(
                 self.validate_openid_prompt,
                 after=grant.validate_consent_request,
+            )
+            grant.register_hook(
+                self.validate_openid_interactions,
+                after=grant.validate_interactions,
             )

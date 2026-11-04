@@ -74,6 +74,10 @@ class OAuth2Request:
         #: all the HTTP requests of one authorization request.
         self.authorization_key = None
 
+        #: The time the authorization request started, as given by the
+        #: authorization session, or ``None``.
+        self.request_time = None
+
         self.client = None
         self.auth_method = None
         self.user = None

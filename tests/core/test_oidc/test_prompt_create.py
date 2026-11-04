@@ -1,5 +1,8 @@
+import types
+
 import pytest
 
+from authlib.oauth2.rfc6749 import InvalidRequestError
 from authlib.oidc import discovery
 from authlib.oidc import prompt_create
 
@@ -55,3 +58,47 @@ def test_prompt_values_supported_without_create(valid_oidc_metadata):
     valid_oidc_metadata["prompt_values_supported"] = ["none", "login"]
     with pytest.raises(ValueError, match="create"):
         validate(valid_oidc_metadata)
+
+
+def create_grant(prompt, scope="openid"):
+    """Return a grant for an authorization request with a prompt."""
+    payload = types.SimpleNamespace(scope=scope, data={"prompt": prompt})
+    return types.SimpleNamespace(request=types.SimpleNamespace(payload=payload))
+
+
+def create_extension(metadata):
+    """Return a PromptValues extension with the given server metadata."""
+    extension = prompt_create.PromptValues()
+    extension.get_server_metadata = lambda: metadata
+    return extension
+
+
+@pytest.mark.parametrize(
+    "prompt,description",
+    [
+        ("login consent", "The 'prompt' value 'consent' is not supported."),
+        ("é", "The 'prompt' parameter contains an unsupported value."),
+    ],
+)
+def test_unsupported_prompt_value(prompt, description):
+    """The error description identifies the unsupported value, when its
+    characters are allowed in an error description."""
+    extension = create_extension({"prompt_values_supported": ["login", "create"]})
+    with pytest.raises(InvalidRequestError) as exc_info:
+        extension.validate_prompt_values(create_grant(prompt), None)
+
+    assert exc_info.value.description == description
+    assert exc_info.value.redirect_uri is None
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        {"prompt_values_supported": "login create"},
+        {"prompt_values_supported": ["login", 1]},
+    ],
+)
+def test_invalid_prompt_values_supported(metadata):
+    """prompt_values_supported must be a list of strings."""
+    with pytest.raises(ValueError, match="prompt_values_supported"):
+        create_extension(metadata).validate_prompt_values(create_grant("log"), None)

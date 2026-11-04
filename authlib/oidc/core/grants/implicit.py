@@ -15,11 +15,11 @@ from authlib.oauth2.rfc6749.errors import InvalidRequestError
 from ._legacy import LegacyMixin
 from .util import OPENID_AUTHORIZATION_PARAMETERS
 from .util import create_half_hash
-from .util import get_auth_time_function
 from .util import has_multiple_response_types
 from .util import is_openid_scope
 from .util import resolve_auth_time
 from .util import validate_nonce
+from .util import validate_prompt_none
 from .util import validate_request_prompt
 from .util import validate_response_mode
 
@@ -44,16 +44,6 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
                 version="1.11",
             )
             cls.RESPONSE_MODE = cls.DEFAULT_RESPONSE_MODE
-
-        if cls.get_auth_time is OpenIDImplicitGrant.get_auth_time and not (
-            cls.__module__.startswith("authlib.")
-        ):
-            deprecate(
-                "Not implementing 'get_auth_time' in the OpenID Connect implicit "
-                "and hybrid grants is deprecated. Implement it to enforce the "
-                "'max_age' parameter.",
-                version="1.11",
-            )
 
     def exists_nonce(self, nonce, request):
         """Check if the given nonce is existing in your database. Developers
@@ -90,46 +80,6 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
         """
         raise NotImplementedError()
 
-    def get_auth_time(self, request):
-        """Return the time of the last authentication of the user, as a Unix
-        timestamp. Developers MUST implement this method in subclass. The
-        value usually comes from the user session, e.g. with Django::
-
-            def get_auth_time(self, request):
-                return request.framework_request.session.get("auth_time")
-
-        When the authentication is older than the ``max_age`` parameter,
-        ``grant.prompt`` is ``"login"``. When it returns ``None``, the user
-        must log in again. The value is also the ``auth_time`` claim of the
-        ID token. When it is ``None``, the ID token has no ``auth_time``.
-        In the hybrid flow, it is also ``request.auth_time`` in
-        ``save_authorization_code``.
-
-        :param request: the authorization request, with its ``user``
-        :return: a timestamp, or ``None`` if it is unknown
-        """
-        raise NotImplementedError()
-
-    def get_request_time(self, request):
-        """Return the time the authorization request started, as a Unix
-        timestamp. Developers MAY implement this method, along with
-        ``get_auth_time``. Return the same time for all the HTTP requests of
-        one authorization request, for instance before and after a login.
-        ``request.authorization_key`` identifies the authorization request.
-        Keep the time on the server side, and remove it when the request
-        ends. The OpenID Connect guides of the Flask and Django integrations
-        show how.
-
-        With it, a login after this time satisfies ``prompt=login`` and
-        ``max_age=0``, and ``max_age`` is measured from this time. Without
-        it, these requests ask for a login each time, and ``max_age`` is
-        measured from the current time.
-
-        :param request: the authorization request
-        :return: a timestamp, or ``None`` if it is unknown
-        """
-        return None
-
     def validate_authorization_request(self):
         redirect_uri = super().validate_authorization_request()
         validate_response_mode(self, redirect_uri)
@@ -149,21 +99,18 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
 
     def validate_consent_request(self):
         redirect_uri = self.validate_authorization_request()
-        validate_request_prompt(
-            self,
-            redirect_uri,
-            redirect_fragment=True,
-            get_auth_time=get_auth_time_function(self, OpenIDImplicitGrant),
-            get_request_time=self.get_request_time,
-        )
+        self.redirect_uri = redirect_uri
+        validate_request_prompt(self, redirect_uri, redirect_fragment=True)
         return redirect_uri
+
+    def validate_interactions(self):
+        super().validate_interactions()
+        validate_prompt_none(self, redirect_fragment=True)
 
     def create_authorization_response(self, redirect_uri, grant_user):
         if grant_user:
             self.request.user = grant_user
-            self.request.auth_time = resolve_auth_time(
-                self, OpenIDImplicitGrant, self.request
-            )
+            self.request.auth_time = resolve_auth_time(self)
 
         state = self.request.payload.state
         if grant_user:

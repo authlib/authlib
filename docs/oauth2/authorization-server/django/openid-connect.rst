@@ -139,12 +139,10 @@ First, we need to implement the missing methods for ``OpenIDCode``::
                 email=user.email,
             ).filter(scope)
 
-        def get_auth_time(self, request):
-            return request.framework_request.session.get("auth_time")
-
 Second, the ``AuthorizationCode`` data has two more values: the ``nonce``
 parameter, and the time of the user authentication. ``OpenIDCode`` sets this
-time in ``request.auth_time`` with ``get_auth_time``. It becomes the
+time in ``request.auth_time``, from the authorization session (see
+:ref:`django_oidc_max_age`). It becomes the
 ``auth_time`` claim of the ID token. Save these values in the
 ``AuthorizationCodeGrant.save_authorization_code`` method::
 
@@ -228,9 +226,6 @@ a scripting language. You need to implement the missing methods of
                 email=user.email,
             ).filter(scope)
 
-        def get_auth_time(self, request):
-            return request.framework_request.session.get("auth_time")
-
     server.register_grant(OpenIDImplicitGrant)
 
 Hybrid Flow
@@ -290,25 +285,25 @@ is ``save_authorization_code``. You can implement it like this::
                 email=user.email,
             ).filter(scope)
 
-        def get_auth_time(self, request):
-            return request.framework_request.session.get("auth_time")
-
     # register it to grant endpoint
     server.register_grant(OpenIDHybridGrant)
 
 Since all OpenID Connect Flow require ``exists_nonce``, ``resolve_client_private_key``,
-``get_client_claims``, ``get_client_algorithm``, ``generate_user_info`` and
-``get_auth_time`` methods, you can create shared functions for them.
+``get_client_claims``, ``get_client_algorithm`` and ``generate_user_info``
+methods, you can create shared functions for them.
 
 .. _django_oidc_max_age:
 
-Authentication Age
-------------------
+Authorization Session
+---------------------
 
-A client can ask for a recent authentication of the user, with the
-``max_age`` parameter or the ``default_max_age`` client metadata. It is a
-number of seconds. When the last authentication of the user is older, the
-user must log in again.
+A client can ask for a recent authentication of the user, with
+``prompt=login``, with the ``max_age`` parameter or with the
+``default_max_age`` client metadata. It can also ask for a new consent with
+``prompt=consent``, or for an account selection with
+``prompt=select_account``. To apply these parameters, Authlib needs facts
+about the session of the user. Give them with an
+:class:`~authlib.oidc.core.AuthorizationSessionMixin`.
 
 Store the time of the login in the session::
 
@@ -320,14 +315,56 @@ Store the time of the login in the session::
         login(request, user)
         request.session["auth_time"] = int(time.time())
 
-Then return it in ``get_auth_time``, as in the examples above.
-``request.framework_request`` is the Django request. When the user must log
-in, ``grant.prompt`` is ``"login"``::
+Then implement the authorization session::
+
+    import time
+    from authlib.oidc.core import AuthorizationSessionMixin
+
+    class AuthorizationSession(AuthorizationSessionMixin):
+        def __init__(self, request):
+            self.session = request.session
+            self.user = request.user if request.user.is_authenticated else None
+
+        def get_user(self):
+            return self.user
+
+        def get_request_time(self, request):
+            now = int(time.time())
+            stored = self.session.get("request_times", {})
+            times = {
+                key: start for key, start in stored.items() if now - start <= 600
+            }
+            times.setdefault(request.authorization_key, now)
+            if times != stored:
+                self.session["request_times"] = times
+
+            return times[request.authorization_key]
+
+        def end_request(self, request):
+            times = self.session.get("request_times", {})
+            times.pop(request.authorization_key, None)
+            self.session["request_times"] = times
+
+        def get_interaction_time(self, request, interaction):
+            if interaction == "login":
+                return self.session.get("auth_time")
+            if interaction == "consent":
+                consent = get_consent(self.user, request.client)
+                return consent.issued_at.timestamp() if consent else None
+            return None
+
+        def is_consent_needed(self, request):
+            consent = get_consent(self.user, request.client)
+            return consent is None or not consent.covers(request.scope)
+
+Pass it to ``get_consent_grant``. When the user must go through an
+interaction, such as a login, it is in ``grant.interactions``, and
+``grant.prompt`` is the first of them::
 
     def authorize(request):
+        authorization_session = AuthorizationSession(request)
         try:
-            end_user = request.user if request.user.is_authenticated else None
-            grant = server.get_consent_grant(request, end_user=end_user)
+            grant = server.get_consent_grant(request, session=authorization_session)
         except OAuth2Error as error:
             return server.handle_error_response(request, error)
 
@@ -335,36 +372,27 @@ in, ``grant.prompt`` is ``"login"``::
             return redirect_to_login(request.get_full_path())
         ...
 
-With ``prompt=none``, the server returns a ``login_required`` error instead.
-``max_age=0`` works like ``prompt=login``.
+The interactions come in this order: ``"login"``, ``"select_account"`` and
+``"consent"``. A login after the start of the request also counts as an
+account selection, so an anonymous user only has to log in. With
+``prompt=none``, the server returns an error instead, such as
+``login_required`` or ``consent_required``.
 
-By default, ``grant.prompt`` stays ``"login"`` with ``prompt=login`` and
-``max_age=0``, even after the login. To fix this, implement
-``get_request_time`` along with ``get_auth_time``. It returns the time the
-authorization request started. A login after this time satisfies
-``prompt=login`` and ``max_age=0``, and ``max_age`` is measured from this
-time.
+The time of the login must come from a real authentication, with a password
+or another factor. Do not update it when the user switches to another account
+or resumes a session. It becomes the ``auth_time`` claim of the ID token.
 
-Store the time in the session::
+An interaction that the client asks for is done when it happened after the
+authorization request started: a login after this time satisfies
+``prompt=login`` and ``max_age=0``, and a consent after this time satisfies
+``prompt=consent``. ``max_age`` is measured from this time. Without
+``get_request_time``, these interactions are asked again and again, and the
+age of the authentication is measured each time you call
+``get_consent_grant``.
 
-    import time
-
-    class MyOpenIDCode(OpenIDCode):
-        def get_request_time(self, request):
-            session = request.framework_request.session
-            now = int(time.time())
-            times = {
-                key: start
-                for key, start in session.get("request_times", {}).items()
-                if now - start <= 600
-            }
-            times.setdefault(request.authorization_key, now)
-            session["request_times"] = times
-            return times[request.authorization_key]
-
-Implement it in ``OpenIDCode``, ``OpenIDImplicitGrant`` and
-``OpenIDHybridGrant``. It is called from the first visit, before the user logs
-in. ``request.authorization_key`` is a hash of the authorization request
+``get_consent_grant`` calls ``get_request_time`` once per HTTP request, from
+the first visit, before the user logs in.
+``request.authorization_key`` is a hash of the authorization request
 parameters. It is the same before and after the login, and when the user
 submits the consent form. Two authorization requests with the same parameters
 have the same key. Clients that send a unique ``state``, ``nonce`` or
@@ -372,19 +400,8 @@ have the same key. Clients that send a unique ``state``, ``nonce`` or
 
 Keep the time on the server side, for instance in the session. Do not read it
 from a request parameter or a form field. A user could send an old time and
-skip the login.
-
-Remove the time when the authorization request ends, when the user accepts or
-denies it::
-
-    response = server.create_authorization_response(
-        request, grant=grant, grant_user=user
-    )
-    times = request.session.get("request_times", {})
-    times.pop(grant.request.authorization_key, None)
-    request.session["request_times"] = times
-    return response
-
+skip the login. Authlib calls ``end_request`` when the request ends: when the
+user accepts or denies it, and when ``get_consent_grant`` raises an error.
 Otherwise, the same authorization request sent again later would reuse the
 old time, and the user would not have to log in. The example also drops the
 times older than 10 minutes. They come from requests that never end, for
@@ -399,13 +416,15 @@ The time must still be in the session when the user comes back from the login:
   ``GET`` with the same parameters first, or keep the times in a server-side
   cache.
 
-A login does not satisfy ``prompt=consent`` or ``prompt=select_account``.
-With ``prompt=login consent``, ``grant.prompt`` is ``"consent"`` after the
-login. To handle ``prompt=consent``, compare the date of the last consent of
-the user with the time the request started.
+``is_consent_needed`` tells if the user must give their consent, according to
+the consents you store: there is none, it was revoked, or it does not cover
+the requested scope. A client can still ask for a consent with
+``prompt=consent``. ``is_account_selection_needed`` works the same way for the
+account selection.
 
-Without ``get_request_time``, the age of the authentication is measured each
-time you call ``get_consent_grant``. Check ``grant.prompt`` when you show the
-consent page, and not when the user submits it. Otherwise, a user who stays
-on the consent page longer than ``max_age`` is sent back to the login page.
+Without an authorization session, ``max_age`` is ignored, except
+``max_age=0``, and the ``auth_time`` claim is the current time. This is
+deprecated.
 
+The :ref:`specs/rfc9470` extension applies ``max_age`` to the requests without
+the ``openid`` scope too.
