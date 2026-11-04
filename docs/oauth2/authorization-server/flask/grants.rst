@@ -240,3 +240,10 @@ For instance, there is the ``CodeChallenge`` extension in Authlib::
     server.register_grant(AuthorizationCodeGrant, [CodeChallenge(required=False)])
 
 Learn more about ``CodeChallenge`` at :ref:`specs/rfc7636`.
+
+An extension that adds parameters to the authorization request declares them,
+with their JSON types. The server rejects a request that repeats one of them::
+
+    class MyExtension:
+        def __call__(self, grant):
+            grant.register_authorization_parameters({"my_parameter": str})

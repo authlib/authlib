@@ -34,6 +34,7 @@ class AuthorizationServer(Hookable):
         self._token_grants = []
         self._endpoints = {}
         self._extensions = []
+        self._authorization_parameters = {}
 
     def query_client(self, client_id):
         """Query OAuth client by client_id. The client model class MUST
@@ -159,6 +160,16 @@ class AuthorizationServer(Hookable):
     def register_extension(self, extension):
         extension(self)
         self._extensions.append(extension)
+
+    def register_authorization_parameters(self, parameters):
+        """Add authorization request parameters to all the grants. A server
+        extension calls it with the parameters it introduces::
+
+            server.register_authorization_parameters({"response_mode": str})
+
+        :param parameters: a dict of parameter names and JSON types
+        """
+        self._authorization_parameters.update(parameters)
 
     def get_error_uri(self, request, error):
         """Return a URI for the given error, framework may implement this method."""

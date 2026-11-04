@@ -61,6 +61,7 @@ class MultipleResponseTypes:
         }
 
     def __call__(self, authorization_server):
+        authorization_server.register_authorization_parameters({"response_mode": str})
         authorization_server.register_hook(
             self.resolve_response_mode,
             after=AuthorizationServer.get_authorization_grant,

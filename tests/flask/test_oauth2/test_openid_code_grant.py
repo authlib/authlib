@@ -246,6 +246,29 @@ def test_require_nonce(test_client, server):
     assert params["error_description"] == "Missing 'nonce' in request."
 
 
+def test_multiple_nonce(test_client, server):
+    """A repeated nonce gives an invalid_request error."""
+    register_oidc_code_grant(server)
+    rv = test_client.get(
+        "/oauth/authorize?response_type=code&client_id=client-id"
+        "&scope=openid+profile&nonce=abc&nonce=def"
+    )
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_request"
+    assert resp["error_description"] == "Multiple 'nonce' in request."
+
+
+def test_repeated_openid_parameter_without_openid_scope(test_client, server):
+    """Without the openid scope, the OpenID Connect parameters can be
+    repeated."""
+    register_oidc_code_grant(server)
+    rv = test_client.get(
+        "/oauth/authorize?response_type=code&client_id=client-id"
+        "&scope=profile&prompt=login&prompt=consent"
+    )
+    assert rv.data == b"ok"
+
+
 def test_nonce_replay(test_client, server):
     register_oidc_code_grant(
         server,

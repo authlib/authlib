@@ -119,6 +119,41 @@ class AuthorizationEndpointMixin(Hookable):
     #: ``RESPONSE_MODE``. Errors use it too.
     response_mode = None
 
+    #: The authorization request parameters of this grant, with their JSON
+    #: types. Per RFC 6749 §4.1.1 and §4.2.1.
+    AUTHORIZATION_PARAMETERS = {
+        "response_type": str,
+        "client_id": str,
+        "redirect_uri": str,
+        "scope": str,
+        "state": str,
+    }
+
+    _extension_authorization_parameters = {}
+
+    @property
+    def authorization_parameters(self):
+        """The authorization request parameters of this grant, of its
+        extensions and of the server extensions, with their JSON types."""
+        return {
+            **self.AUTHORIZATION_PARAMETERS,
+            **self.server._authorization_parameters,
+            **self._extension_authorization_parameters,
+        }
+
+    def register_authorization_parameters(self, parameters):
+        """Add authorization request parameters to this grant. A grant
+        extension calls it with the parameters it introduces::
+
+            grant.register_authorization_parameters({"code_challenge": str})
+
+        :param parameters: a dict of parameter names and JSON types
+        """
+        self._extension_authorization_parameters = {
+            **self._extension_authorization_parameters,
+            **parameters,
+        }
+
     @classmethod
     def check_authorization_endpoint(cls, request: OAuth2Request):
         return normalize_response_type(request.payload.response_type) in {
@@ -142,14 +177,14 @@ class AuthorizationEndpointMixin(Hookable):
                 )
             return redirect_uri
 
-    @staticmethod
-    def validate_no_multiple_request_parameter(request: OAuth2Request):
+    def validate_no_multiple_request_parameter(self, request: OAuth2Request):
         """For the Authorization Endpoint, request and response parameters MUST NOT be included
         more than once. Per :rfc:`6749#section-3.1`.
+
+        It checks the parameters in :attr:`authorization_parameters`.
         """
         datalist = request.payload.datalist
-        parameters = ["response_type", "client_id", "redirect_uri", "scope", "state"]
-        for param in parameters:
+        for param in self.authorization_parameters:
             if len(datalist.get(param, [])) > 1:
                 raise InvalidRequestError(
                     f"Multiple '{param}' in request.", state=request.payload.state

@@ -126,6 +126,19 @@ def test_response_mode_ignored_without_extension(test_client):
     assert not params["fragment"]
 
 
+def test_multiple_response_mode(test_client, server):
+    """With the extension, a repeated response_mode gives an invalid_request
+    error."""
+    server.register_extension(MultipleResponseTypes())
+
+    rv = test_client.get(
+        f"{authorize_url}&response_type=code&response_mode=query&response_mode=fragment"
+    )
+
+    assert rv.json["error"] == "invalid_request"
+    assert rv.json["error_description"] == "Multiple 'response_mode' in request."
+
+
 def test_validation_errors_use_the_default_response_mode(test_client, server):
     """The requested response mode is not used before the request is
     validated."""

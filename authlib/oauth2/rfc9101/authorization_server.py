@@ -72,6 +72,9 @@ class JWTAuthenticationRequest:
         self.support_request_uri = support_request_uri
 
     def __call__(self, authorization_server: AuthorizationServer):
+        authorization_server.register_authorization_parameters(
+            {"request": str, "request_uri": str}
+        )
         authorization_server.register_hook(
             self.parse_authorization_request,
             before=AuthorizationServer.get_authorization_grant,

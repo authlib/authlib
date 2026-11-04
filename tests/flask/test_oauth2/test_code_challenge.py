@@ -79,6 +79,14 @@ def test_supported_code_challenge_method(test_client):
     assert rv.data == b"ok"
 
 
+def test_multiple_code_challenge(test_client):
+    """A repeated code_challenge gives an invalid_request error."""
+    rv = test_client.get(authorize_url + "&code_challenge=abc&code_challenge=def")
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_request"
+    assert resp["error_description"] == "Multiple 'code_challenge' in request."
+
+
 def test_trusted_client_without_code_challenge(test_client, db, client):
     client.client_secret = "client-secret"
     client.set_client_metadata(

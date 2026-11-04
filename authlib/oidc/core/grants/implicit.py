@@ -13,6 +13,7 @@ from authlib.oauth2.rfc6749 import OAuth2Error
 from authlib.oauth2.rfc6749.errors import InvalidRequestError
 
 from ._legacy import LegacyMixin
+from .util import OPENID_AUTHORIZATION_PARAMETERS
 from .util import create_half_hash
 from .util import get_auth_time_function
 from .util import has_multiple_response_types
@@ -27,6 +28,10 @@ log = logging.getLogger(__name__)
 
 class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
     RESPONSE_TYPES = {"id_token token", "id_token"}
+    AUTHORIZATION_PARAMETERS = {
+        **ImplicitGrant.AUTHORIZATION_PARAMETERS,
+        **OPENID_AUTHORIZATION_PARAMETERS,
+    }
 
     #: Deprecated. Use ``RESPONSE_MODE``.
     DEFAULT_RESPONSE_MODE = "fragment"
