@@ -16,6 +16,7 @@ from authlib.oauth2.rfc6749.grants import (
 from authlib.oauth2.rfc7636 import CodeChallenge
 from authlib.oidc.core import OpenIDCode as _OpenIDCode
 from authlib.oidc.core import OpenIDJWTAuthenticationRequest
+from authlib.oidc.prompt_create import PromptValues
 from tests.util import read_file_path
 
 from .models import Client
@@ -860,6 +861,24 @@ def test_request_object_server_extension_parameter_type(test_client, server):
     rv = authorize_with_request_object(test_client, {"response_mode": ["query"]})
     assert rv.status_code == 400
     assert rv.json["error"] == "invalid_request_object"
+
+
+def test_request_object_unsupported_prompt(test_client, server):
+    """The prompt values of the request object are checked against
+    prompt_values_supported."""
+
+    class LimitedPromptValues(PromptValues):
+        def get_server_metadata(self):
+            return {"prompt_values_supported": ["login", "create"]}
+
+    server.register_extension(LimitedPromptValues())
+    register_request_object_extension(server)
+    rv = authorize_with_request_object(
+        test_client, {"scope": "openid", "prompt": "consent"}
+    )
+    assert rv.status_code == 400
+    assert rv.json["error"] == "invalid_request"
+    assert "prompt" in rv.json["error_description"]
 
 
 def test_request_object_openid_parameters_without_openid_scope(test_client, server):

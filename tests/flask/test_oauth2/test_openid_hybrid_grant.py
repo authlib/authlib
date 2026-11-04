@@ -19,7 +19,6 @@ from authlib.oauth2.rfc6749.requests import OAuth2Request
 from authlib.oidc.core import HybridIDToken
 from authlib.oidc.core.grants import OpenIDCode as _OpenIDCode
 from authlib.oidc.core.grants import OpenIDHybridGrant as _OpenIDHybridGrant
-from authlib.oidc.prompt_create import PromptCreate
 from tests.util import HMAC_SECRET
 from tests.util import parse_form
 
@@ -27,6 +26,7 @@ from .models import AuthorizationCode
 from .models import CodeGrantMixin
 from .models import exists_nonce
 from .models import save_authorization_code
+from .oauth2_server import SupportedPromptValues
 from .oauth2_server import create_basic_header
 from .oauth2_server import register_form_post
 
@@ -107,8 +107,8 @@ def create_hybrid_request(client, user):
 
 
 def test_prompt_create(test_client, server):
-    """PromptCreate sets the grant prompt to 'create' in the hybrid flow."""
-    server.register_extension(PromptCreate())
+    """PromptValues sets the grant prompt to 'create' in the hybrid flow."""
+    server.register_extension(SupportedPromptValues())
     query = url_encode(
         [
             ("response_type", "code id_token"),

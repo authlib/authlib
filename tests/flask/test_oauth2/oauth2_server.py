@@ -13,12 +13,28 @@ from authlib.integrations.sqla_oauth2 import create_save_token_func
 from authlib.oauth2 import OAuth2Error
 from authlib.oauth2.form_post import FormPost
 from authlib.oauth2.multiple_response_types import MultipleResponseTypes
+from authlib.oidc.prompt_create import PromptValues
 
 from .models import AuthorizationSession
 from .models import Client
 from .models import Token
 from .models import User
 from .models import db
+
+
+class SupportedPromptValues(PromptValues):
+    """PromptValues with all the prompt values, including 'create'."""
+
+    def get_server_metadata(self):
+        return {
+            "prompt_values_supported": [
+                "none",
+                "login",
+                "consent",
+                "select_account",
+                "create",
+            ]
+        }
 
 
 def token_generator(client, grant_type, user=None, scope=None):

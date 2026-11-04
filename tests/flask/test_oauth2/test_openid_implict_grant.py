@@ -13,13 +13,13 @@ from authlib.oauth2.multiple_response_types import MultipleResponseTypes
 from authlib.oauth2.rfc6749 import AuthorizationServer
 from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core.grants import OpenIDImplicitGrant as _OpenIDImplicitGrant
-from authlib.oidc.prompt_create import PromptCreate
 from tests.util import HMAC_SECRET
 from tests.util import parse_form
 
 from .models import AuthorizationSession
 from .models import exists_nonce
 from .models import get_request_time
+from .oauth2_server import SupportedPromptValues
 from .oauth2_server import register_form_post
 
 authorize_url = "/oauth/authorize?response_type=token&client_id=client-id"
@@ -91,8 +91,8 @@ def test_consent_view(test_client):
 
 
 def test_prompt_create(test_client, server):
-    """PromptCreate sets the grant prompt to 'create' in the implicit flow."""
-    server.register_extension(PromptCreate())
+    """PromptValues sets the grant prompt to 'create' in the implicit flow."""
+    server.register_extension(SupportedPromptValues())
     rv = test_client.get(
         add_params_to_uri(
             "/oauth/authorize",

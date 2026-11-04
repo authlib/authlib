@@ -20,7 +20,7 @@ from authlib.oauth2.rfc6749.grants import (
 from authlib.oauth2.rfc9470 import StepUpAuthentication
 from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core.grants import OpenIDCode as _OpenIDCode
-from authlib.oidc.prompt_create import PromptCreate
+from authlib.oidc.prompt_create import PromptValues
 from tests.util import HMAC_SECRET
 from tests.util import read_file_path
 
@@ -29,6 +29,7 @@ from .models import CodeGrantMixin
 from .models import exists_nonce
 from .models import get_request_time
 from .models import save_authorization_code
+from .oauth2_server import SupportedPromptValues
 from .oauth2_server import create_basic_header
 
 
@@ -367,10 +368,10 @@ PROMPT_PARAMS = [
     "prompt", ["create", "login create", "consent create", "select_account create"]
 )
 def test_prompt_create(test_client, server, prompt):
-    """With PromptCreate, the grant prompt is 'create' for an anonymous
+    """With PromptValues, the grant prompt is 'create' for an anonymous
     user."""
     register_oidc_code_grant(server)
-    server.register_extension(PromptCreate())
+    server.register_extension(SupportedPromptValues())
     query = url_encode(PROMPT_PARAMS + [("prompt", prompt)])
     rv = test_client.get("/oauth/authorize?" + query)
     assert rv.data == b"create"
@@ -386,28 +387,110 @@ def test_prompt_create(test_client, server, prompt):
     ],
 )
 def test_prompt_create_with_logged_user(test_client, server, prompt, expected):
-    """For a logged-in user, PromptCreate does not change the
+    """For a logged-in user, PromptValues does not change the
     interactions."""
     register_oidc_code_grant(server)
-    server.register_extension(PromptCreate())
+    server.register_extension(SupportedPromptValues())
     query = url_encode(PROMPT_PARAMS + [("user_id", "1"), ("prompt", prompt)])
     rv = test_client.get("/oauth/authorize?" + query)
     assert rv.data == expected
+
+
+class LimitedPromptValues(PromptValues):
+    """PromptValues with a short list of supported values."""
+
+    def get_server_metadata(self):
+        return {"prompt_values_supported": ["login", "create"]}
+
+
+@pytest.mark.parametrize("prompt", ["consent", "login consent", "none", "foo"])
+def test_prompt_create_unsupported_value(test_client, server, prompt):
+    """A prompt value that is not in prompt_values_supported gives an HTTP
+    400 invalid_request error, without redirection."""
+    register_oidc_code_grant(server)
+    server.register_extension(LimitedPromptValues())
+    query = url_encode(PROMPT_PARAMS + [("prompt", prompt)])
+    rv = test_client.get("/oauth/authorize?" + query)
+    assert rv.status_code == 400
+    assert rv.location is None
+    assert rv.json["error"] == "invalid_request"
+    assert "prompt" in rv.json["error_description"]
+
+
+@pytest.mark.parametrize(
+    "name,value,error",
+    [
+        ("client_id", "unknown", "invalid_client"),
+        ("redirect_uri", "https://unknown.test", "invalid_request"),
+    ],
+)
+def test_prompt_create_unsupported_value_after_client(
+    test_client, server, name, value, error
+):
+    """The client and the redirect URI are checked before the prompt
+    values."""
+    register_oidc_code_grant(server)
+    server.register_extension(LimitedPromptValues())
+    params = [(k, value if k == name else v) for k, v in PROMPT_PARAMS]
+    rv = test_client.get("/oauth/authorize?" + url_encode([*params, ("prompt", "foo")]))
+    assert rv.status_code == 400
+    assert rv.json["error"] == error
+    assert "prompt" not in rv.json.get("error_description", "")
+
+
+@pytest.mark.parametrize(
+    "extension,scope,prompt,expected",
+    [
+        (LimitedPromptValues, "openid profile", "login", b"login"),
+        (PromptValues, "openid profile", "consent", b"login"),
+        (LimitedPromptValues, "profile", "consent", b"ok"),
+    ],
+)
+def test_prompt_create_supported_value(
+    test_client, server, extension, scope, prompt, expected
+):
+    """The prompt values are accepted when they are supported, when the
+    server metadata has no prompt_values_supported, or without the openid
+    scope."""
+    register_oidc_code_grant(server)
+    server.register_extension(extension())
+    params = [(k, scope if k == "scope" else v) for k, v in PROMPT_PARAMS]
+    rv = test_client.get(
+        "/oauth/authorize?" + url_encode([*params, ("prompt", prompt)])
+    )
+    assert rv.data == expected
+
+
+def test_prompt_create_not_supported(test_client, server):
+    """When prompt_values_supported does not contain 'create', prompt=create
+    gives an HTTP 400 invalid_request error."""
+
+    class NoCreatePromptValues(PromptValues):
+        def get_server_metadata(self):
+            return {"prompt_values_supported": ["none", "login"]}
+
+    register_oidc_code_grant(server)
+    server.register_extension(NoCreatePromptValues())
+    rv = test_client.get(
+        "/oauth/authorize?" + url_encode([*PROMPT_PARAMS, ("prompt", "create")])
+    )
+    assert rv.status_code == 400
+    assert rv.json["error"] == "invalid_request"
 
 
 def test_prompt_create_does_not_skip_max_age(test_client, server):
     """When a logged-in user must log in again because of max_age, the grant
     prompt stays 'login'."""
     register_oidc_code_grant(server)
-    server.register_extension(PromptCreate())
+    server.register_extension(SupportedPromptValues())
     rv = authorize_max_age(test_client, 60, int(time.time()) - 7200, "create")
     assert rv.data == b"login"
 
 
 def test_prompt_create_with_none(test_client, server):
-    """With PromptCreate, 'none' cannot be combined with 'create'."""
+    """With PromptValues, 'none' cannot be combined with 'create'."""
     register_oidc_code_grant(server)
-    server.register_extension(PromptCreate())
+    server.register_extension(SupportedPromptValues())
     query = url_encode(PROMPT_PARAMS + [("user_id", "1"), ("prompt", "none create")])
     rv = test_client.get("/oauth/authorize?" + query)
 
@@ -424,18 +507,23 @@ def test_prompt_multiple_values_prefers_login_without_user(test_client, server):
 
 
 def test_prompt_create_without_openid_scope(test_client, server):
-    """PromptCreate does not change requests without the openid scope."""
+    """PromptValues does not change requests without the openid scope."""
     register_oidc_code_grant(server)
-    server.register_extension(PromptCreate())
+    server.register_extension(SupportedPromptValues())
     params = [(k, "profile" if k == "scope" else v) for k, v in PROMPT_PARAMS]
     query = url_encode(params + [("user_id", "1"), ("prompt", "create")])
     rv = test_client.get("/oauth/authorize?" + query)
     assert rv.data == b"ok"
 
 
-def test_prompt_create_without_extension(test_client, server):
-    """Without PromptCreate, 'create' does not change the grant prompt."""
+@pytest.mark.parametrize("extension_cls", [None, PromptValues])
+def test_prompt_create_without_extension(test_client, server, extension_cls):
+    """Without the extension, or without prompt_values_supported, 'create'
+    does not change the grant prompt."""
     register_oidc_code_grant(server)
+    if extension_cls:
+        server.register_extension(extension_cls())
+
     query = url_encode(PROMPT_PARAMS + [("prompt", "create")])
     rv = test_client.get("/oauth/authorize?" + query)
     assert rv.data == b"login"
@@ -946,7 +1034,7 @@ def test_prompt_create_with_max_age(test_client, server, prompt_create_first):
     """For an anonymous user, create comes before login, whatever the order
     of the extensions."""
     register_oidc_code_grant(server)
-    extensions = [PromptCreate(), StepUpAuthentication()]
+    extensions = [SupportedPromptValues(), StepUpAuthentication()]
     if not prompt_create_first:
         extensions.reverse()
 
