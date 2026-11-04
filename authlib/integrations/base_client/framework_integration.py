@@ -52,8 +52,9 @@ class FrameworkIntegration:
 
     def clear_state_data(self, session, state):
         key = f"_state_{self.name}_{state}"
-        if self.cache:
+        if self.cache and key in session:
             self.cache.delete(key)
+
         session.pop(key, None)
         self._clear_session_state(session)
 

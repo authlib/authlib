@@ -197,6 +197,35 @@ async def test_oauth2_authorize_csrf_with_cache():
         await client.authorize_access_token(victim_req)
 
 
+class _StrictAsyncCache(_FakeAsyncCache):
+    async def delete(self, key):
+        raise ValueError(f"Invalid cache key: {key!r}")
+
+
+@pytest.mark.asyncio
+async def test_oauth2_authorize_unknown_state_with_cache():
+    """An unknown state is refused, and never reaches the cache."""
+    oauth = OAuth(cache=_StrictAsyncCache())
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        access_token_url="https://provider.test/token",
+        authorize_url="https://provider.test/authorize",
+    )
+    req = Request(
+        {
+            "type": "http",
+            "path": "/",
+            "query_string": b"code=a&state=a%20b",
+            "session": {},
+        }
+    )
+
+    with pytest.raises(OAuthError, match="mismatching_state"):
+        await client.authorize_access_token(req)
+
+
 @pytest.mark.asyncio
 async def test_oauth2_authorize_access_denied():
     oauth = OAuth()
