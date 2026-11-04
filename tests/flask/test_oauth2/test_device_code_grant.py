@@ -290,3 +290,19 @@ def test_create_authorization_response(test_client):
         resp["verification_uri_complete"]
         == "https://resource.test/activate?user_code=" + resp["user_code"]
     )
+
+
+def test_digital_user_code(test_client, monkeypatch):
+    """The user code has three groups of three digits."""
+    monkeypatch.setattr(DeviceAuthorizationEndpoint, "USER_CODE_TYPE", "digital")
+    rv = test_client.post(
+        "/device_authorize",
+        data={
+            "client_id": "client-id",
+        },
+    )
+    assert rv.status_code == 200
+    resp = json.loads(rv.data)
+    groups = resp["user_code"].split("-")
+    assert len(groups) == 3
+    assert all(len(group) == 3 and group.isdigit() for group in groups)

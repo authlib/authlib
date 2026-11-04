@@ -20,7 +20,6 @@ jobs:
       max-parallel: 3
       matrix:
         python:
-        - "3.10"
         - "3.11"
         - "3.12"
         - "3.13"
@@ -87,11 +86,11 @@ jobs:
         enable-cache: true
         cache-dependency-glob: pyproject.toml
 
-    - name: Set up Python 3.10
-      run: uv python install 3.10
+    - name: Set up Python 3.11
+      run: uv python install 3.11
 
     - name: Install lowest direct versions
-      run: uv sync --python 3.10 --resolution lowest-direct --upgrade --group clients --group jose
+      run: uv sync --python 3.11 --resolution lowest-direct --upgrade --group clients --group jose
 
     - name: Test
       run: uv run --no-sync pytest tests

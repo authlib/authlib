@@ -1,3 +1,5 @@
+import string
+
 from authlib.common.security import generate_token
 from authlib.common.urls import add_params_to_uri
 
@@ -163,7 +165,7 @@ def create_string_user_code():
 
 
 def create_digital_user_code():
-    base = "0123456789"
+    base = string.digits
     return "-".join(
         [
             generate_token(3, base),

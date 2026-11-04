@@ -53,9 +53,7 @@ def prepare_grant_uri(
     for k, value in kwargs.items():
         if value is not None:
             if isinstance(value, (list, tuple)):
-                for v in value:
-                    if v is not None:
-                        params.append((to_unicode(k), v))
+                params.extend((to_unicode(k), v) for v in value if v is not None)
             else:
                 params.append((to_unicode(k), value))
 
@@ -93,9 +91,7 @@ def prepare_token_request(grant_type, body="", redirect_uri=None, **kwargs):
     if grant_type == "authorization_code" and kwargs.get("code") is None:
         raise MissingCodeException()
 
-    for k in kwargs:
-        if kwargs[k]:
-            params.append((to_unicode(k), kwargs[k]))
+    params.extend((to_unicode(k), value) for k, value in kwargs.items() if value)
 
     return add_params_to_qs(body, params)
 
