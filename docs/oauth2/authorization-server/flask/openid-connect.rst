@@ -374,8 +374,9 @@ authorization request started: a login after this time satisfies
 age of the authentication is measured each time you call
 ``get_consent_grant``.
 
-``get_consent_grant`` calls ``get_request_time`` once per HTTP request, from
-the first visit, before the user logs in.
+Authlib calls ``get_request_time`` from the first visit, when the user must
+go through an interaction, and when a rule needs the start time. It does not
+call it with ``prompt=none``.
 ``request.authorization_key`` is a hash of the authorization request
 parameters. It is the same before and after the login, and when the user
 submits the consent form. Two authorization requests with the same parameters

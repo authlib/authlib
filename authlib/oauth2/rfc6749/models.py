@@ -291,9 +291,10 @@ class AuthorizationSessionMixin:
         minutes: they come from requests that never ended, and a later request
         with the same parameters must not reuse them.
 
-        ``get_consent_grant`` calls this method once per HTTP request, from
-        the first visit, before the user logs in. The result is in
-        ``request.request_time``.
+        Authlib calls it on the first use of ``request.request_time``: when
+        a rule needs the start time, for instance with ``prompt=login`` or
+        ``max_age``, and when the user must go through an interaction. It is
+        not called with the OpenID Connect ``prompt=none``.
 
         An interaction that the request asks for, such as ``prompt=login`` or
         ``prompt=consent``, is done when it happens after this time. Without

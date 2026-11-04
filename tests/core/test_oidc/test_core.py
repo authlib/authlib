@@ -237,7 +237,8 @@ def test_openid_code_on_custom_grant(monkeypatch):
             ("validate_request_prompt", redirect_uri)
         ),
     )
-    request = types.SimpleNamespace(payload=types.SimpleNamespace(scope="openid"))
+    payload = types.SimpleNamespace(scope="openid", data={})
+    request = types.SimpleNamespace(payload=payload)
     grant = CustomCodeGrant(request, None)
     RecordingOpenIDCode()(grant)
 
