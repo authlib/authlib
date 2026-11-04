@@ -108,19 +108,16 @@ class OAuth2Code(Model, AuthorizationCodeMixin):
     redirect_uri = TextField(default="", null=True)
     response_type = TextField(default="")
     scope = TextField(default="", null=True)
-    auth_time = IntegerField(null=False, default=now_timestamp)
+    issued_at = IntegerField(null=False, default=now_timestamp)
 
     def is_expired(self):
-        return self.auth_time + 300 < time.time()
+        return self.issued_at + 300 < time.time()
 
     def get_redirect_uri(self):
         return self.redirect_uri
 
     def get_scope(self):
         return self.scope or ""
-
-    def get_auth_time(self):
-        return self.auth_time
 
 
 class CodeGrantMixin:

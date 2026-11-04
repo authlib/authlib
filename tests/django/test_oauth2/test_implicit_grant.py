@@ -76,3 +76,9 @@ def test_create_authorization_response(factory, server):
     assert resp.status_code == 302
     params = dict(url_decode(urlparse.urlparse(resp["Location"]).fragment))
     assert "access_token" in params
+
+
+def test_framework_request(factory, server):
+    """The OAuth 2.0 request gives access to the Django request."""
+    request = factory.get("/authorize?response_type=token")
+    assert server.create_oauth2_request(request).framework_request is request

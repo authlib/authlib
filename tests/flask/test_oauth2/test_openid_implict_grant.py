@@ -1,3 +1,4 @@
+import time
 from contextlib import nullcontext
 
 import pytest
@@ -17,6 +18,7 @@ from tests.util import HMAC_SECRET
 from tests.util import parse_form
 
 from .models import exists_nonce
+from .models import get_auth_time
 from .oauth2_server import register_form_post
 
 authorize_url = "/oauth/authorize?response_type=token&client_id=client-id"
@@ -38,6 +40,9 @@ def server(server):
 
         def generate_user_info(self, user, scopes):
             return user.generate_user_info(scopes)
+
+        def get_auth_time(self, request):
+            return get_auth_time(request)
 
         def exists_nonce(self, nonce, request):
             return exists_nonce(nonce, request)
@@ -579,4 +584,149 @@ def test_default_response_mode_is_deprecated():
         class FormPostGrant(_OpenIDImplicitGrant):
             DEFAULT_RESPONSE_MODE = "form_post"
 
+            def get_auth_time(self, request):
+                return None
+
     assert FormPostGrant.RESPONSE_MODE == "form_post"
+
+
+IMPLICIT_PARAMS = {
+    "response_type": "id_token",
+    "client_id": "client-id",
+    "scope": "openid profile",
+    "state": "bar",
+    "nonce": "abc",
+    "redirect_uri": "https://client.test/callback",
+    "user_id": "1",
+}
+
+
+def test_auth_time_claim(test_client):
+    """The auth_time claim of the ID token comes from get_auth_time."""
+    rv = test_client.post(
+        "/oauth/authorize", data={**IMPLICIT_PARAMS, "auth_time": "1000000000"}
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    claims = validate_claims(params["id_token"], params)
+    assert claims["auth_time"] == 1000000000
+
+
+def test_auth_time_claim_is_an_integer(test_client, server):
+    """A float returned by get_auth_time becomes an integer auth_time."""
+
+    class FloatAuthTimeGrant(_OpenIDImplicitGrant):
+        def resolve_client_private_key(self, client):
+            return OctKey.import_key(HMAC_SECRET)
+
+        def get_client_claims(self, client):
+            return {"iss": "Authlib", "aud": [client.get_client_id()]}
+
+        def generate_user_info(self, user, scopes):
+            return user.generate_user_info(scopes)
+
+        def exists_nonce(self, nonce, request):
+            return exists_nonce(nonce, request)
+
+        def get_auth_time(self, request):
+            return 1000000000.75
+
+    server._authorization_grants = []
+    server.register_grant(FloatAuthTimeGrant)
+    rv = test_client.post("/oauth/authorize", data=IMPLICIT_PARAMS)
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    claims = validate_claims(params["id_token"], params)
+    assert claims["auth_time"] == 1000000000
+    assert isinstance(claims["auth_time"], int)
+
+
+def test_unknown_auth_time_claim(test_client, server):
+    """When get_auth_time returns None, the ID token has no auth_time."""
+
+    class UnknownAuthTimeGrant(_OpenIDImplicitGrant):
+        def resolve_client_private_key(self, client):
+            return OctKey.import_key(HMAC_SECRET)
+
+        def get_client_claims(self, client):
+            return {"iss": "Authlib", "aud": [client.get_client_id()]}
+
+        def generate_user_info(self, user, scopes):
+            return user.generate_user_info(scopes)
+
+        def exists_nonce(self, nonce, request):
+            return exists_nonce(nonce, request)
+
+        def get_auth_time(self, request):
+            return None
+
+    server._authorization_grants = []
+    server.register_grant(UnknownAuthTimeGrant)
+    rv = test_client.post("/oauth/authorize", data=IMPLICIT_PARAMS)
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    claims = validate_claims(params["id_token"], params)
+    assert "auth_time" not in claims
+
+
+def test_max_age_old_authentication(test_client):
+    """An authentication older than max_age asks for a login."""
+    auth_time = str(int(time.time()) - 7200)
+    query = {**IMPLICIT_PARAMS, "max_age": "3600", "auth_time": auth_time}
+    rv = test_client.get(add_params_to_uri("/oauth/authorize", query))
+    assert rv.data == b"login"
+
+    query["auth_time"] = str(int(time.time()))
+    rv = test_client.get(add_params_to_uri("/oauth/authorize", query))
+    assert rv.data == b"ok"
+
+
+def test_max_age_prompt_none(test_client):
+    """With prompt=none, an authentication older than max_age gives
+    login_required in the fragment."""
+    auth_time = str(int(time.time()) - 7200)
+    query = {
+        **IMPLICIT_PARAMS,
+        "max_age": "3600",
+        "auth_time": auth_time,
+        "prompt": "none",
+    }
+    rv = test_client.get(add_params_to_uri("/oauth/authorize", query))
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["error"] == "login_required"
+
+
+def test_max_age_invalid(test_client):
+    """An invalid max_age gives invalid_request in the fragment."""
+    query = {**IMPLICIT_PARAMS, "max_age": "-1"}
+    rv = test_client.get(add_params_to_uri("/oauth/authorize", query))
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["error"] == "invalid_request"
+
+
+def test_get_auth_time_not_implemented(test_client, server):
+    """Without get_auth_time, a deprecation is emitted and the auth_time
+    claim is the current time."""
+    with pytest.warns(AuthlibDeprecationWarning, match="get_auth_time"):
+
+        class LegacyGrant(_OpenIDImplicitGrant):
+            def resolve_client_private_key(self, client):
+                return OctKey.import_key(HMAC_SECRET)
+
+            def get_client_claims(self, client):
+                return {"iss": "Authlib", "aud": [client.get_client_id()]}
+
+            def generate_user_info(self, user, scopes):
+                return user.generate_user_info(scopes)
+
+            def exists_nonce(self, nonce, request):
+                return exists_nonce(nonce, request)
+
+    server._authorization_grants = []
+    server.register_grant(LegacyGrant)
+    query = {**IMPLICIT_PARAMS, "max_age": "3600", "auth_time": "1000000000"}
+    rv = test_client.get(add_params_to_uri("/oauth/authorize", query))
+    assert rv.data == b"ok"
+
+    before = int(time.time())
+    rv = test_client.post("/oauth/authorize", data=query)
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    claims = validate_claims(params["id_token"], params)
+    assert claims["auth_time"] >= before

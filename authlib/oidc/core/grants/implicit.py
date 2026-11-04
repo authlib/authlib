@@ -14,8 +14,10 @@ from authlib.oauth2.rfc6749.errors import InvalidRequestError
 
 from ._legacy import LegacyMixin
 from .util import create_half_hash
+from .util import get_auth_time_function
 from .util import has_multiple_response_types
 from .util import is_openid_scope
+from .util import resolve_auth_time
 from .util import validate_nonce
 from .util import validate_request_prompt
 from .util import validate_response_mode
@@ -37,6 +39,16 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
                 version="1.11",
             )
             cls.RESPONSE_MODE = cls.DEFAULT_RESPONSE_MODE
+
+        if cls.get_auth_time is OpenIDImplicitGrant.get_auth_time and not (
+            cls.__module__.startswith("authlib.")
+        ):
+            deprecate(
+                "Not implementing 'get_auth_time' in the OpenID Connect implicit "
+                "and hybrid grants is deprecated. Implement it to enforce the "
+                "'max_age' parameter.",
+                version="1.11",
+            )
 
     def exists_nonce(self, nonce, request):
         """Check if the given nonce is existing in your database. Developers
@@ -73,6 +85,26 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
         """
         raise NotImplementedError()
 
+    def get_auth_time(self, request):
+        """Return the time of the last authentication of the user, as a Unix
+        timestamp. Developers MUST implement this method in subclass. The
+        value usually comes from the user session, e.g. with Django::
+
+            def get_auth_time(self, request):
+                return request.framework_request.session.get("auth_time")
+
+        When the authentication is older than the ``max_age`` parameter,
+        ``grant.prompt`` is ``"login"``. When it returns ``None``, the user
+        must log in again. The value is also the ``auth_time`` claim of the
+        ID token. When it is ``None``, the ID token has no ``auth_time``.
+        In the hybrid flow, it is also ``request.auth_time`` in
+        ``save_authorization_code``.
+
+        :param request: the authorization request, with its ``user``
+        :return: a timestamp, or ``None`` if it is unknown
+        """
+        raise NotImplementedError()
+
     def validate_authorization_request(self):
         redirect_uri = super().validate_authorization_request()
         validate_response_mode(self, redirect_uri)
@@ -92,10 +124,21 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
 
     def validate_consent_request(self):
         redirect_uri = self.validate_authorization_request()
-        validate_request_prompt(self, redirect_uri, redirect_fragment=True)
+        validate_request_prompt(
+            self,
+            redirect_uri,
+            redirect_fragment=True,
+            get_auth_time=get_auth_time_function(self, OpenIDImplicitGrant),
+        )
         return redirect_uri
 
     def create_authorization_response(self, redirect_uri, grant_user):
+        if grant_user:
+            self.request.user = grant_user
+            self.request.auth_time = resolve_auth_time(
+                self, OpenIDImplicitGrant, self.request
+            )
+
         state = self.request.payload.state
         if grant_user:
             params = self.create_granted_params(grant_user)
@@ -155,6 +198,10 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
             )
 
         claims = self.get_compatible_claims(self.request)
+        claims.pop("auth_time", None)
+        if self.request.auth_time is not None:
+            claims["auth_time"] = self.request.auth_time
+
         nonce = self.request.payload.data.get("nonce")
         if nonce:
             claims["nonce"] = nonce

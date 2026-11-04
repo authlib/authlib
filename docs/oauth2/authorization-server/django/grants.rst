@@ -37,19 +37,16 @@ kept in a database or a cache like redis. Here is an example of database
         redirect_uri = TextField(default='', null=True)
         response_type = TextField(default='')
         scope = TextField(default='', null=True)
-        auth_time = IntegerField(null=False, default=now_timestamp)
+        issued_at = IntegerField(null=False, default=now_timestamp)
 
         def is_expired(self):
-            return self.auth_time + 300 < time.time()
+            return self.issued_at + 300 < time.time()
 
         def get_redirect_uri(self):
             return self.redirect_uri
 
         def get_scope(self):
             return self.scope or ''
-
-        def get_auth_time(self):
-            return self.auth_time
 
 Note here, you **MUST** implement the missing methods of
 :class:`~authlib.oauth2.rfc6749.AuthorizationCodeMixin` API interface.

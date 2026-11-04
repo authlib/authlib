@@ -1,3 +1,5 @@
+import time
+
 from flask_sqlalchemy import SQLAlchemy
 
 from authlib.integrations.sqla_oauth2 import OAuth2AuthorizationCodeMixin
@@ -105,6 +107,7 @@ def save_authorization_code(code, request):
         redirect_uri=request.payload.redirect_uri,
         scope=request.scope,
         nonce=request.payload.data.get("nonce"),
+        auth_time=getattr(request, "auth_time", None),
         user_id=request.user.id,
         code_challenge=request.payload.data.get("code_challenge"),
         code_challenge_method=request.payload.data.get("code_challenge_method"),
@@ -121,3 +124,9 @@ def exists_nonce(nonce, request):
         client_id=request.payload.client_id, nonce=nonce
     ).first()
     return bool(exists)
+
+
+def get_auth_time(request):
+    """Return the 'auth_time' request parameter, or the current time."""
+    auth_time = request.framework_request.values.get("auth_time")
+    return int(auth_time) if auth_time else int(time.time())
