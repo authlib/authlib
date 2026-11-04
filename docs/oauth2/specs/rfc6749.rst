@@ -62,6 +62,13 @@ Token Model
 .. autoclass:: TokenMixin
     :members:
 
+Authorization Session
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: AuthorizationSessionMixin
+    :member-order: bysource
+    :members:
+
 Errors
 ~~~~~~
 

@@ -174,5 +174,10 @@ The ``AuthorizationServer`` has provided built-in methods to handle these endpoi
     def issue_token(request):
         return server.create_token_response(request)
 
+To let Authlib know if the user must give their consent, pass an
+:class:`~authlib.oauth2.rfc6749.AuthorizationSessionMixin` to
+``get_consent_grant`` instead of the user. Its ``is_consent_needed`` method
+adds ``"consent"`` to ``grant.interactions``.
+
 For now, you have set up the authorization server. But it won't work since it doesn't
 support any grant types yet. Let's head over to the next chapter.

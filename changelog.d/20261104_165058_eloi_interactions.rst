@@ -5,14 +5,24 @@ Added
   before the authorization response, in order. The OpenID Connect grants add
   ``"login"``, ``"consent"`` and ``"select_account"``. ``grant.prompt`` is the
   first of them.
+- ``AuthorizationSessionMixin`` gives Authlib the facts about the session of
+  the user. Pass it to ``get_consent_grant(session=...)`` instead of the user.
+  It gives the time the authorization request started, and the time of the
+  last interactions of the user, such as the login and the consent. An
+  interaction that the client asks for, such as ``prompt=login`` or
+  ``prompt=consent``, is done when it happened after the request started, so
+  the user is not asked again and again. ``is_consent_needed`` tells if the
+  user must give their consent, and ``end_request`` is called when the
+  authorization request ends.
 
 Changed
 ~~~~~~~
 
 - ``get_consent_grant`` calls the new ``validate_interactions`` method of the
   grant after ``validate_consent_request``. With ``prompt=none``, the OpenID
-  Connect errors such as ``login_required`` are raised there. If you override
-  ``get_consent_grant``, call it too.
+  Connect errors such as ``login_required`` are raised there. It also sets
+  ``request.request_time`` from the authorization session. If you override
+  ``get_consent_grant``, do the same.
 
 Deprecated
 ~~~~~~~~~~

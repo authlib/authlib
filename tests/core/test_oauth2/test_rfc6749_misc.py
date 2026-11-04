@@ -4,6 +4,7 @@ import time
 import pytest
 
 from authlib.deprecate import AuthlibDeprecationWarning
+from authlib.oauth2.rfc6749 import AuthorizationSessionMixin
 from authlib.oauth2.rfc6749 import OAuth2Token
 from authlib.oauth2.rfc6749 import errors
 from authlib.oauth2.rfc6749 import parameters
@@ -163,3 +164,15 @@ def test_grant_prompt_setter_is_deprecated():
 
     assert grant.prompt == "none"
     assert grant.interactions == ["login"]
+
+
+def test_authorization_session_defaults():
+    """By default, an authorization session knows no time, needs no consent,
+    and no interaction is done."""
+    session = AuthorizationSessionMixin()
+    request = OAuth2Request("GET", "https://server.test/authorize")
+    assert session.get_request_time(request) is None
+    assert session.get_interaction_time(request, "login") is None
+    assert not session.is_consent_needed(request)
+    assert session.end_request(request) is None
+    assert not session.is_interaction_done(request, "login")

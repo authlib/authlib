@@ -201,6 +201,11 @@ Now define an endpoint for authorization. This endpoint is used by
 This is a simple demo, the real case should be more complex. There is a little
 more complex demo in https://github.com/authlib/example-oauth2-server.
 
+To let Authlib know if the user must give their consent, pass an
+:class:`~authlib.oauth2.rfc6749.AuthorizationSessionMixin` to
+``get_consent_grant`` instead of the user. Its ``is_consent_needed`` method
+adds ``"consent"`` to ``grant.interactions``.
+
 The token endpoint is much easier::
 
     @app.route('/oauth/token', methods=['POST'])

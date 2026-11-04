@@ -1,6 +1,7 @@
 import base64
 
 from flask import Flask
+from flask import current_app
 from flask import request
 
 from authlib.common.encoding import to_bytes
@@ -13,6 +14,7 @@ from authlib.oauth2 import OAuth2Error
 from authlib.oauth2.form_post import FormPost
 from authlib.oauth2.multiple_response_types import MultipleResponseTypes
 
+from .models import AuthorizationSession
 from .models import Client
 from .models import Token
 from .models import User
@@ -44,8 +46,14 @@ def create_authorization_server(app, lazy=False):
         else:
             end_user = None
 
+        session_class = current_app.config.get(
+            "AUTHORIZATION_SESSION", AuthorizationSession
+        )
         try:
-            grant = server.get_consent_grant(end_user=end_user)
+            if session_class:
+                grant = server.get_consent_grant(session=session_class(end_user))
+            else:
+                grant = server.get_consent_grant(end_user=end_user)
         except OAuth2Error as error:
             return server.handle_error_response(request, error)
 

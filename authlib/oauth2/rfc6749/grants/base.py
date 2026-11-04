@@ -32,6 +32,9 @@ class BaseGrant(Hookable):
         #: authorization response, in order, such as ``"login"`` or
         #: ``"consent"``. Extensions add theirs while the request is validated.
         self.interactions = []
+        #: The :class:`~authlib.oauth2.rfc6749.AuthorizationSessionMixin`
+        #: passed to ``get_consent_grant``, or ``None``.
+        self.authorization_session = None
         self._prompt = _UNSET
         self.redirect_uri = None
         self.request = request
@@ -244,9 +247,18 @@ class AuthorizationEndpointMixin(Hookable):
         """Check the :attr:`interactions` of the request.
 
         It runs after :meth:`validate_consent_request`, once the extensions
-        have added their interactions. It does nothing by default.
-        Extensions can check the interactions here.
+        have added their interactions. It adds ``"consent"`` when the
+        authorization session says that the user must give their consent.
+        Extensions can also check the interactions here.
         """
+        session = self.authorization_session
+        if (
+            session is not None
+            and self.request.user
+            and "consent" not in self.interactions
+            and session.is_consent_needed(self.request)
+        ):
+            self.interactions.append("consent")
 
     def validate_authorization_request(self):
         raise NotImplementedError()
