@@ -20,6 +20,7 @@ Specifications
     rfc9207
     rfc9728
     multiple-response-types
+    form-post
     oidc
     rpinitiated
     backchannel

@@ -119,13 +119,16 @@ class MultipleResponseTypes:
     def validate_response_mode(self, grant, redirect_uri):
         """Use the requested response mode for the responses and the errors,
         once the request can use it. Until then, errors use the default
-        response mode of the grant.
+        response mode of the grant. Without a requested response mode, use
+        the default one, once the request can use it.
 
         :raises InvalidRequestError: if the request cannot use the requested
             response mode
         """
         response_mode = grant.request.payload.data.get("response_mode")
         if response_mode is None:
+            self.validate_default_response_mode(grant, redirect_uri)
+            grant.response_mode = grant.RESPONSE_MODE
             return
 
         try:
@@ -139,10 +142,31 @@ class MultipleResponseTypes:
                 self.response_modes[response_mode].validate(grant, redirect_uri)
 
         except OAuth2Error as error:
-            error.response_mode = error.response_mode or grant.RESPONSE_MODE
+            if error.response_mode is None:
+                self.validate_default_response_mode(grant, redirect_uri)
+                error.response_mode = grant.RESPONSE_MODE
+
             raise
 
         grant.response_mode = response_mode
+
+    def validate_default_response_mode(self, grant, redirect_uri):
+        """Check that the request can use the default response mode of the
+        grant.
+
+        :raises RuntimeError: if nothing encodes the default response mode
+        :raises OAuth2Error: if the request cannot use it
+        """
+        if grant.RESPONSE_MODE in DEFAULT_RESPONSE_MODES:
+            return
+
+        if grant.RESPONSE_MODE not in self.response_modes:
+            raise RuntimeError(
+                f"The {grant.RESPONSE_MODE!r} response mode of "
+                f"{type(grant).__name__} needs a ResponseMode in MultipleResponseTypes."
+            )
+
+        self.response_modes[grant.RESPONSE_MODE].validate(grant, redirect_uri)
 
     def encode_authorization_response(self, authorization_server, original, response):
         """Encode the responses of the response modes besides ``query`` and

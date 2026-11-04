@@ -10,6 +10,8 @@ from authlib.integrations.flask_oauth2 import AuthorizationServer
 from authlib.integrations.sqla_oauth2 import create_query_client_func
 from authlib.integrations.sqla_oauth2 import create_save_token_func
 from authlib.oauth2 import OAuth2Error
+from authlib.oauth2.form_post import FormPost
+from authlib.oauth2.multiple_response_types import MultipleResponseTypes
 
 from .models import Client
 from .models import Token
@@ -84,3 +86,12 @@ def create_basic_header(username, password):
 
 def create_bearer_header(token):
     return {"Authorization": "Bearer " + token}
+
+
+class FormPostResponseModes(MultipleResponseTypes):
+    def get_server_metadata(self):
+        return {"response_modes_supported": ["query", "fragment", "form_post"]}
+
+
+def register_form_post(server):
+    server.register_extension(FormPostResponseModes([FormPost()]))

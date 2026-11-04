@@ -4,6 +4,7 @@ from joserfc import jwt
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.deprecate import deprecate
+from authlib.oauth2.form_post import FormPost
 from authlib.oauth2.rfc6749 import AccessDeniedError
 from authlib.oauth2.rfc6749 import AuthorizationResponse
 from authlib.oauth2.rfc6749 import ImplicitGrant
@@ -13,7 +14,7 @@ from authlib.oauth2.rfc6749.errors import InvalidRequestError
 
 from ._legacy import LegacyMixin
 from .util import create_half_hash
-from .util import create_response_mode_response
+from .util import has_multiple_response_types
 from .util import is_openid_scope
 from .util import validate_nonce
 from .util import validate_request_prompt
@@ -24,7 +25,18 @@ log = logging.getLogger(__name__)
 
 class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
     RESPONSE_TYPES = {"id_token token", "id_token"}
+
+    #: Deprecated. Use ``RESPONSE_MODE``.
     DEFAULT_RESPONSE_MODE = "fragment"
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if "DEFAULT_RESPONSE_MODE" in vars(cls) and "RESPONSE_MODE" not in vars(cls):
+            deprecate(
+                "'DEFAULT_RESPONSE_MODE' is deprecated. Use 'RESPONSE_MODE' instead.",
+                version="1.11",
+            )
+            cls.RESPONSE_MODE = cls.DEFAULT_RESPONSE_MODE
 
     def exists_nonce(self, nonce, request):
         """Check if the given nonce is existing in your database. Developers
@@ -100,18 +112,18 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
             error = AccessDeniedError(state=state)
             params = error.get_body()
 
-        if self.response_mode:
-            return AuthorizationResponse(redirect_uri, params, self.response_mode)
+        if has_multiple_response_types(self.server):
+            response_mode = self.response_mode or self.RESPONSE_MODE
+            return AuthorizationResponse(redirect_uri, params, response_mode)
 
-        # http://openid.net/specs/oauth-v2-multiple-response-types-1_0.html#ResponseModes
         response_mode = self.request.payload.data.get(
-            "response_mode", self.DEFAULT_RESPONSE_MODE
+            "response_mode", self.RESPONSE_MODE
         )
-        return create_response_mode_response(
-            redirect_uri=redirect_uri,
-            params=params,
-            response_mode=response_mode,
-        )
+        response = AuthorizationResponse(redirect_uri, params, response_mode)
+        if response_mode == "form_post":
+            return FormPost().encode(response)
+
+        return response
 
     def create_granted_params(self, grant_user):
         self.request.user = grant_user

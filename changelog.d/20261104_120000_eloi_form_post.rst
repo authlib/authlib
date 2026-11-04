@@ -1,0 +1,17 @@
+Added
+~~~~~
+
+- ``authlib.oauth2.form_post.FormPost`` implements OAuth 2.0 Form Post
+  Response Mode for any authorization grant. Pass it to the
+  ``MultipleResponseTypes`` extension. A grant can use it by default with
+  ``RESPONSE_MODE = "form_post"``.
+
+Deprecated
+~~~~~~~~~~
+
+- ``DEFAULT_RESPONSE_MODE`` of the OpenID Connect implicit and hybrid grants
+  is deprecated. Use ``RESPONSE_MODE`` instead. It will stop working in
+  version 1.11.
+- ``authlib.oidc.core.grants.util.create_response_mode_response`` is
+  deprecated. Return an ``AuthorizationResponse`` instead. It will be removed
+  in version 1.11.

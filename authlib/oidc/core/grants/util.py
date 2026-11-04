@@ -1,4 +1,3 @@
-import html
 import time
 import weakref
 
@@ -6,12 +5,11 @@ from joserfc import jwt
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.encoding import to_native
-from authlib.common.urls import urlparse
 from authlib.deprecate import deprecate
+from authlib.oauth2.form_post import FormPost
 from authlib.oauth2.multiple_response_types import MultipleResponseTypes
 from authlib.oauth2.rfc6749 import AuthorizationResponse
 from authlib.oauth2.rfc6749 import InvalidRequestError
-from authlib.oauth2.rfc6749 import OAuth2Response
 from authlib.oauth2.rfc6749 import scope_to_list
 
 from ..errors import AccountSelectionRequiredError
@@ -20,6 +18,11 @@ from ..errors import LoginRequiredError
 from ..util import create_half_hash
 
 _warned_servers = weakref.WeakSet()
+
+
+def has_multiple_response_types(server):
+    """Tell if the MultipleResponseTypes extension is registered on a server."""
+    return any(isinstance(ext, MultipleResponseTypes) for ext in server._extensions)
 
 
 def is_openid_scope(scope):
@@ -77,10 +80,7 @@ def validate_response_mode(grant, redirect_uri):
         without redirection
     """
     server = grant.server
-    if any(isinstance(ext, MultipleResponseTypes) for ext in server._extensions):
-        if "response_mode" not in grant.request.payload.data:
-            _validate_form_post_redirect_uri(grant.DEFAULT_RESPONSE_MODE, redirect_uri)
-
+    if has_multiple_response_types(server):
         return
 
     if "response_mode" in grant.request.payload.data and server not in _warned_servers:
@@ -88,13 +88,13 @@ def validate_response_mode(grant, redirect_uri):
         deprecate(
             "Using 'response_mode' with the OpenID Connect implicit and hybrid "
             "grants without the 'MultipleResponseTypes' extension is deprecated. "
-            "Register it with 'server.register_extension(MultipleResponseTypes())'.",
+            "Register it with 'server.register_extension(MultipleResponseTypes())'. "
+            "For the form_post response mode, pass it 'FormPost()' and add "
+            "'form_post' to its 'response_modes_supported' metadata.",
             version="1.11",
         )
 
-    response_mode = grant.request.payload.data.get(
-        "response_mode", grant.DEFAULT_RESPONSE_MODE
-    )
+    response_mode = grant.request.payload.data.get("response_mode", grant.RESPONSE_MODE)
     if response_mode not in ("fragment", "form_post"):
         raise InvalidRequestError(
             "The 'response_mode' value is not supported for this response type.",
@@ -102,18 +102,8 @@ def validate_response_mode(grant, redirect_uri):
             redirect_fragment=True,
         )
 
-    _validate_form_post_redirect_uri(response_mode, redirect_uri)
-
-
-def _validate_form_post_redirect_uri(response_mode, redirect_uri):
-    """Refuse to render a form that a non-HTTP redirect URI would run."""
-    if response_mode != "form_post":
-        return
-
-    if urlparse.urlparse(redirect_uri).scheme not in ("http", "https"):
-        raise InvalidRequestError(
-            "The 'form_post' response mode requires an http or https redirect URI."
-        )
+    if response_mode == "form_post":
+        FormPost().validate(grant, redirect_uri)
 
 
 def validate_nonce(request, exists_nonce, required=False):
@@ -187,30 +177,17 @@ def generate_id_token(
 
 
 def create_response_mode_response(redirect_uri, params, response_mode):
+    """Deprecated. Return an ``AuthorizationResponse`` instead."""
+    deprecate(
+        "'create_response_mode_response' is deprecated. "
+        "Return an 'AuthorizationResponse' instead.",
+        version="1.11",
+    )
+    response = AuthorizationResponse(redirect_uri, params, response_mode)
     if response_mode == "form_post":
-        tpl = (
-            "<html><head><title>Redirecting</title></head>"
-            '<body onload="javascript:document.forms[0].submit()">'
-            '<form method="post" action="{}">{}</form></body></html>'
-        )
-        inputs = "".join(
-            [
-                f'<input type="hidden" name="{html.escape(str(k))}" value="{html.escape(str(v))}"/>'
-                for k, v in params
-            ]
-        )
-        body = tpl.format(html.escape(redirect_uri), inputs)
-        # Per OAuth 2.0 Form Post Response Mode §2, the Authorization Server
-        # MUST instruct the User Agent (and any intermediaries) not to store
-        # or reuse the content of the response.
-        headers = [
-            ("Content-Type", "text/html; charset=utf-8"),
-            ("Cache-Control", "no-store"),
-            ("Pragma", "no-cache"),
-        ]
-        return OAuth2Response(200, body, headers)
+        return FormPost().encode(response)
 
-    return AuthorizationResponse(redirect_uri, params, "fragment")
+    return response
 
 
 def _guess_prompt_value(end_user, prompts, redirect_uri, redirect_fragment):
