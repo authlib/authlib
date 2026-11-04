@@ -55,6 +55,23 @@ instances::
 
     authorization_server.register_extension(MyMultipleResponseTypes([FormPost()]))
 
+The ``none`` response type
+--------------------------
+
+With ``response_type=none``, the user grants or denies the request, and the
+client receives no code and no token. Per MRT §4, the response contains
+``state``, and its default response mode is the query response mode.
+Register :class:`NoneResponseTypeGrant` to support it::
+
+    from authlib.oauth2.multiple_response_types import NoneResponseTypeGrant
+
+    authorization_server.register_grant(NoneResponseTypeGrant)
+
+The client must be allowed to use the ``none`` response type. Add ``none``
+to the ``response_types_supported`` metadata of the server, so that clients
+can register for it. The grant stores nothing: record the consent of the
+user in your application if you need it.
+
 API Reference
 -------------
 
@@ -63,5 +80,9 @@ API Reference
     :members:
 
 .. autoclass:: ResponseMode
+    :member-order: bysource
+    :members:
+
+.. autoclass:: NoneResponseTypeGrant
     :member-order: bysource
     :members:

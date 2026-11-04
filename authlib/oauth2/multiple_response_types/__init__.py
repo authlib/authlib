@@ -8,5 +8,6 @@ https://openid.net/specs/oauth-v2-multiple-response-types-1_0.html
 
 from .authorization_server import MultipleResponseTypes
 from .authorization_server import ResponseMode
+from .grant import NoneResponseTypeGrant
 
-__all__ = ["MultipleResponseTypes", "ResponseMode"]
+__all__ = ["MultipleResponseTypes", "NoneResponseTypeGrant", "ResponseMode"]
