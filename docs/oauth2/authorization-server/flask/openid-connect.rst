@@ -93,6 +93,7 @@ extended features. We can apply the :class:`OpenIDCode` extension to
 
 First, we need to implement the missing methods for ``OpenIDCode``::
 
+    from flask import session
     from joserfc.jwk import KeySet
     from authlib.oidc.core import grants, UserInfo
 
@@ -119,6 +120,9 @@ First, we need to implement the missing methods for ``OpenIDCode``::
                 name=user.name,
                 email=user.email,
             ).filter(scope)
+
+        def get_auth_time(self, request):
+            return session.get("auth_time")
 
 Second, since there is one more ``nonce`` value in the ``AuthorizationCode``
 data, we need to save this value into the database. In this case, we have to
@@ -177,6 +181,7 @@ The Implicit Flow is mainly used by Clients implemented in a browser using
 a scripting language. You need to implement the missing methods of
 :class:`OpenIDImplicitGrant` before registering it::
 
+    from flask import session
     from joserfc.jwk import KeySet
     from authlib.oidc.core import grants
 
@@ -204,6 +209,9 @@ a scripting language. You need to implement the missing methods of
                 email=user.email,
             ).filter(scope)
 
+        def get_auth_time(self, request):
+            return session.get("auth_time")
+
     server.register_grant(OpenIDImplicitGrant)
 
 .. _flask_odic_hybrid:
@@ -219,6 +227,7 @@ OpenIDHybridGrant is a subclass of OpenIDImplicitGrant, so the missing methods
 are the same, except that OpenIDHybridGrant has one more missing method, that
 is ``save_authorization_code``. You can implement it like this::
 
+    from flask import session
     from joserfc.jwk import KeySet
     from authlib.oidc.core import grants
     from authlib.common.security import generate_token
@@ -264,12 +273,51 @@ is ``save_authorization_code``. You can implement it like this::
                 email=user.email,
             ).filter(scope)
 
+        def get_auth_time(self, request):
+            return session.get("auth_time")
+
     # register it to grant endpoint
     server.register_grant(OpenIDHybridGrant)
 
-
 Since all OpenID Connect Flow require ``exists_nonce``, ``resolve_client_private_key``,
-``get_client_claims``, ``get_client_algorithm`` and ``generate_user_info`` methods,
-you can create shared functions for them.
+``get_client_claims``, ``get_client_algorithm``, ``generate_user_info`` and
+``get_auth_time`` methods, you can create shared functions for them.
+
+.. _flask_odic_max_age:
+
+Authentication Age
+------------------
+
+A client can ask for a recent authentication of the user, with the
+``max_age`` parameter or the ``default_max_age`` client metadata. It is a
+number of seconds. When the last authentication of the user is older, the
+user must log in again.
+
+Store the time of the login in the session::
+
+    import time
+    from flask import session
+
+    def login(user):
+        session["user_id"] = user.id
+        session["auth_time"] = int(time.time())
+
+Then return it in ``get_auth_time``, as in the examples above. When the user
+must log in, ``grant.prompt`` is ``"login"``::
+
+    @app.route("/oauth/authorize", methods=["GET", "POST"])
+    def authorize():
+        try:
+            grant = server.get_consent_grant(end_user=current_user())
+        except OAuth2Error as error:
+            return server.handle_error_response(request, error)
+
+        if grant.prompt == "login":
+            return redirect(url_for("login", next=request.url))
+        ...
+
+With ``prompt=none``, the server returns a ``login_required`` error instead.
+``max_age=0`` works like ``prompt=login``: ``grant.prompt`` stays ``"login"``
+for this request, even after the login.
 
 Find the `example of OpenID Connect server <https://github.com/authlib/example-oidc-server>`_.

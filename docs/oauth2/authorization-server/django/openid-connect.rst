@@ -77,7 +77,6 @@ For example, Google is using::
 
     {"iss": "https://accounts.google.com"}
 
-
 Code Flow
 ---------
 
@@ -136,6 +135,9 @@ First, we need to implement the missing methods for ``OpenIDCode``::
                 email=user.email,
             ).filter(scope)
 
+        def get_auth_time(self, request):
+            return request.framework_request.session.get("auth_time")
+
 Second, since there is one more ``nonce`` value in ``AuthorizationCode`` data,
 we need to save this value into database. In this case, we have to update our
 ``AuthorizationCodeGrant.save_authorization_code`` method::
@@ -182,7 +184,6 @@ Now that you added the ``openid`` scope to your application, an OpenID token
 will be provided to this app whenever a client asks for a token with an
 ``openid`` scope.
 
-
 Implicit Flow
 -------------
 
@@ -220,8 +221,10 @@ a scripting language. You need to implement the missing methods of
                 email=user.email,
             ).filter(scope)
 
-    server.register_grant(OpenIDImplicitGrant)
+        def get_auth_time(self, request):
+            return request.framework_request.session.get("auth_time")
 
+    server.register_grant(OpenIDImplicitGrant)
 
 Hybrid Flow
 ------------
@@ -279,10 +282,51 @@ is ``save_authorization_code``. You can implement it like this::
                 email=user.email,
             ).filter(scope)
 
+        def get_auth_time(self, request):
+            return request.framework_request.session.get("auth_time")
+
     # register it to grant endpoint
     server.register_grant(OpenIDHybridGrant)
 
-
 Since all OpenID Connect Flow require ``exists_nonce``, ``resolve_client_private_key``,
-``get_client_claims``, ``get_client_algorithm`` and ``generate_user_info`` methods,
-you can create shared functions for them.
+``get_client_claims``, ``get_client_algorithm``, ``generate_user_info`` and
+``get_auth_time`` methods, you can create shared functions for them.
+
+.. _django_oidc_max_age:
+
+Authentication Age
+------------------
+
+A client can ask for a recent authentication of the user, with the
+``max_age`` parameter or the ``default_max_age`` client metadata. It is a
+number of seconds. When the last authentication of the user is older, the
+user must log in again.
+
+Store the time of the login in the session::
+
+    import time
+    from django.contrib.auth import login
+
+    def login_view(request):
+        ...
+        login(request, user)
+        request.session["auth_time"] = int(time.time())
+
+Then return it in ``get_auth_time``, as in the examples above.
+``request.framework_request`` is the Django request. When the user must log
+in, ``grant.prompt`` is ``"login"``::
+
+    def authorize(request):
+        try:
+            grant = server.get_consent_grant(request, end_user=request.user)
+        except OAuth2Error as error:
+            return server.handle_error_response(request, error)
+
+        if grant.prompt == "login":
+            return redirect_to_login(request.get_full_path())
+        ...
+
+With ``prompt=none``, the server returns a ``login_required`` error instead.
+``max_age=0`` works like ``prompt=login``: ``grant.prompt`` stays ``"login"``
+for this request, even after the login.
+

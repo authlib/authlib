@@ -42,6 +42,11 @@ class DjangoOAuth2Request(OAuth2Request):
         self._request = request
 
     @property
+    def framework_request(self):
+        """The Django request of this OAuth 2.0 request."""
+        return self._request
+
+    @property
     def args(self):
         return self._request.GET
 

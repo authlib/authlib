@@ -1,3 +1,4 @@
+import time
 from contextlib import nullcontext
 
 import pytest
@@ -25,6 +26,7 @@ from tests.util import parse_form
 from .models import AuthorizationCode
 from .models import CodeGrantMixin
 from .models import exists_nonce
+from .models import get_auth_time
 from .models import save_authorization_code
 from .oauth2_server import create_basic_header
 from .oauth2_server import register_form_post
@@ -56,6 +58,9 @@ def server(server):
         def generate_user_info(self, user, scopes):
             return user.generate_user_info(scopes)
 
+        def get_auth_time(self, request):
+            return get_auth_time(request)
+
     class OpenIDHybridGrant(IDTokenConfigMixin, _OpenIDHybridGrant):
         def save_authorization_code(self, code, request):
             return save_authorization_code(code, request)
@@ -65,6 +70,9 @@ def server(server):
 
         def generate_user_info(self, user, scopes):
             return user.generate_user_info(scopes)
+
+        def get_auth_time(self, request):
+            return get_auth_time(request)
 
     server.register_grant(OpenIDHybridGrant)
     server.register_grant(AuthorizationCodeGrant, [OpenIDCode()])
@@ -122,6 +130,46 @@ def test_prompt_create(test_client, server):
     )
     rv = test_client.get("/oauth/authorize?" + query)
     assert rv.data == b"create"
+
+
+HYBRID_PARAMS = [
+    ("response_type", "code id_token"),
+    ("client_id", "client-id"),
+    ("scope", "openid profile"),
+    ("state", "bar"),
+    ("nonce", "abc"),
+    ("redirect_uri", "https://client.test"),
+    ("user_id", "1"),
+]
+
+
+def test_max_age(test_client):
+    """An authentication older than max_age asks for a login, and errors go
+    in the fragment."""
+    old = str(int(time.time()) - 7200)
+    query = url_encode(HYBRID_PARAMS + [("max_age", "3600"), ("auth_time", old)])
+    rv = test_client.get("/oauth/authorize?" + query)
+    assert rv.data == b"login"
+
+    query = url_encode(
+        HYBRID_PARAMS + [("max_age", "3600"), ("auth_time", old), ("prompt", "none")]
+    )
+    rv = test_client.get("/oauth/authorize?" + query)
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["error"] == "login_required"
+
+
+def test_auth_time_claim(test_client):
+    """The auth_time claim of the front-channel ID token comes from
+    get_auth_time."""
+    rv = test_client.post(
+        "/oauth/authorize", data=dict(HYBRID_PARAMS + [("auth_time", "1000000000")])
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    token = jwt.decode(
+        params["id_token"], OctKey.import_key(HMAC_SECRET), algorithms=["HS256"]
+    )
+    assert token.claims["auth_time"] == 1000000000
 
 
 def test_invalid_client_id(test_client):

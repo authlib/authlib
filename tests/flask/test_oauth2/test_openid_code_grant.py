@@ -25,6 +25,7 @@ from tests.util import read_file_path
 
 from .models import CodeGrantMixin
 from .models import exists_nonce
+from .models import get_auth_time
 from .models import save_authorization_code
 from .oauth2_server import create_basic_header
 
@@ -80,6 +81,9 @@ class OpenIDCode(_OpenIDCode):
 
     def generate_user_info(self, user, scopes):
         return user.generate_user_info(scopes)
+
+    def get_auth_time(self, request):
+        return get_auth_time(request)
 
 
 def register_oidc_code_grant(
@@ -327,6 +331,149 @@ def test_prompt_create_without_extension(test_client, server):
     query = url_encode(PROMPT_PARAMS + [("user_id", "1"), ("prompt", "create")])
     rv = test_client.get("/oauth/authorize?" + query)
     assert rv.data == b"ok"
+
+
+def authorize_max_age(test_client, max_age, auth_time, prompt=None):
+    """Send an authorization request with a logged user and a max_age."""
+    params = PROMPT_PARAMS + [("user_id", "1"), ("auth_time", str(auth_time))]
+    if max_age is not None:
+        params.append(("max_age", str(max_age)))
+
+    if prompt:
+        params.append(("prompt", prompt))
+
+    return test_client.get("/oauth/authorize?" + url_encode(params))
+
+
+def test_max_age_recent_authentication(test_client, server):
+    """An authentication younger than max_age needs no login."""
+    register_oidc_code_grant(server)
+    rv = authorize_max_age(test_client, 3600, int(time.time()) - 60)
+    assert rv.data == b"ok"
+
+
+def test_max_age_old_authentication(test_client, server):
+    """An authentication older than max_age asks for a login."""
+    register_oidc_code_grant(server)
+    rv = authorize_max_age(test_client, 3600, int(time.time()) - 7200)
+    assert rv.data == b"login"
+
+
+def test_max_age_old_authentication_prompt_none(test_client, server):
+    """With prompt=none, an authentication older than max_age gives
+    login_required."""
+    register_oidc_code_grant(server)
+    rv = authorize_max_age(test_client, 3600, int(time.time()) - 7200, "none")
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert params["error"] == "login_required"
+    assert params["state"] == "bar"
+
+
+def test_max_age_old_authentication_prompt_consent(test_client, server):
+    """The login comes before the consent."""
+    register_oidc_code_grant(server)
+    rv = authorize_max_age(test_client, 3600, int(time.time()) - 7200, "consent")
+    assert rv.data == b"login"
+
+
+def test_max_age_zero(test_client, server):
+    """max_age=0 is equivalent to prompt=login."""
+    register_oidc_code_grant(server)
+    rv = authorize_max_age(test_client, 0, int(time.time()))
+    assert rv.data == b"login"
+
+
+@pytest.mark.parametrize("max_age", ["-1", "1.5", "abc", "١٢", "9" * 5000])
+def test_max_age_invalid(test_client, server, max_age):
+    """A max_age that is not a non-negative integer gives invalid_request."""
+    register_oidc_code_grant(server)
+    rv = authorize_max_age(test_client, max_age, int(time.time()))
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert params["error"] == "invalid_request"
+    assert params["state"] == "bar"
+
+
+def test_max_age_empty(test_client, server):
+    """An empty max_age is ignored."""
+    register_oidc_code_grant(server)
+    rv = authorize_max_age(test_client, "", int(time.time()) - 7200)
+    assert rv.data == b"ok"
+
+
+def test_default_max_age(test_client, server, db, client):
+    """The default_max_age client metadata applies without max_age."""
+    register_oidc_code_grant(server)
+    client.set_client_metadata({**client.client_metadata, "default_max_age": 3600})
+    db.session.add(client)
+    db.session.commit()
+
+    rv = authorize_max_age(test_client, None, int(time.time()) - 7200)
+    assert rv.data == b"login"
+
+    rv = authorize_max_age(test_client, None, int(time.time()) - 60)
+    assert rv.data == b"ok"
+
+
+def test_invalid_default_max_age(test_client, server, db, client):
+    """An invalid default_max_age client metadata is ignored."""
+    register_oidc_code_grant(server)
+    client.set_client_metadata({**client.client_metadata, "default_max_age": -1})
+    db.session.add(client)
+    db.session.commit()
+
+    rv = authorize_max_age(test_client, None, int(time.time()) - 7200)
+    assert rv.data == b"ok"
+
+
+def test_max_age_overrides_default_max_age(test_client, server, db, client):
+    """The max_age parameter overrides the default_max_age client metadata."""
+    register_oidc_code_grant(server)
+    client.set_client_metadata({**client.client_metadata, "default_max_age": 60})
+    db.session.add(client)
+    db.session.commit()
+
+    rv = authorize_max_age(test_client, 3600, int(time.time()) - 600)
+    assert rv.data == b"ok"
+
+
+def test_max_age_unknown_auth_time(test_client, server):
+    """When get_auth_time returns None, max_age asks for a login."""
+
+    class UnknownAuthTimeOpenIDCode(OpenIDCode):
+        def get_auth_time(self, request):
+            return None
+
+    register_oidc_code_grant(server, extension=UnknownAuthTimeOpenIDCode)
+    rv = authorize_max_age(test_client, 3600, int(time.time()))
+    assert rv.data == b"login"
+
+    rv = authorize_max_age(test_client, None, int(time.time()))
+    assert rv.data == b"ok"
+
+
+def test_get_auth_time_not_implemented(test_client, server):
+    """Without get_auth_time, max_age is not enforced, except max_age=0."""
+    with pytest.warns(AuthlibDeprecationWarning, match="get_auth_time"):
+
+        class LegacyOpenIDCode(_OpenIDCode):
+            def resolve_client_private_key(self, client):
+                return current_app.config["OAUTH2_JWT_KEY"]
+
+            def get_client_claims(self, client):
+                return {"iss": current_app.config["OAUTH2_JWT_ISS"]}
+
+            def exists_nonce(self, nonce, request):
+                return exists_nonce(nonce, request)
+
+            def generate_user_info(self, user, scopes):
+                return user.generate_user_info(scopes)
+
+    register_oidc_code_grant(server, extension=LegacyOpenIDCode)
+    rv = authorize_max_age(test_client, 3600, int(time.time()) - 7200)
+    assert rv.data == b"ok"
+
+    rv = authorize_max_age(test_client, 0, int(time.time()))
+    assert rv.data == b"login"
 
 
 @pytest.mark.filterwarnings(

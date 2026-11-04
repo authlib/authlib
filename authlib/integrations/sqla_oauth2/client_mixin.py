@@ -114,6 +114,10 @@ class OAuth2ClientMixin(ClientMixin):
     def id_token_signed_response_alg(self):
         return self.client_metadata.get("id_token_signed_response_alg")
 
+    @property
+    def default_max_age(self):
+        return self.client_metadata.get("default_max_age")
+
     def get_client_id(self):
         return self.client_id
 

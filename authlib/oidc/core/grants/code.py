@@ -12,12 +12,14 @@ import logging
 from joserfc import jwt
 
 from authlib._joserfc_helpers import import_any_key
+from authlib.deprecate import deprecate
 from authlib.oauth2.rfc6749 import OAuth2Request
 from authlib.oauth2.rfc6749 import OAuth2Response
 
 from ..models import AuthorizationCodeMixin
 from ._legacy import LegacyMixin
 from .util import create_half_hash
+from .util import get_auth_time_function
 from .util import is_openid_scope
 from .util import validate_nonce
 from .util import validate_request_prompt
@@ -122,6 +124,9 @@ class OpenIDCode(OpenIDToken):
             def generate_user_info(self, user, scope):
                 return {...}
 
+            def get_auth_time(self, request):
+                return request.framework_request.session.get("auth_time")
+
     The register this extension with AuthorizationCodeGrant::
 
         authorization_server.register_grant(
@@ -131,6 +136,15 @@ class OpenIDCode(OpenIDToken):
 
     def __init__(self, require_nonce=False):
         self.require_nonce = require_nonce
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if cls.get_auth_time is OpenIDCode.get_auth_time:
+            deprecate(
+                "Not implementing 'OpenIDCode.get_auth_time' is deprecated. "
+                "Implement it to enforce the 'max_age' parameter.",
+                version="1.11",
+            )
 
     def exists_nonce(self, nonce, request):
         """Check if the given nonce is existing in your database. Developers
@@ -148,8 +162,37 @@ class OpenIDCode(OpenIDToken):
         """
         raise NotImplementedError()
 
+    def get_auth_time(self, request):
+        """Return the time of the last authentication of the user, as a Unix
+        timestamp. Developers MUST implement this method in subclass. The
+        value usually comes from the user session, e.g. with Django::
+
+            def get_auth_time(self, request):
+                return request.framework_request.session.get("auth_time")
+
+        When the authentication is older than the ``max_age`` parameter,
+        ``grant.prompt`` is ``"login"``. When it returns ``None``, the user
+        must log in again.
+
+        :param request: the authorization request, with its ``user``
+        :return: a timestamp, or ``None`` if it is unknown
+        """
+        raise NotImplementedError()
+
     def validate_openid_authorization_request(self, grant, redirect_uri):
         validate_nonce(grant.request, self.exists_nonce, self.require_nonce)
+
+    def validate_openid_prompt(self, grant, redirect_uri):
+        """Validate the ``prompt`` and ``max_age`` parameters of the request.
+
+        :param grant: the grant that validates the authorization request
+        :param redirect_uri: the redirect URI of the authorization request
+        """
+        validate_request_prompt(
+            grant,
+            redirect_uri,
+            get_auth_time=get_auth_time_function(self, OpenIDCode),
+        )
 
     def __call__(self, grant):
         grant.register_hook(self.process_token, after=grant.create_token_response)
@@ -159,6 +202,6 @@ class OpenIDCode(OpenIDToken):
                 after=grant.validate_authorization_request_payload,
             )
             grant.register_hook(
-                validate_request_prompt,
+                self.validate_openid_prompt,
                 after=grant.validate_consent_request,
             )

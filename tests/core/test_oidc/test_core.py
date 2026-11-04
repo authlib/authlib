@@ -4,6 +4,7 @@ import pytest
 from joserfc.errors import InvalidClaimError
 from joserfc.errors import MissingClaimError
 
+from authlib.oauth2.rfc6749 import InvalidRequestError
 from authlib.oauth2.rfc6749.grants import AuthorizationEndpointMixin
 from authlib.oauth2.rfc6749.grants import BaseGrant
 from authlib.oauth2.rfc6749.grants import TokenEndpointMixin
@@ -13,6 +14,7 @@ from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core import OpenIDCode
 from authlib.oidc.core import UserInfo
 from authlib.oidc.core import get_claim_cls_by_response_type
+from authlib.oidc.core.grants.util import validate_request_prompt
 
 
 def test_essential_claims():
@@ -223,9 +225,12 @@ def test_openid_code_on_custom_grant(monkeypatch):
         def process_token(self, grant, response):
             calls.append(("process_token", response))
 
+        def get_auth_time(self, request):
+            return None
+
     monkeypatch.setattr(
         "authlib.oidc.core.grants.code.validate_request_prompt",
-        lambda grant, redirect_uri: calls.append(
+        lambda grant, redirect_uri, get_auth_time: calls.append(
             ("validate_request_prompt", redirect_uri)
         ),
     )
@@ -242,3 +247,25 @@ def test_openid_code_on_custom_grant(monkeypatch):
         ("validate_request_prompt", "https://client.test/cb"),
         ("process_token", "token response"),
     ]
+
+
+def create_max_age_grant(max_age):
+    """Return a grant whose request has a logged user and a max_age."""
+    payload = types.SimpleNamespace(data={"max_age": max_age})
+    request = types.SimpleNamespace(payload=payload, user=object(), client=None)
+    return types.SimpleNamespace(request=request, prompt=None)
+
+
+def test_max_age_integer():
+    """An integer max_age, as in a request object, is enforced."""
+    grant = create_max_age_grant(3600)
+    validate_request_prompt(grant, None, get_auth_time=lambda request: 0)
+    assert grant.prompt == "login"
+
+
+@pytest.mark.parametrize("max_age", [-1, True, 1.5])
+def test_max_age_invalid_value(max_age):
+    """A negative, boolean or float max_age gives invalid_request."""
+    grant = create_max_age_grant(max_age)
+    with pytest.raises(InvalidRequestError):
+        validate_request_prompt(grant, None, get_auth_time=lambda request: 0)

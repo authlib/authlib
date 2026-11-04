@@ -1,3 +1,5 @@
+import time
+
 from flask_sqlalchemy import SQLAlchemy
 
 from authlib.integrations.sqla_oauth2 import OAuth2AuthorizationCodeMixin
@@ -121,3 +123,9 @@ def exists_nonce(nonce, request):
         client_id=request.payload.client_id, nonce=nonce
     ).first()
     return bool(exists)
+
+
+def get_auth_time(request):
+    """Return the 'auth_time' request parameter, or the current time."""
+    auth_time = request.framework_request.values.get("auth_time")
+    return int(auth_time) if auth_time else int(time.time())
