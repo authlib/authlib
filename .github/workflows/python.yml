@@ -20,7 +20,6 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      max-parallel: 3
       matrix:
         python:
         - "3.11"
@@ -29,6 +28,11 @@ jobs:
         - "3.14"
         - "3.15"
         - "pypy3.11"
+        include:
+        - python: "3.14"
+          sonar: true
+        - python: "pypy3.11"
+          skip_coverage: true
 
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -41,23 +45,27 @@ jobs:
       with:
         enable-cache: true
         cache-dependency-glob: pyproject.toml
-
-    - name: Set up Python ${{ matrix.python }}
-      run: uv python install ${{ matrix.python }}
+        python-version: ${{ matrix.python }}
 
     - name: Install dependencies
-      run: uv sync --python ${{ matrix.python }} --group clients --group jose
+      run: uv sync --group clients --group jose
 
     - name: Test with coverage
+      if: ${{ !matrix.skip_coverage }}
       run: uv run pytest tests -n auto --cov=authlib --cov-report=term --cov-report=xml
 
+    - name: Test
+      if: ${{ matrix.skip_coverage }}
+      run: uv run pytest tests -n auto
+
     - name: Check diff coverage for modified files
-      if: github.event_name == 'pull_request'
+      if: ${{ github.event_name == 'pull_request' && !matrix.skip_coverage }}
       env:
         BASE_REF: ${{ github.base_ref }}
       run: uv run diff-cover coverage.xml --compare-branch="origin/$BASE_REF" --fail-under=100 --format github-annotations:warning
 
     - name: Upload coverage to Codecov
+      if: ${{ !matrix.skip_coverage }}
       uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
@@ -66,6 +74,7 @@ jobs:
         name: GitHub
 
     - name: SonarCloud Scan
+      if: ${{ matrix.sonar }}
       uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
       continue-on-error: true
       env:
@@ -88,6 +97,7 @@ jobs:
       with:
         enable-cache: true
         cache-dependency-glob: pyproject.toml
+        cache-suffix: minversions
 
     - name: Set up Python 3.11
       run: uv python install 3.11
