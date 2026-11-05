@@ -3,7 +3,6 @@ import logging
 from authlib.common.security import generate_token
 
 from ..errors import AccessDeniedError
-from ..errors import InvalidClientError
 from ..errors import InvalidGrantError
 from ..errors import InvalidRequestError
 from ..errors import OAuth2Error
@@ -350,20 +349,8 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
 
 def validate_code_authorization_request(grant):
     request = grant.request
-    client_id = request.payload.client_id
-    log.debug("Validate authorization request of %r", client_id)
-
-    if client_id is None:
-        raise InvalidClientError(
-            description="Missing 'client_id' parameter.",
-        )
-
-    client = grant.server.query_client(client_id)
-    if not client:
-        raise InvalidClientError(
-            description="The client does not exist on this server.",
-        )
-
+    log.debug("Validate authorization request of %r", request.payload.client_id)
+    client = grant.query_authorization_client()
     redirect_uri = grant.validate_authorization_redirect_uri(request, client)
     response_type = request.payload.response_type
     if not client.check_response_type(response_type):
