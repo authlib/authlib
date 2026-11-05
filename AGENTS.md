@@ -13,7 +13,7 @@ Maintainers may close contributions from autonomous agents without review or rep
 ## Development
 
 - Run the tests with `uv run --all-groups pytest tests`.
-- Run `prek run --all-files` before you finish. It runs ruff and codespell.
+- Run `prek run --all-files` before you finish. It runs ruff, codespell and zizmor.
 - Add a changelog fragment with `uv run scriv create` for user-visible changes.
 - Commit messages follow Conventional Commits.
   The scope is optional. Allowed scopes are `jose`, `oauth`, `oidc` and `client`.

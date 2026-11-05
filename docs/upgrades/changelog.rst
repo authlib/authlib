@@ -8,6 +8,38 @@ Here you can see the full list of changes between each Authlib release.
 
 .. scriv-insert-here
 
+.. _changelog-1.9.4:
+
+Version 1.9.4 — 2026-11-04
+--------------------------
+
+Security
+~~~~~~~~
+
+- ``IDJAGGrant`` stores the verified claims of the ID-JAG in
+  ``request.id_jag_claims``. ``authenticate_user`` can use them to resolve
+  the user with the ``iss`` and ``sub`` claims, and ``tenant`` for a
+  multi-tenant IdP. The documentation used to resolve the user with ``sub``
+  alone. An IdP, or a tenant of an IdP, could then get access tokens for the
+  users of another one. Update ``authenticate_user`` if your server trusts
+  several IdPs or a multi-tenant IdP.
+  `GHSA-9qr6-8289-9j56 <https://github.com/authlib/authlib/security/advisories/GHSA-9qr6-8289-9j56>`_
+
+.. _changelog-1.9.3:
+
+Version 1.9.3 — 2026-11-03
+--------------------------
+
+Security
+~~~~~~~~
+
+- The OpenID Connect implicit and hybrid grants refuse ``response_mode=form_post``
+  when the redirect URI does not use the ``http`` or ``https`` scheme. They
+  return an ``invalid_request`` error and do not redirect. A client with a
+  ``javascript:`` redirect URI could run a script in the origin of the
+  authorization server, even when the user denied the authorization.
+  `GHSA-gp2m-377p-m4j3 <https://github.com/authlib/authlib/security/advisories/GHSA-gp2m-377p-m4j3>`_
+
 .. _changelog-1.9.2:
 
 Version 1.9.2 — 2026-11-01

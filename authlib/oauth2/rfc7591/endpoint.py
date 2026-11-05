@@ -7,11 +7,11 @@ from joserfc.errors import JoseError
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.security import generate_token
-from authlib.consts import default_json_headers
-from authlib.deprecate import deprecate
 
-from ..rfc6749 import AccessDeniedError
 from ..rfc6749 import InvalidRequestError
+from ..rfc6749 import JsonResponse
+from ..rfc6749 import MissingAuthorizationError
+from ..rfc6750 import InvalidTokenError
 from .claims import ClientMetadataClaims
 from .errors import InvalidClientMetadataError
 from .errors import InvalidSoftwareStatementError
@@ -39,7 +39,11 @@ class ClientRegistrationEndpoint:
     def create_registration_response(self, request):
         token = self.authenticate_token(request)
         if not token:
-            raise AccessDeniedError()
+            # Per RFC 6750 §3.1, a request without authentication information
+            # gets no error code.
+            if not request.headers.get("Authorization"):
+                raise MissingAuthorizationError()
+            raise InvalidTokenError()
 
         request.credential = token
 
@@ -52,7 +56,7 @@ class ClientRegistrationEndpoint:
         registration_info = self.generate_client_registration_info(client, request)
         if registration_info:
             body.update(registration_info)
-        return 201, body, default_json_headers
+        return JsonResponse(body, status_code=201)
 
     def extract_client_metadata(self, request):
         if not request.payload.data:
@@ -97,26 +101,8 @@ class ClientRegistrationEndpoint:
 
     def generate_client_info(self, request):
         # https://tools.ietf.org/html/rfc7591#section-3.2.1
-        try:
-            client_id = self.generate_client_id(request)
-        except TypeError:  # pragma: no cover
-            client_id = self.generate_client_id()  # type: ignore
-            deprecate(
-                "generate_client_id takes a 'request' parameter. "
-                "It will become mandatory in coming releases",
-                version="1.8",
-            )
-
-        try:
-            client_secret = self.generate_client_secret(request)
-        except TypeError:  # pragma: no cover
-            client_secret = self.generate_client_secret()
-            deprecate(
-                "generate_client_secret takes a 'request' parameter. "
-                "It will become mandatory in coming releases",
-                version="1.8",
-            )
-
+        client_id = self.generate_client_id(request)
+        client_secret = self.generate_client_secret(request)
         client_id_issued_at = int(time.time())
         client_secret_expires_at = 0
         return dict(
@@ -162,7 +148,11 @@ class ClientRegistrationEndpoint:
                 auth = request.headers.get("Authorization")
                 return get_token_by_auth(auth)
 
-        :return: token instance
+        For open registration, return a truthy value for requests without
+        token. When it returns ``None``, the endpoint responds with HTTP 401,
+        per :rfc:`7591#section-3.2.2` and :rfc:`6750#section-3`.
+
+        :return: token instance, or ``None`` if the request is not allowed
         """
         raise NotImplementedError()
 

@@ -19,6 +19,13 @@ Understand
 Before implementing, read the concept guides:
 
 * :ref:`intro_oauth2` — OAuth 2.0 roles, flows, and grant types
+* :ref:`authorization_session` — how ``prompt``, ``max_age`` and the consent
+  are applied
+
+.. toctree::
+    :hidden:
+
+    authorization-session
 
 How-to
 ------

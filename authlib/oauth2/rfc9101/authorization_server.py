@@ -18,6 +18,10 @@ from .errors import RequestNotSupportedError
 from .errors import RequestUriNotSupportedError
 
 
+class _RequestObjectPayload(BasicOAuth2Payload):
+    """The authorization request parameters of a request object."""
+
+
 class JWTAuthenticationRequest:
     """Authorization server extension implementing the support
     for JWT secured authentication request, as defined in :rfc:`RFC9101 <9101>`.
@@ -56,25 +60,21 @@ class JWTAuthenticationRequest:
         client_id={"essential": True},
     )
 
-    #: Expected JSON types of the authorization parameters in the request object
-    parameter_types = {
-        "client_id": str,
-        "response_type": str,
-        "redirect_uri": str,
-        "scope": str,
-        "state": str,
-        "code_challenge": str,
-        "code_challenge_method": str,
-    }
-
     def __init__(self, support_request: bool = True, support_request_uri: bool = True):
         self.support_request = support_request
         self.support_request_uri = support_request_uri
 
     def __call__(self, authorization_server: AuthorizationServer):
+        authorization_server.register_authorization_parameters(
+            {"request": str, "request_uri": str}
+        )
         authorization_server.register_hook(
             self.parse_authorization_request,
             before=AuthorizationServer.get_authorization_grant,
+        )
+        authorization_server.register_hook(
+            self.validate_grant_parameter_types,
+            after=AuthorizationServer.get_authorization_grant,
         )
 
     def get_request_object_signing_algorithms(self, client):
@@ -123,8 +123,26 @@ class JWTAuthenticationRequest:
         request_object = self._decode_request_object(
             request, client, raw_request_object
         )
-        payload = BasicOAuth2Payload(request_object.claims)
-        request.payload = payload
+        _validate_parameter_types(
+            request_object.claims,
+            authorization_server.authorization_parameters,
+            request.payload.state,
+        )
+        request.payload = _RequestObjectPayload(request_object.claims)
+
+    def validate_grant_parameter_types(self, authorization_server, grant):
+        """Check the JSON types of the request object parameters that the
+        grant and its extensions declare.
+
+        :param authorization_server: the authorization server
+        :param grant: the grant chosen for the authorization request
+        :raises InvalidRequestObjectError: if a parameter has an invalid type
+        """
+        payload = grant.request.payload
+        if isinstance(payload, _RequestObjectPayload):
+            _validate_parameter_types(
+                payload.data, grant.authorization_parameters, payload.state
+            )
 
     def _shoud_proceed_with_request_object(
         self,
@@ -214,18 +232,6 @@ class JWTAuthenticationRequest:
                 description=error.description or InvalidRequestObjectError.description,
                 state=request.payload.state,
             ) from error
-
-        # Parameter names and string values MUST be included as JSON strings.
-        # Numerical values MUST be included as JSON numbers.
-        for name, expected_type in self.parameter_types.items():
-            if name not in request_object.claims:
-                continue
-            value = request_object.claims[name]
-            if isinstance(value, bool) or not isinstance(value, expected_type):
-                raise InvalidRequestObjectError(
-                    description=f"The '{name}' parameter has an invalid type.",
-                    state=request.payload.state,
-                )
 
         # The client ID values in the client_id request parameter and in
         # the Request Object client_id claim MUST be identical.
@@ -359,3 +365,19 @@ class JWTAuthenticationRequest:
         If not implemented, the value is considered as :data:`False`.
         """
         return False  # pragma: no cover
+
+
+def _validate_parameter_types(claims, parameters, state):
+    """Check the JSON types of the request object parameters."""
+    # RFC 9101 §4: parameter names and string values MUST be included as
+    # JSON strings. Numerical values MUST be included as JSON numbers.
+    for name, expected_type in parameters.items():
+        if name not in claims:
+            continue
+
+        value = claims[name]
+        if isinstance(value, bool) or not isinstance(value, expected_type):
+            raise InvalidRequestObjectError(
+                description=f"The '{name}' parameter has an invalid type.",
+                state=state,
+            )

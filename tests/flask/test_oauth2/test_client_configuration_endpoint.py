@@ -29,7 +29,7 @@ class ClientConfigurationEndpoint(_ClientConfigurationEndpoint):
         client_id = request.uri.split("/")[-1]
         return Client.query.filter_by(client_id=client_id).first()
 
-    def revoke_access_token(self, request, token):
+    def revoke_access_token(self, token, request):
         token.revoked = True
         db.session.add(token)
         db.session.commit()
@@ -97,17 +97,19 @@ def test_read_client(test_client, client, token):
     assert resp["registration_access_token"] == token.access_token
 
 
-def test_read_access_denied(test_client):
+def test_read_without_valid_token(test_client):
     rv = test_client.get("/configure_client/client-id")
     resp = json.loads(rv.data)
-    assert rv.status_code == 400
-    assert resp["error"] == "access_denied"
+    assert rv.status_code == 401
+    assert "error" not in resp
+    assert rv.headers["WWW-Authenticate"] == "Bearer"
 
     headers = {"Authorization": "bearer invalid_token"}
     rv = test_client.get("/configure_client/client-id", headers=headers)
     resp = json.loads(rv.data)
-    assert rv.status_code == 400
-    assert resp["error"] == "access_denied"
+    assert rv.status_code == 401
+    assert resp["error"] == "invalid_token"
+    assert rv.headers["WWW-Authenticate"].startswith('Bearer error="invalid_token"')
 
     headers = {"Authorization": "bearer unauthorized_token"}
     rv = test_client.get(
@@ -116,8 +118,8 @@ def test_read_access_denied(test_client):
         headers=headers,
     )
     resp = json.loads(rv.data)
-    assert rv.status_code == 400
-    assert resp["error"] == "access_denied"
+    assert rv.status_code == 401
+    assert resp["error"] == "invalid_token"
 
 
 def test_read_invalid_client(test_client, token):
@@ -129,7 +131,8 @@ def test_read_invalid_client(test_client, token):
     rv = test_client.get("/configure_client/invalid_client_id", headers=headers)
     resp = json.loads(rv.data)
     assert rv.status_code == 401
-    assert resp["error"] == "invalid_client"
+    assert resp["error"] == "invalid_token"
+    assert token.revoked
 
 
 def test_read_unauthorized_client(test_client, token):
@@ -174,17 +177,18 @@ def test_update_client(test_client, client, token):
     assert client.scope == ""
 
 
-def test_update_access_denied(test_client):
+def test_update_without_valid_token(test_client):
     rv = test_client.put("/configure_client/client-id", json={})
     resp = json.loads(rv.data)
-    assert rv.status_code == 400
-    assert resp["error"] == "access_denied"
+    assert rv.status_code == 401
+    assert "error" not in resp
+    assert rv.headers["WWW-Authenticate"] == "Bearer"
 
     headers = {"Authorization": "bearer invalid_token"}
     rv = test_client.put("/configure_client/client-id", json={}, headers=headers)
     resp = json.loads(rv.data)
-    assert rv.status_code == 400
-    assert resp["error"] == "access_denied"
+    assert rv.status_code == 401
+    assert resp["error"] == "invalid_token"
 
     headers = {"Authorization": "bearer unauthorized_token"}
     rv = test_client.put(
@@ -193,8 +197,8 @@ def test_update_access_denied(test_client):
         headers=headers,
     )
     resp = json.loads(rv.data)
-    assert rv.status_code == 400
-    assert resp["error"] == "access_denied"
+    assert rv.status_code == 401
+    assert resp["error"] == "invalid_token"
 
 
 def test_update_invalid_request(test_client, token):
@@ -257,7 +261,7 @@ def test_update_invalid_client(test_client, token):
     )
     resp = json.loads(rv.data)
     assert rv.status_code == 401
-    assert resp["error"] == "invalid_client"
+    assert resp["error"] == "invalid_token"
 
 
 def test_update_unauthorized_client(test_client, token):
@@ -447,17 +451,18 @@ def test_delete_client(test_client, client, token):
     assert not rv.data
 
 
-def test_delete_access_denied(test_client):
+def test_delete_without_valid_token(test_client):
     rv = test_client.delete("/configure_client/client-id")
     resp = json.loads(rv.data)
-    assert rv.status_code == 400
-    assert resp["error"] == "access_denied"
+    assert rv.status_code == 401
+    assert "error" not in resp
+    assert rv.headers["WWW-Authenticate"] == "Bearer"
 
     headers = {"Authorization": "bearer invalid_token"}
     rv = test_client.delete("/configure_client/client-id", headers=headers)
     resp = json.loads(rv.data)
-    assert rv.status_code == 400
-    assert resp["error"] == "access_denied"
+    assert rv.status_code == 401
+    assert resp["error"] == "invalid_token"
 
     headers = {"Authorization": "bearer unauthorized_token"}
     rv = test_client.delete(
@@ -466,8 +471,8 @@ def test_delete_access_denied(test_client):
         headers=headers,
     )
     resp = json.loads(rv.data)
-    assert rv.status_code == 400
-    assert resp["error"] == "access_denied"
+    assert rv.status_code == 401
+    assert resp["error"] == "invalid_token"
 
 
 def test_delete_invalid_client(test_client, token):
@@ -479,7 +484,7 @@ def test_delete_invalid_client(test_client, token):
     rv = test_client.delete("/configure_client/invalid_client_id", headers=headers)
     resp = json.loads(rv.data)
     assert rv.status_code == 401
-    assert resp["error"] == "invalid_client"
+    assert resp["error"] == "invalid_token"
 
 
 def test_delete_unauthorized_client(test_client, token):
@@ -516,8 +521,8 @@ def test_read_token_of_another_client(test_client, other_client, token):
     headers = {"Authorization": f"bearer {token.access_token}"}
     rv = test_client.get("/configure_client/other-client-id", headers=headers)
     resp = json.loads(rv.data)
-    assert rv.status_code == 400
-    assert resp["error"] == "access_denied"
+    assert rv.status_code == 401
+    assert resp["error"] == "invalid_token"
     assert "client_secret" not in resp
 
 
@@ -529,8 +534,8 @@ def test_update_token_of_another_client(test_client, other_client, token):
         "/configure_client/other-client-id", json=body, headers=headers
     )
     resp = json.loads(rv.data)
-    assert rv.status_code == 400
-    assert resp["error"] == "access_denied"
+    assert rv.status_code == 401
+    assert resp["error"] == "invalid_token"
     assert other_client.client_name == "Other"
 
 
@@ -539,6 +544,30 @@ def test_delete_token_of_another_client(test_client, other_client, token):
     headers = {"Authorization": f"bearer {token.access_token}"}
     rv = test_client.delete("/configure_client/other-client-id", headers=headers)
     resp = json.loads(rv.data)
-    assert rv.status_code == 400
-    assert resp["error"] == "access_denied"
+    assert rv.status_code == 401
+    assert resp["error"] == "invalid_token"
     assert Client.query.filter_by(client_id="other-client-id").first()
+
+
+def test_revoke_access_token_legacy_signature(test_client, app, server, token):
+    """Subclasses using the (request, token) argument order still work."""
+
+    class LegacyClientConfigurationEndpoint(ClientConfigurationEndpoint):
+        ENDPOINT_NAME = "legacy_client_configuration"
+
+        def revoke_access_token(self, request, token):
+            token.revoked = True
+
+        def get_server_metadata(self):
+            return {}
+
+    server.register_endpoint(LegacyClientConfigurationEndpoint)
+
+    @app.route("/legacy_configure_client/<client_id>", methods=["GET"])
+    def legacy_configure_client(client_id):
+        return server.create_endpoint_response("legacy_client_configuration")
+
+    headers = {"Authorization": f"bearer {token.access_token}"}
+    rv = test_client.get("/legacy_configure_client/invalid_client_id", headers=headers)
+    assert rv.status_code == 401
+    assert token.revoked

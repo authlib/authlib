@@ -201,15 +201,18 @@ def test_post_token_in_body(test_client, db, token):
 
 def test_no_token(test_client):
     rv = test_client.post("/oauth/userinfo")
+    assert rv.status_code == 401
     resp = json.loads(rv.data)
-    assert resp["error"] == "missing_authorization"
+    assert "error" not in resp
+    assert rv.headers["WWW-Authenticate"] == "Bearer"
 
 
 def test_missing_token_type(test_client):
     headers = {"Authorization": "token_string"}
     rv = test_client.post("/oauth/userinfo", headers=headers)
+    assert rv.status_code == 401
     resp = json.loads(rv.data)
-    assert resp["error"] == "unsupported_token_type"
+    assert "error" not in resp
 
 
 def test_token_in_header_and_body(test_client, token):
@@ -231,8 +234,9 @@ def test_token_in_body_with_get(test_client, token):
         data="access_token=access-token",
         content_type="application/x-www-form-urlencoded",
     )
+    assert rv.status_code == 401
     resp = json.loads(rv.data)
-    assert resp["error"] == "missing_authorization"
+    assert "error" not in resp
 
 
 def test_token_in_multipart_body(test_client, token):
@@ -242,22 +246,38 @@ def test_token_in_multipart_body(test_client, token):
         data={"access_token": "access-token"},
         content_type="multipart/form-data",
     )
+    assert rv.status_code == 401
     resp = json.loads(rv.data)
-    assert resp["error"] == "missing_authorization"
+    assert "error" not in resp
 
 
 def test_token_in_json_body(test_client, token):
     """The access token cannot be sent in a JSON body."""
     rv = test_client.post("/oauth/userinfo", json={"access_token": "access-token"})
+    assert rv.status_code == 401
     resp = json.loads(rv.data)
-    assert resp["error"] == "missing_authorization"
+    assert "error" not in resp
 
 
 def test_bad_token(test_client):
     headers = {"Authorization": "invalid token_string"}
     rv = test_client.post("/oauth/userinfo", headers=headers)
+    assert rv.status_code == 401
     resp = json.loads(rv.data)
-    assert resp["error"] == "unsupported_token_type"
+    assert "error" not in resp
+    assert rv.headers["WWW-Authenticate"] == "Bearer"
+
+
+def test_token_without_user(test_client, db, token):
+    """A token without a user is rejected."""
+    token.user_id = None
+    db.session.add(token)
+    db.session.commit()
+
+    headers = {"Authorization": "Bearer access-token"}
+    rv = test_client.get("/oauth/userinfo", headers=headers)
+    assert rv.status_code == 401
+    assert json.loads(rv.data)["error"] == "invalid_token"
 
 
 def test_token_has_bad_scope(test_client, db, token):

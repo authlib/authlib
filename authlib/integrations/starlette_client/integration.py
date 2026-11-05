@@ -58,8 +58,9 @@ class StarletteIntegration(FrameworkIntegration):
 
     async def clear_state_data(self, session: dict[str, Any] | None, state: str):
         key = f"_state_{self.name}_{state}"
-        if self.cache:
+        if self.cache and session is not None and key in session:
             await self.cache.delete(key)
+
         if session is not None:
             session.pop(key, None)
             self._clear_session_state(session)

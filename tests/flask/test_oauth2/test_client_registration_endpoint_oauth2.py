@@ -19,7 +19,7 @@ class ClientRegistrationEndpoint(_ClientRegistrationEndpoint):
 
     def authenticate_token(self, request):
         auth_header = request.headers.get("Authorization")
-        if auth_header:
+        if auth_header and auth_header != "bearer invalid_token":
             request.user_id = 1
             return auth_header
 
@@ -54,10 +54,48 @@ def server(server, app, metadata):
     return server
 
 
-def test_access_denied(test_client):
+def test_missing_token(test_client):
+    """A request without token gets a 401 response with no error code."""
     rv = test_client.post("/create_client", json={})
     resp = json.loads(rv.data)
-    assert resp["error"] == "access_denied"
+    assert rv.status_code == 401
+    assert "error" not in resp
+    assert rv.headers["WWW-Authenticate"] == "Bearer"
+
+
+def test_invalid_token(test_client):
+    """An invalid initial access token gets a 401 invalid_token error."""
+    headers = {"Authorization": "bearer invalid_token"}
+    rv = test_client.post("/create_client", json={}, headers=headers)
+    resp = json.loads(rv.data)
+    assert rv.status_code == 401
+    assert resp["error"] == "invalid_token"
+    assert rv.headers["WWW-Authenticate"].startswith('Bearer error="invalid_token"')
+
+
+def test_open_registration(test_client, app, server, metadata):
+    """Open registration accepts requests without token."""
+
+    class OpenClientRegistration(ClientRegistrationEndpoint):
+        ENDPOINT_NAME = "open_client_registration"
+
+        def authenticate_token(self, request):
+            request.user_id = 1
+            return True
+
+        def get_server_metadata(self):
+            return metadata
+
+    server.register_endpoint(OpenClientRegistration)
+
+    @app.route("/open_create_client", methods=["POST"])
+    def open_create_client():
+        return server.create_endpoint_response("open_client_registration")
+
+    rv = test_client.post("/open_create_client", json={"client_name": "Authlib"})
+    resp = json.loads(rv.data)
+    assert rv.status_code == 201
+    assert resp["client_name"] == "Authlib"
 
 
 def test_invalid_request(test_client):

@@ -77,7 +77,6 @@ For example, Google is using::
 
     {"iss": "https://accounts.google.com"}
 
-
 Code Flow
 ---------
 
@@ -93,10 +92,14 @@ to rewrite our ``AuthorizationCode`` db model::
         redirect_uri = TextField(default='', null=True)
         response_type = TextField(default='')
         scope = TextField(default='', null=True)
-        auth_time = IntegerField(null=False, default=now_timestamp)
+        issued_at = IntegerField(null=False, default=now_timestamp)
 
-        # add nonce
+        # add nonce and auth_time
         nonce = CharField(max_length=120, default='', null=True)
+        auth_time = IntegerField(null=True)
+
+        def get_auth_time(self):
+            return self.auth_time
 
         # ... other fields and methods ...
 
@@ -136,8 +139,11 @@ First, we need to implement the missing methods for ``OpenIDCode``::
                 email=user.email,
             ).filter(scope)
 
-Second, since there is one more ``nonce`` value in ``AuthorizationCode`` data,
-we need to save this value into database. In this case, we have to update our
+Second, the ``AuthorizationCode`` data has two more values: the ``nonce``
+parameter, and the time of the user authentication. ``OpenIDCode`` sets this
+time in ``request.auth_time``, from the authorization session (see
+:ref:`django_oidc_max_age`). It becomes the
+``auth_time`` claim of the ID token. Save these values in the
 ``AuthorizationCodeGrant.save_authorization_code`` method::
 
     class AuthorizationCodeGrant(_AuthorizationCodeGrant):
@@ -148,10 +154,11 @@ we need to save this value into database. In this case, we have to update our
             auth_code = AuthorizationCode(
                 code=code,
                 client_id=client.client_id,
-                redirect_uri=request.redirect_uri,
+                redirect_uri=request.payload.redirect_uri,
                 scope=request.scope,
                 user=request.user,
                 nonce=nonce,
+                auth_time=request.auth_time,
             )
             auth_code.save()
             return auth_code
@@ -181,7 +188,6 @@ in your application to something like ``openid profile email``.
 Now that you added the ``openid`` scope to your application, an OpenID token
 will be provided to this app whenever a client asks for a token with an
 ``openid`` scope.
-
 
 Implicit Flow
 -------------
@@ -222,7 +228,6 @@ a scripting language. You need to implement the missing methods of
 
     server.register_grant(OpenIDImplicitGrant)
 
-
 Hybrid Flow
 ------------
 
@@ -255,10 +260,11 @@ is ``save_authorization_code``. You can implement it like this::
             auth_code = AuthorizationCode(
                 code=code,
                 client_id=client.client_id,
-                redirect_uri=request.redirect_uri,
+                redirect_uri=request.payload.redirect_uri,
                 scope=request.scope,
                 user=request.user,
                 nonce=nonce,
+                auth_time=request.auth_time,
             )
             auth_code.save()
             return auth_code
@@ -282,7 +288,61 @@ is ``save_authorization_code``. You can implement it like this::
     # register it to grant endpoint
     server.register_grant(OpenIDHybridGrant)
 
-
 Since all OpenID Connect Flow require ``exists_nonce``, ``resolve_client_private_key``,
-``get_client_claims``, ``get_client_algorithm`` and ``generate_user_info`` methods,
-you can create shared functions for them.
+``get_client_claims``, ``get_client_algorithm`` and ``generate_user_info``
+methods, you can create shared functions for them.
+
+.. _django_oidc_max_age:
+
+Authorization Session
+---------------------
+
+A client can ask for a recent login with ``prompt=login`` or ``max_age``, or
+for a new consent with ``prompt=consent``. Authlib applies these rules with an
+:class:`~authlib.oauth2.AuthorizationSession`.
+:ref:`authorization_session` explains the rules and the pitfalls.
+
+Store the time of the login in the session::
+
+    import time
+    from django.contrib.auth import login
+
+    def login_view(request):
+        ...
+        login(request, user)
+        request.session["auth_time"] = int(time.time())
+
+Subclass the authorization session. It keeps the start time of the requests
+in the Django session. Give the time of the interactions, and tell if the
+user must give their consent::
+
+    from authlib.oauth2 import AuthorizationSession
+
+    class MyAuthorizationSession(AuthorizationSession):
+        def get_interaction_time(self, request, interaction):
+            if interaction == "login":
+                return self.session.get("auth_time")
+            if interaction == "consent":
+                consent = get_consent(self.user, request.client)
+                return consent.issued_at.timestamp() if consent else None
+            return None
+
+        def is_consent_needed(self, request):
+            consent = get_consent(self.user, request.client)
+            return consent is None or not consent.covers(request.scope)
+
+Pass it to ``get_consent_grant``. When the user must go through an
+interaction, such as a login, it is in ``grant.interactions``, and
+``grant.prompt`` is the first of them::
+
+    def authorize(request):
+        user = request.user if request.user.is_authenticated else None
+        authorization_session = MyAuthorizationSession(user, request.session)
+        try:
+            grant = server.get_consent_grant(request, session=authorization_session)
+        except OAuth2Error as error:
+            return server.handle_error_response(request, error)
+
+        if request.method == "GET" and grant.prompt == "login":
+            return redirect_to_login(request.get_full_path())
+        ...

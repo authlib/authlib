@@ -1,0 +1,14 @@
+Breaking changes
+~~~~~~~~~~~~~~~~
+
+- The RFC 7592 client configuration endpoint passes the arguments of
+  ``revoke_access_token`` by name. Subclasses must name its parameters
+  ``token`` and ``request``.
+
+Fixed
+~~~~~
+
+- The RFC 7592 client configuration endpoint passes the token and the request
+  to ``revoke_access_token`` in the documented ``(token, request)`` order. It
+  used to swap them. Subclasses that use the swapped ``(request, token)``
+  signature keep working.

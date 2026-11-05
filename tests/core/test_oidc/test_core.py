@@ -4,15 +4,23 @@ import pytest
 from joserfc.errors import InvalidClaimError
 from joserfc.errors import MissingClaimError
 
+from authlib.deprecate import AuthlibDeprecationWarning
+from authlib.oauth2.rfc6749 import AuthorizationServer
+from authlib.oauth2.rfc6749 import InvalidRequestError
 from authlib.oauth2.rfc6749.grants import AuthorizationEndpointMixin
 from authlib.oauth2.rfc6749.grants import BaseGrant
 from authlib.oauth2.rfc6749.grants import TokenEndpointMixin
+from authlib.oidc.core import AuthorizationSessionMixin
 from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core import HybridIDToken
 from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core import OpenIDCode
 from authlib.oidc.core import UserInfo
 from authlib.oidc.core import get_claim_cls_by_response_type
+from authlib.oidc.core.errors import LoginRequiredError
+from authlib.oidc.core.grants.util import validate_request_prompt
+
+USER = object()
 
 
 def test_essential_claims():
@@ -168,6 +176,14 @@ def test_get_claim_cls_by_response_type():
     assert cls == CodeIDToken
     cls = get_claim_cls_by_response_type("code id_token")
     assert cls == HybridIDToken
+    cls = get_claim_cls_by_response_type("token id_token")
+    assert cls == ImplicitIDToken
+    cls = get_claim_cls_by_response_type("token id_token code")
+    assert cls == HybridIDToken
+    cls = get_claim_cls_by_response_type("code code")
+    assert cls is None
+    cls = get_claim_cls_by_response_type(None)
+    assert cls is None
     cls = get_claim_cls_by_response_type("none")
     assert cls is None
 
@@ -217,11 +233,12 @@ def test_openid_code_on_custom_grant(monkeypatch):
 
     monkeypatch.setattr(
         "authlib.oidc.core.grants.code.validate_request_prompt",
-        lambda grant, redirect_uri: calls.append(
+        lambda grant, redirect_uri, **kwargs: calls.append(
             ("validate_request_prompt", redirect_uri)
         ),
     )
-    request = types.SimpleNamespace(payload=types.SimpleNamespace(scope="openid"))
+    payload = types.SimpleNamespace(scope="openid", data={})
+    request = types.SimpleNamespace(payload=payload)
     grant = CustomCodeGrant(request, None)
     RecordingOpenIDCode()(grant)
 
@@ -234,3 +251,174 @@ def test_openid_code_on_custom_grant(monkeypatch):
         ("validate_request_prompt", "https://client.test/cb"),
         ("process_token", "token response"),
     ]
+
+
+class FixedSession(AuthorizationSessionMixin):
+    """An authorization session with fixed times."""
+
+    def __init__(self, request_time=None, account_selection_needed=False, **times):
+        self.request_time = request_time
+        self.account_selection_needed = account_selection_needed
+        self.times = times
+
+    def get_user(self):
+        return USER
+
+    def get_request_time(self, request):
+        return self.request_time
+
+    def get_interaction_time(self, request, interaction):
+        return self.times.get(interaction)
+
+    def is_account_selection_needed(self, request):
+        return self.account_selection_needed
+
+
+def validate_prompt(
+    prompt=None, max_age=None, user=USER, session=None, default_max_age=None
+):
+    """Validate a request, and return its interactions."""
+    data = {"prompt": prompt, "max_age": max_age}
+    payload = types.SimpleNamespace(
+        data={k: v for k, v in data.items() if v is not None}
+    )
+    client = types.SimpleNamespace(default_max_age=default_max_age)
+    request_time = session.request_time if session else None
+    request = types.SimpleNamespace(
+        payload=payload, user=user, client=client, request_time=request_time
+    )
+    grant = types.SimpleNamespace(
+        request=request,
+        interactions=[],
+        server=AuthorizationServer(),
+        authorization_session=session,
+    )
+    validate_request_prompt(grant, None)
+    return grant.interactions
+
+
+@pytest.mark.parametrize("prompt", ["login", "consent", "select_account"])
+def test_interaction_after_request_time(prompt):
+    """An interaction that the request asks for is done when it happened
+    after the start of the request."""
+    for interaction_time, request_time in [(1000, 1000), (1000, 999.5)]:
+        session = FixedSession(request_time, **{prompt: interaction_time})
+        assert validate_prompt(prompt, session=session) == []
+
+    session = FixedSession(1000, **{prompt: 999})
+    assert validate_prompt(prompt, session=session) == [prompt]
+
+    session = FixedSession(None, **{prompt: 10**12})
+    assert validate_prompt(prompt, session=session) == [prompt]
+
+
+def test_unknown_auth_time():
+    """When the login time is unknown, the user must log in."""
+    assert validate_prompt("login", session=FixedSession(0)) == ["login"]
+
+
+def test_default_max_age():
+    """The default_max_age client metadata applies without max_age."""
+    session = FixedSession(1061, login=1000)
+    assert validate_prompt(session=session, default_max_age=60) == ["login"]
+    assert validate_prompt(session=session, default_max_age=-1) == []
+
+
+def test_max_age_overrides_default_max_age():
+    """The max_age parameter overrides default_max_age."""
+    session = FixedSession(1061, login=1000)
+    interactions = validate_prompt(max_age=3600, session=session, default_max_age=60)
+    assert interactions == []
+
+
+@pytest.mark.parametrize("max_age", [-1, True, 1.5, "abc"])
+def test_max_age_invalid_value(max_age):
+    """A negative, boolean, float or non-numeric max_age gives
+    invalid_request."""
+    with pytest.raises(InvalidRequestError):
+        validate_prompt(max_age=max_age, session=FixedSession())
+
+
+def test_account_selection_needed():
+    """The authorization session can require the account selection. It is
+    done when the user selects an account or logs in after the request
+    started."""
+    session = FixedSession(1000, login=0, account_selection_needed=True)
+    assert validate_prompt(session=session) == ["select_account"]
+
+    for times in [{"select_account": 1000, "login": 0}, {"login": 1000}]:
+        session = FixedSession(1000, account_selection_needed=True, **times)
+        assert validate_prompt(session=session) == []
+
+
+@pytest.mark.parametrize(
+    "params,interactions",
+    [
+        ({"prompt": "login"}, ["login"]),
+        ({"max_age": 0}, ["login"]),
+        ({"default_max_age": 0}, ["login"]),
+        ({"max_age": 60}, []),
+        ({"prompt": "consent"}, ["consent"]),
+    ],
+)
+def test_without_authorization_session(params, interactions):
+    """Without an authorization session, only prompt and max_age=0 add
+    interactions, and a deprecation warning is shown."""
+    with pytest.warns(AuthlibDeprecationWarning, match="authorization session"):
+        assert validate_prompt(**params) == interactions
+
+
+def test_consent_after_login():
+    """After the login, prompt=consent still applies."""
+    session = FixedSession(1000, login=1000)
+    assert validate_prompt("login consent", session=session) == ["consent"]
+
+
+def test_login_counts_as_account_selection():
+    """A login after the start of the request satisfies
+    prompt=select_account."""
+    session = FixedSession(1000, login=1000)
+    assert validate_prompt("select_account", session=session) == []
+
+    session = FixedSession(1000, login=999)
+    assert validate_prompt("select_account", session=session) == ["select_account"]
+
+
+@pytest.mark.parametrize(
+    "user,prompt,interactions",
+    [
+        (None, "select_account login consent", ["login", "consent"]),
+        (USER, "consent select_account", ["select_account", "consent"]),
+        (
+            USER,
+            "consent login select_account",
+            ["login", "select_account", "consent"],
+        ),
+        (USER, "none", []),
+    ],
+)
+def test_interactions(user, prompt, interactions):
+    """The interactions are listed in order: login, account selection, then
+    consent. An anonymous user selects their account when they log in."""
+    session = FixedSession(login=0)
+    assert validate_prompt(prompt, user=user, session=session) == interactions
+
+
+def test_prompt_none_without_user():
+    """With prompt=none, a needed login gives login_required right away."""
+    with pytest.raises(LoginRequiredError):
+        validate_prompt("none", user=None, session=FixedSession())
+
+
+def test_anonymous_interactions():
+    """For an anonymous user, the interactions that prompt asks for are added
+    without looking at the session."""
+
+    class FailingSession(FixedSession):
+        def get_interaction_time(self, request, interaction):
+            assert interaction == "login"
+
+    interactions = validate_prompt(
+        "consent select_account", user=None, session=FailingSession()
+    )
+    assert interactions == ["login", "consent"]

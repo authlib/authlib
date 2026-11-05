@@ -71,7 +71,7 @@ methods in order to use it. Here is an example::
             # if using client_id as issuer
             return Client.objects.get(client_id=issuer)
 
-        def resolve_client_key(self, client, headers, payload):
+        def resolve_client_public_key(self, client):
             # if client has `jwks` column
             key_set = KeySet.import_key_set(client.jwks)
             return key_set

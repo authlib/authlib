@@ -3,10 +3,16 @@ import time
 
 import pytest
 
+from authlib.deprecate import AuthlibDeprecationWarning
+from authlib.oauth2.rfc6749 import AuthorizationSessionMixin
 from authlib.oauth2.rfc6749 import OAuth2Token
 from authlib.oauth2.rfc6749 import errors
 from authlib.oauth2.rfc6749 import parameters
 from authlib.oauth2.rfc6749 import util
+from authlib.oauth2.rfc6749.grants.base import AuthorizationEndpointMixin
+from authlib.oauth2.rfc6749.grants.base import BaseGrant
+from authlib.oauth2.rfc6749.requests import BasicOAuth2Payload
+from authlib.oauth2.rfc6749.requests import OAuth2Request
 
 
 def test_parse_authorization_code_response():
@@ -70,6 +76,37 @@ def test_scope_to_list():
     assert util.scope_to_list(None) is None
 
 
+@pytest.mark.parametrize(
+    "response_type,expected",
+    [
+        ("code", "code"),
+        ("token id_token code", "code id_token token"),
+        (" code  id_token ", "code id_token"),
+        ("code code", "code code"),
+        ("code\tid_token", "code\tid_token"),
+        ("", ""),
+        (None, None),
+    ],
+)
+def test_normalize_response_type(response_type, expected):
+    assert util.normalize_response_type(response_type) == expected
+
+
+def test_check_authorization_endpoint_unsorted_response_types():
+    """A grant can declare its response types in any order."""
+
+    class CustomGrant(AuthorizationEndpointMixin):
+        RESPONSE_TYPES = {"token code"}
+
+    request = OAuth2Request("GET", "https://provider.test/authorize")
+    for response_type in ("token code", "code token"):
+        request.payload = BasicOAuth2Payload({"response_type": response_type})
+        assert CustomGrant.check_authorization_endpoint(request)
+
+    request.payload = BasicOAuth2Payload({"response_type": "code"})
+    assert not CustomGrant.check_authorization_endpoint(request)
+
+
 def test_extract_basic_authorization():
     assert util.extract_basic_authorization({}) == (None, None)
     assert util.extract_basic_authorization({"Authorization": "invalid"}) == (
@@ -105,3 +142,59 @@ def test_oauth2token_is_expired_with_valid_token():
     future = int(time.time()) + 7200
     token = OAuth2Token({"access_token": "a", "expires_at": future})
     assert token.is_expired() is False
+
+
+def test_grant_prompt_is_the_first_interaction():
+    """grant.prompt is the first interaction, or None."""
+    grant = BaseGrant(None, None)
+    assert grant.interactions == []
+    assert grant.prompt is None
+
+    grant.interactions.extend(["login", "consent"])
+    assert grant.prompt == "login"
+
+
+def test_grant_prompt_setter_is_deprecated():
+    """Setting grant.prompt is deprecated. It changes grant.prompt only, not
+    grant.interactions."""
+    grant = BaseGrant(None, None)
+    grant.interactions.append("login")
+    with pytest.warns(AuthlibDeprecationWarning, match="grant.interactions"):
+        grant.prompt = "none"
+
+    assert grant.prompt == "none"
+    assert grant.interactions == ["login"]
+
+
+def test_authorization_session_defaults():
+    """By default, an authorization session knows no time, needs no consent,
+    and no interaction is done."""
+    session = AuthorizationSessionMixin()
+    request = OAuth2Request("GET", "https://server.test/authorize")
+    assert session.get_request_time(request) is None
+    assert session.get_interaction_time(request, "login") is None
+    assert not session.is_consent_needed(request)
+    assert session.end_request(request) is None
+    assert not session.is_interaction_done(request, "login")
+
+
+def test_request_time_loader_error():
+    """When the authorization session fails to give the start time, the next
+    read tries again."""
+    request = OAuth2Request("GET", "https://server.test/authorize")
+    calls = []
+
+    def loader(request):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("store down")
+
+        return 1000
+
+    request._request_time_loader = loader
+    with pytest.raises(RuntimeError):
+        assert request.request_time
+
+    assert request.request_time == 1000
+    assert request.request_time == 1000
+    assert len(calls) == 2

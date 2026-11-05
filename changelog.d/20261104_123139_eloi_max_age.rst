@@ -1,0 +1,40 @@
+Breaking changes
+~~~~~~~~~~~~~~~~
+
+- ``OAuth2AuthorizationCodeMixin`` has an ``issued_at`` column, and
+  ``is_expired`` uses it. The ``auth_time`` column is now the time of the user
+  authentication, and it is nullable. In your migration, add the
+  ``issued_at`` column, copy the ``auth_time`` values into it, and make
+  ``auth_time`` nullable.
+
+Added
+~~~~~
+
+- The OpenID Connect grants enforce the ``max_age`` parameter and the
+  ``default_max_age`` client metadata, with the login time of the
+  authorization session. When the last login is too old, ``"login"`` is added
+  to ``grant.interactions``, and with ``prompt=none`` the server returns
+  ``login_required``. ``max_age=0`` works like ``prompt=login``, and an
+  invalid ``max_age`` gives an ``invalid_request`` error.
+- The ``StepUpAuthentication`` extension of RFC 9470 enforces ``max_age`` for
+  the requests without the ``openid`` scope too. The ``acr_values`` parameter
+  and the rest of RFC 9470 are not supported yet.
+- The ``framework_request`` property of the Flask and Django OAuth 2.0
+  requests gives the request of the framework.
+- ``OAuth2ClientMixin`` has a ``default_max_age`` property.
+
+Fixed
+~~~~~
+
+- The ``auth_time`` claim of the ID token is the login time of the
+  authorization session. It used to be the time the ID token or the
+  authorization code was created. In the code and hybrid flows, store
+  ``request.auth_time`` in ``save_authorization_code``. When the time is
+  unknown, the ID token has no ``auth_time``.
+
+Deprecated
+~~~~~~~~~~
+
+- Using the OpenID Connect grants without an authorization session is
+  deprecated. Until then, ``max_age`` is only enforced when it is ``0``, and
+  ``auth_time`` is the current time. It will be required in version 1.11.

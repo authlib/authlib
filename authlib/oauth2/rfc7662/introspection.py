@@ -1,6 +1,5 @@
-from authlib.consts import default_json_headers
-
 from ..rfc6749 import InvalidRequestError
+from ..rfc6749 import JsonResponse
 from ..rfc6749 import TokenEndpoint
 from ..rfc6749 import UnsupportedTokenTypeError
 
@@ -51,7 +50,7 @@ class IntrospectionEndpoint(TokenEndpoint):
     def create_endpoint_response(self, request):
         """Validate introspection request and create the response.
 
-        :returns: (status_code, body, headers)
+        :returns: an :class:`~authlib.oauth2.rfc6749.OAuth2Response`
         """
         # The authorization server first validates the client credentials
         client = self.authenticate_endpoint_client(request)
@@ -62,7 +61,7 @@ class IntrospectionEndpoint(TokenEndpoint):
 
         # the authorization server invalidates the token
         body = self.create_introspection_payload(token)
-        return 200, body, default_json_headers
+        return JsonResponse(body)
 
     def create_introspection_payload(self, token):
         # the token is not active, does not exist on this server, or the

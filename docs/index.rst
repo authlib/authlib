@@ -13,7 +13,7 @@ The ultimate Python library in building OAuth and OpenID Connect servers and cli
 It is designed from low level specifications implementations to high level
 frameworks integrations, to meet the needs of everyone.
 
-Authlib is compatible with Python3.10+.
+Authlib is compatible with Python3.11+.
 
 .. toctree::
     :maxdepth: 2

@@ -1,11 +1,10 @@
 import logging
 
-from authlib.common.urls import add_params_to_uri
-
 from ..errors import AccessDeniedError
 from ..errors import InvalidScopeError
 from ..errors import OAuth2Error
 from ..errors import UnauthorizedClientError
+from ..responses import AuthorizationResponse
 from .base import AuthorizationEndpointMixin
 from .base import BaseGrant
 
@@ -78,6 +77,9 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
     GRANT_TYPE = "implicit"
     ERROR_RESPONSE_FRAGMENT = True
 
+    #: Per RFC 6749 §4.2.2, the access token goes in the fragment.
+    RESPONSE_MODE = "fragment"
+
     def validate_authorization_request(self):
         """The client constructs the request URI by adding the following
         parameters to the query component of the authorization endpoint URI
@@ -120,8 +122,7 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
         # ignore validate for response_type, since it is validated by
         # check_authorization_endpoint
 
-        # The implicit grant type is optimized for public clients
-        client = self.authenticate_token_endpoint_client()
+        client = self.query_authorization_client()
         log.debug("Validate authorization request of %r", client)
 
         redirect_uri = self.validate_authorization_redirect_uri(self.request, client)
@@ -199,25 +200,24 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
         :param redirect_uri: Redirect to the given URI for the authorization
         :param grant_user: if resource owner granted the request, pass this
             resource owner, otherwise pass None.
-        :returns: (status_code, body, headers)
+        :returns: an :class:`~authlib.oauth2.rfc6749.AuthorizationResponse`
         """
-        state = self.request.payload.state
-        if grant_user:
-            self.request.user = grant_user
-            token = self.generate_token(
-                user=grant_user,
-                scope=self.request.scope,
-                include_refresh_token=False,
-            )
-            log.debug("Grant token %r to %r", token, self.request.client)
-
-            self.save_token(token)
-            params = [(k, token[k]) for k in token]
-            if state:
-                params.append(("state", state))
-
-            uri = add_params_to_uri(redirect_uri, params, fragment=True)
-            headers = [("Location", uri)]
-            return 302, "", headers
-        else:
+        if not grant_user:
             raise AccessDeniedError(redirect_uri=redirect_uri, redirect_fragment=True)
+
+        self.request.user = grant_user
+        token = self.generate_token(
+            user=grant_user,
+            scope=self.request.scope,
+            include_refresh_token=False,
+        )
+        log.debug("Grant token %r to %r", token, self.request.client)
+
+        self.save_token(token)
+        params = [(k, token[k]) for k in token]
+        if self.request.payload.state:
+            params.append(("state", self.request.payload.state))
+
+        return AuthorizationResponse(
+            redirect_uri, params, self.response_mode or self.RESPONSE_MODE
+        )

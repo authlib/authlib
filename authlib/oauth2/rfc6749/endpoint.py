@@ -13,6 +13,7 @@ from typing import Any
 
 if TYPE_CHECKING:
     from .requests import OAuth2Request
+    from .responses import OAuth2Response
 
 
 @dataclass
@@ -66,25 +67,23 @@ class Endpoint:
 
     def create_response(
         self, validated_request: EndpointRequest
-    ) -> tuple[int, Any, list] | None:
+    ) -> OAuth2Response | None:
         """Create the HTTP response from a validated request.
 
         :param validated_request: The validated EndpointRequest
-        :returns: Tuple of (status_code, body, headers), or None if the
-            application should provide its own response
+        :returns: an :class:`~authlib.oauth2.rfc6749.OAuth2Response`, or None if
+            the application should provide its own response
         """
         raise NotImplementedError()
 
-    def create_endpoint_response(
-        self, request: OAuth2Request
-    ) -> tuple[int, Any, list] | None:
+    def create_endpoint_response(self, request: OAuth2Request) -> OAuth2Response | None:
         """Validate and respond in one step (non-interactive mode).
 
         :param request: The OAuth2Request to process
-        :returns: Tuple of (status_code, body, headers), or None
+        :returns: an :class:`~authlib.oauth2.rfc6749.OAuth2Response`, or None
         """
         validated = self.validate_request(request)
         return self.create_response(validated)
 
-    def __call__(self, request: OAuth2Request) -> tuple[int, Any, list] | None:
+    def __call__(self, request: OAuth2Request) -> OAuth2Response | None:
         return self.create_endpoint_response(request)

@@ -12,6 +12,7 @@ Server.
         register_endpoint,
         get_consent_grant,
         create_authorization_response,
+        defer_anonymous_errors,
         create_token_response,
         create_endpoint_response
 

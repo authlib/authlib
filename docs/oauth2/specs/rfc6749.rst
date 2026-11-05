@@ -34,6 +34,17 @@ Servers
 .. autoclass:: ResourceProtector
     :members:
 
+Responses
+~~~~~~~~~
+
+.. autoclass:: OAuth2Response
+
+.. autoclass:: JsonResponse
+
+.. autoclass:: RedirectResponse
+
+.. autoclass:: AuthorizationResponse
+
 Client Model
 ~~~~~~~~~~~~
 
@@ -49,6 +60,13 @@ Token Model
     :members:
 
 .. autoclass:: TokenMixin
+    :members:
+
+Authorization Session
+~~~~~~~~~~~~~~~~~~~~~
+
+.. autoclass:: AuthorizationSessionMixin
+    :member-order: bysource
     :members:
 
 Errors

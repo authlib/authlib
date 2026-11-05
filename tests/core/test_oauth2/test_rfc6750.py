@@ -107,3 +107,13 @@ def test_form_body_token_without_form(request_class):
     )
     _, token_string = protector.parse_request_authorization(request)
     assert token_string == "a1"
+
+
+def test_missing_authorization_error_with_realm():
+    """A request without credentials gets a challenge with the realm and no
+    error code."""
+    error = MissingAuthorizationError("bearer", "example")
+    status_code, body, headers = error()
+    assert status_code == 401
+    assert body == {}
+    assert ("WWW-Authenticate", 'Bearer realm="example"') in headers

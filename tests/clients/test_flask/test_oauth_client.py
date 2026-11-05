@@ -251,6 +251,29 @@ def test_oauth2_authorize_cache():
         assert client.token is None
 
 
+class StrictCache(SimpleCache):
+    def delete(self, key):
+        raise ValueError(f"Invalid cache key: {key!r}")
+
+
+def test_oauth2_authorize_unknown_state_with_cache():
+    """An unknown state is refused, and never reaches the cache."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app, cache=StrictCache())
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        access_token_url="https://provider.test/token",
+        authorize_url="https://provider.test/authorize",
+    )
+
+    with app.test_request_context(path="/?code=a&state=a%20b"):
+        with pytest.raises(OAuthError, match="mismatching_state"):
+            client.authorize_access_token()
+
+
 def test_oauth2_authorize_session():
     app = Flask(__name__)
     app.secret_key = "!"

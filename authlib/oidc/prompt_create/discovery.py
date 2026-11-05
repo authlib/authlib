@@ -16,7 +16,13 @@ class OpenIDProviderMetadata(dict):
 
         metadata = discovery.OpenIDProviderMetadata({
             ...,
-            "prompt_values_supported": ["none", "login", "consent", "create"],
+            "prompt_values_supported": [
+                "none",
+                "login",
+                "consent",
+                "select_account",
+                "create",
+            ],
         })
         metadata.validate(metadata_classes=[prompt_create.OpenIDProviderMetadata])
     """

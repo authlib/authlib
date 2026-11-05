@@ -49,7 +49,7 @@ def client(client, db):
 
 
 def test_missing_code_challenge(test_client):
-    rv = test_client.get(authorize_url + "&code_challenge_method=plain")
+    rv = test_client.get(authorize_url + "&code_challenge_method=plain&user_id=1")
     assert "Missing" in rv.location
 
 
@@ -57,26 +57,44 @@ def test_has_code_challenge(test_client):
     rv = test_client.get(
         authorize_url + "&code_challenge=Zhs2POMonIVVHZteWfoU7cSXQSm0YjghikFGJSDI2_s"
     )
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
 
 def test_invalid_code_challenge(test_client):
     rv = test_client.get(
-        authorize_url + "&code_challenge=abc&code_challenge_method=plain"
+        authorize_url + "&code_challenge=abc&code_challenge_method=plain&user_id=1"
     )
     assert "Invalid" in rv.location
 
 
 def test_invalid_code_challenge_method(test_client):
     suffix = "&code_challenge=Zhs2POMonIVVHZteWfoU7cSXQSm0YjghikFGJSDI2_s&code_challenge_method=invalid"
-    rv = test_client.get(authorize_url + suffix)
+    rv = test_client.get(authorize_url + suffix + "&user_id=1")
     assert "Unsupported" in rv.location
 
 
 def test_supported_code_challenge_method(test_client):
     suffix = "&code_challenge=Zhs2POMonIVVHZteWfoU7cSXQSm0YjghikFGJSDI2_s&code_challenge_method=plain"
     rv = test_client.get(authorize_url + suffix)
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
+
+
+def test_multiple_code_challenge(test_client):
+    """A repeated code_challenge gives an invalid_request error."""
+    rv = test_client.get(authorize_url + "&code_challenge=abc&code_challenge=def")
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_request"
+    assert resp["error_description"] == "Multiple 'code_challenge' in request."
+
+
+def test_authorization_key_with_code_challenge(app, server):
+    """The code_challenge parameter is part of the authorization key."""
+    keys = set()
+    for challenge in ("a" * 43, "b" * 43):
+        with app.test_request_context(f"{authorize_url}&code_challenge={challenge}"):
+            keys.add(server.get_consent_grant().request.authorization_key)
+
+    assert len(keys) == 2
 
 
 def test_trusted_client_without_code_challenge(test_client, db, client):
@@ -94,7 +112,7 @@ def test_trusted_client_without_code_challenge(test_client, db, client):
     db.session.commit()
 
     rv = test_client.get(authorize_url)
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
     rv = test_client.post(authorize_url, data={"user_id": "1"})
     assert "code=" in rv.location
@@ -133,7 +151,7 @@ def test_code_verifier_without_code_challenge(test_client, db, client):
     db.session.commit()
 
     rv = test_client.get(authorize_url)
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
     rv = test_client.post(authorize_url, data={"user_id": "1"})
     assert "code=" in rv.location

@@ -125,16 +125,19 @@ after subclassing it to implement all required hooks::
                 raise InvalidGrantError(description="Untrusted issuer")
             return KeySet.import_key_set(idp.get_jwks())
 
-        def authenticate_user(self, subject):
-            return User.query.filter_by(sub=subject).first()
+        def resolve_user(self, claims):
+            return User.query.filter_by(
+                issuer=claims["iss"], sub=claims["sub"]
+            ).first()
 
         def check_jti(self, claims, jti):
-            if UsedJTI.query.filter_by(jti=jti).first():
+            if UsedJTI.query.filter_by(issuer=claims["iss"], jti=jti).first():
                 return False
-            UsedJTI.create(jti=jti, exp=claims["exp"])
+
+            UsedJTI.create(issuer=claims["iss"], jti=jti, exp=claims["exp"])
             return True
 
-        def check_id_jag_permission(self, client, user, scopes):
+        def check_id_jag_permission(self, client, user, scopes, claims):
             return AccessPolicy.is_allowed(client, user, scopes)
 
     # Register the grant
@@ -171,6 +174,20 @@ method. For example, to also support ``client_secret_post``::
 Custom methods, such as ``private_key_jwt``, must also be registered with the
 authorization server. The draft recommends confidential clients; ``none`` is
 not enabled by default.
+
+Users
+~~~~~
+
+The ``sub`` claim is only unique within the IdP that issued the ID-JAG
+(ID-JAG draft -06 §3.1). When the Resource Authorization Server trusts
+several IdPs, resolve the user with the ``iss`` and ``sub`` claims (§4.1).
+Otherwise, an IdP can get access tokens for the users of another IdP.
+:meth:`IDJAGGrant.resolve_user` receives the verified claims of the ID-JAG,
+as in the example above.
+
+For a multi-tenant IdP, also check the ``tenant`` claim, and resolve the user
+within that tenant (§4.4.1). Return ``None`` to reject the ID-JAG. A
+``tenant`` claim that is not a string is rejected with ``invalid_grant``.
 
 Scope
 ~~~~~
@@ -249,12 +266,13 @@ Required Hooks
    * - ``resolve_issuer_key(issuer, headers)``
      - Fetch the IdP's public key(s) by issuer identifier.  ``headers``
        contains the JWT headers (including ``kid``) for key selection.
-   * - ``authenticate_user(subject)``
-     - Look up the user by the ``sub`` claim value.
+   * - ``resolve_user(claims)``
+     - Look up the user by the ``iss`` and ``sub`` claims (see `Users`_).
+       Return ``None`` to reject the ID-JAG.
    * - ``check_jti(claims, jti)``
      - Return ``True`` if the ``jti`` is acceptable (first use), ``False``
        if it is a replay.
-   * - ``check_id_jag_permission(client, user, scopes)``
+   * - ``check_id_jag_permission(client, user, scopes, claims)``
      - Return ``True`` if the client may act on behalf of the user for the
        scopes of the access token (see `Scope`_).
 

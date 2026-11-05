@@ -7,7 +7,6 @@ Implementation of Accessing Protected Resources per :rfc:`6749#section-7`.
 from authlib.common.hooks import Hookable
 
 from .errors import MissingAuthorizationError
-from .errors import UnsupportedTokenTypeError
 from .util import scope_to_list
 
 
@@ -98,7 +97,8 @@ class ResourceProtector(Hookable):
 
             resource_protector.register_extension(my_extension)
         """
-        self._extensions.append(extension(self))
+        extension(self)
+        self._extensions.append(extension)
 
     def register_token_validator(self, validator: TokenValidator):
         """Register a token validator for a given Authorization type.
@@ -115,7 +115,9 @@ class ResourceProtector(Hookable):
         """Get token validator from registry for the given token type."""
         validator = self._token_validators.get(token_type.lower())
         if not validator:
-            raise UnsupportedTokenTypeError(
+            # Per RFC 6750 §3.1, an unsupported authentication method is
+            # handled like a request without authentication information.
+            raise MissingAuthorizationError(
                 self._default_auth_type, self._default_realm
             )
         return validator
@@ -131,7 +133,6 @@ class ResourceProtector(Hookable):
 
         :return: validator, token_string
         :raise: MissingAuthorizationError
-        :raise: UnsupportedTokenTypeError
         """
         auth = request.headers.get("Authorization")
         if not auth:
@@ -142,7 +143,7 @@ class ResourceProtector(Hookable):
         # https://tools.ietf.org/html/rfc6749#section-7.1
         token_parts = auth.split(None, 1)
         if len(token_parts) != 2:
-            raise UnsupportedTokenTypeError(
+            raise MissingAuthorizationError(
                 self._default_auth_type, self._default_realm
             )
 

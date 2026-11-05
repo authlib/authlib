@@ -1,3 +1,5 @@
+from functools import partial
+
 from authlib.common.errors import ContinueIteration
 from authlib.common.hooks import Hookable
 from authlib.deprecate import deprecate
@@ -9,8 +11,14 @@ from .errors import InvalidScopeError
 from .errors import OAuth2Error
 from .errors import UnsupportedGrantTypeError
 from .errors import UnsupportedResponseTypeError
+from .grants.base import AuthorizationEndpointMixin
+from .grants.base import validate_no_repeated_parameter
 from .requests import JsonRequest
 from .requests import OAuth2Request
+from .responses import AuthorizationResponse
+from .responses import JsonResponse
+from .responses import OAuth2Response
+from .responses import _encode_redirect
 from .util import scope_to_list
 
 
@@ -21,6 +29,15 @@ class AuthorizationServer(Hookable):
     :param scopes_supported: A list of supported scopes by this authorization server.
     """
 
+    #: Per RFC 9700 §4.11.2, the server must authenticate the user before it
+    #: redirects them. When the request of an anonymous user has an error
+    #: for the redirect URI, :meth:`get_consent_grant` returns the grant with
+    #: the ``"login"`` interaction instead of raising it. The error is raised
+    #: after the login. An error without a grant, such as
+    #: ``unsupported_response_type``, is not redirected. Silent requests,
+    #: such as the OpenID Connect ``prompt=none``, are not concerned.
+    defer_anonymous_errors = True
+
     def __init__(self, scopes_supported=None):
         super().__init__()
         self.scopes_supported = scopes_supported
@@ -30,6 +47,7 @@ class AuthorizationServer(Hookable):
         self._token_grants = []
         self._endpoints = {}
         self._extensions = []
+        self._authorization_parameters = {}
 
     def query_client(self, client_id):
         """Query OAuth client by client_id. The client model class MUST
@@ -153,7 +171,28 @@ class AuthorizationServer(Hookable):
         self._client_auth.register(method, func)
 
     def register_extension(self, extension):
-        self._extensions.append(extension(self))
+        extension(self)
+        self._extensions.append(extension)
+
+    def register_authorization_parameters(self, parameters):
+        """Add authorization request parameters to all the grants. A server
+        extension calls it with the parameters it introduces::
+
+            server.register_authorization_parameters({"response_mode": str})
+
+        :param parameters: a dict of parameter names and JSON types
+        """
+        self._authorization_parameters.update(parameters)
+
+    @property
+    def authorization_parameters(self):
+        """The authorization request parameters known before a grant is
+        chosen, with their JSON types: those of RFC 6749 and of the server
+        extensions."""
+        return {
+            **AuthorizationEndpointMixin.AUTHORIZATION_PARAMETERS,
+            **self._authorization_parameters,
+        }
 
     def get_error_uri(self, request, error):
         """Return a URI for the given error, framework may implement this method."""
@@ -246,6 +285,7 @@ class AuthorizationServer(Hookable):
         redirect_uri = None
         if client_id := request.payload.client_id:
             if client := self.query_client(client_id):
+                request.client = client
                 if requested_uri := request.payload.redirect_uri:
                     if client.check_redirect_uri(requested_uri):
                         redirect_uri = requested_uri
@@ -258,26 +298,79 @@ class AuthorizationServer(Hookable):
             redirect_uri=redirect_uri,
         )
 
-    def get_consent_grant(self, request=None, end_user=None):
+    def get_consent_grant(self, request=None, end_user=None, session=None):
         """Validate current HTTP request for authorization page. This page
         is designed for resource owner to grant or deny the authorization.
+
+        :param request: HTTP request instance
+        :param end_user: the logged-in user, or ``None``
+        :param session: an
+            :class:`~authlib.oauth2.rfc6749.AuthorizationSessionMixin`. Its
+            user replaces ``end_user``.
+        :raises ValueError: if ``end_user`` is not the user of ``session``
         """
         request = self.create_oauth2_request(request)
+        if session is not None:
+            user = session.get_user()
+            if end_user is not None and end_user != user:
+                raise ValueError("'end_user' is not the user of the 'session'.")
 
+            end_user = user
+
+        grant = None
         try:
             request.user = end_user
+            validate_no_repeated_parameter(request, self.authorization_parameters)
 
             grant = self.get_authorization_grant(request)
+            grant.authorization_session = session
             grant.validate_no_multiple_request_parameter(request)
+            request.authorization_key = grant.get_authorization_key()
+            if session is not None:
+                request._request_time_loader = partial(_load_request_time, grant)
+
             grant.validate_consent_request()
+            grant.validate_interactions()
+            if grant.interactions:
+                _keep_request_time(request)
 
         except OAuth2Error as error:
             # REQUIRED if a "state" parameter was present in the client
             # authorization request.  The exact value received from the
             # client.
             error.state = request.payload.state
+            _set_error_response_mode(error, grant)
+            if self._is_deferred(request, grant, error):
+                error.redirect_uri = None
+                if grant is not None:
+                    grant.interactions = ["login"]
+                    grant._deferred_error = error
+                    _keep_request_time(request)
+                    return grant
+
+            if session is not None:
+                session.end_request(request)
+
+            _check_error_redirect(session, request, error)
             raise
+
+        except Exception:
+            if session is not None:
+                session.end_request(request)
+
+            raise
+
         return grant
+
+    def _is_deferred(self, request, grant, error):
+        """Tell if an error must wait for the login of the user before it is
+        redirected. Per RFC 9700 §4.11.2."""
+        return (
+            self.defer_anonymous_errors
+            and error.redirect_uri is not None
+            and not request.user
+            and (grant is None or not grant.silent)
+        )
 
     def get_token_grant(self, request):
         """Find the token grant for current request.
@@ -339,7 +432,7 @@ class AuthorizationServer(Hookable):
                 result = endpoint.create_response(request)
                 if result is None:
                     return None
-                return self.handle_response(*result)
+                return self._send_response(result)
             except OAuth2Error as error:
                 return self.handle_error_response(request.request, error)
 
@@ -350,7 +443,7 @@ class AuthorizationServer(Hookable):
                 result = endpoint(request)
                 if result is None:
                     return None
-                return self.handle_response(*result)
+                return self._send_response(result)
             except ContinueIteration:
                 continue
             except OAuth2Error as error:
@@ -362,29 +455,58 @@ class AuthorizationServer(Hookable):
         :param request: HTTP request instance.
         :param grant_user: if granted, it is resource owner. If denied,
             it is None.
+        :param grant: the grant returned by :meth:`get_consent_grant`
         :returns: Response
-        """
-        if not isinstance(request, OAuth2Request):
-            request = self.create_oauth2_request(request)
+        :raises TypeError: without ``grant``
+        :raises ValueError: if ``grant_user`` is not the user of the
+            authorization session
 
-        if not grant:
-            deprecate("The 'grant' parameter will become mandatory.", version="1.8")
+        When :meth:`get_consent_grant` deferred an error until the login of
+        the user, the error is returned without redirection.
+        """
+        if grant is None:
+            raise TypeError(
+                "create_authorization_response() requires the 'grant' returned "
+                "by get_consent_grant()."
+            )
+
+        session = grant.authorization_session
+        try:
+            if session is not None and grant_user is not None:
+                if grant_user != grant.request.user:
+                    raise ValueError(
+                        "'grant_user' is not the user of the authorization session."
+                    )
+
             try:
-                grant = self.get_authorization_grant(request)
-            except UnsupportedResponseTypeError as error:
-                error.state = request.payload.state
-                return self.handle_error_response(request, error)
+                if not isinstance(request, OAuth2Request):
+                    request = self.create_oauth2_request(request)
+            except OAuth2Error as error:
+                response = self.handle_error_response(request, error)
+            else:
+                response = self._create_grant_response(request, grant, grant_user)
+
+            grant.execute_hook("after_authorization_response", response)
+        finally:
+            if session is not None:
+                session.end_request(grant.request)
+
+        return response
+
+    def _create_grant_response(self, request, grant, grant_user):
+        """Return the authorization response of a grant, or its error."""
+        if grant._deferred_error is not None:
+            return self.handle_error_response(request, grant._deferred_error)
 
         try:
             redirect_uri = grant.validate_authorization_request()
-            args = grant.create_authorization_response(redirect_uri, grant_user)
-            response = self.handle_response(*args)
+            result = grant.create_authorization_response(redirect_uri, grant_user)
+            return self._send_response(result)
         except OAuth2Error as error:
-            error.state = request.payload.state
-            response = self.handle_error_response(request, error)
-
-        grant.execute_hook("after_authorization_response", response)
-        return response
+            error.state = grant.request.payload.state
+            _set_error_response_mode(error, grant)
+            _check_error_redirect(grant.authorization_session, grant.request, error)
+            return self.handle_error_response(request, error)
 
     def create_token_response(self, request=None):
         """Validate token request and create token response.
@@ -399,13 +521,60 @@ class AuthorizationServer(Hookable):
 
         try:
             grant.validate_token_request()
-            args = grant.create_token_response()
-            return self.handle_response(*args)
+            return self._send_response(grant.create_token_response())
         except OAuth2Error as error:
             return self.handle_error_response(request, error)
 
+    def encode_response(self, response):
+        """Turn a response into the arguments of :meth:`handle_response`.
+
+        :param response: an :class:`~authlib.oauth2.rfc6749.OAuth2Response`
+        :return: ``(status_code, body, headers)``
+        """
+        if isinstance(response, AuthorizationResponse):
+            response = self.encode_authorization_response(response)
+
+        return response.status_code, response.body, response.headers
+
+    def encode_authorization_response(self, response):
+        """Encode an authorization response according to its response mode.
+
+        :param response: an :class:`~authlib.oauth2.rfc6749.AuthorizationResponse`
+        :return: an :class:`~authlib.oauth2.rfc6749.OAuth2Response`
+        :raises ValueError: if the response mode is not supported
+        """
+        return _encode_redirect(response)
+
     def handle_error_response(self, request, error):
-        return self.handle_response(*error(self.get_error_uri(request, error)))
+        if error.redirect_uri:
+            response_mode = error.response_mode or (
+                "fragment" if error.redirect_fragment else "query"
+            )
+            response = AuthorizationResponse(
+                error.redirect_uri, error.get_body(), response_mode
+            )
+            return self._send_response(response)
+
+        status_code, body, headers = error(self.get_error_uri(request, error))
+        response = JsonResponse(body, status_code=status_code, headers=headers)
+        return self._send_response(response)
+
+    def _send_response(self, result):
+        """Send a response, or a legacy ``(status_code, body, headers)`` tuple."""
+        if not isinstance(result, OAuth2Response):
+            deprecate(
+                "Returning a '(status_code, body, headers)' tuple from a grant "
+                "or an endpoint is deprecated. Return an 'OAuth2Response' instead.",
+                version="1.11",
+            )
+            result = OAuth2Response(*result)
+        return self.handle_response(*self.encode_response(result))
+
+
+def _set_error_response_mode(error, grant):
+    """Send the error with the response mode chosen for the request."""
+    if error.response_mode is None:
+        error.response_mode = getattr(grant, "response_mode", None)
 
 
 def _create_grant(grant_cls, extensions, request, server):
@@ -414,3 +583,30 @@ def _create_grant(grant_cls, extensions, request, server):
         for ext in extensions:
             ext(grant)
     return grant
+
+
+def _check_error_redirect(session, request, error):
+    """Return the error without redirection when the authorization session
+    does not trust the redirect URI."""
+    if (
+        error.redirect_uri is not None
+        and session is not None
+        and not session.can_redirect_error(request, error)
+    ):
+        error.redirect_uri = None
+
+
+def _load_request_time(grant, request):
+    """Read the start time of the request from the authorization session,
+    unless the request is silent."""
+    if grant.silent:
+        return None
+
+    return grant.authorization_session.get_request_time(request)
+
+
+def _keep_request_time(request):
+    """Read the start time of the request from the authorization session, so
+    that the session keeps it until the user comes back from the
+    interactions."""
+    return request.request_time

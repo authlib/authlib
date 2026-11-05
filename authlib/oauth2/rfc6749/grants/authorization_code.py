@@ -1,14 +1,14 @@
 import logging
 
 from authlib.common.security import generate_token
-from authlib.common.urls import add_params_to_uri
 
 from ..errors import AccessDeniedError
-from ..errors import InvalidClientError
 from ..errors import InvalidGrantError
 from ..errors import InvalidRequestError
 from ..errors import OAuth2Error
 from ..errors import UnauthorizedClientError
+from ..responses import AuthorizationResponse
+from ..responses import JsonResponse
 from .base import AuthorizationEndpointMixin
 from .base import BaseGrant
 from .base import TokenEndpointMixin
@@ -143,7 +143,7 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
         :param redirect_uri: Redirect to the given URI for the authorization
         :param grant_user: if resource owner granted the request, pass this
             resource owner, otherwise pass None.
-        :returns: (status_code, body, headers)
+        :returns: an :class:`~authlib.oauth2.rfc6749.AuthorizationResponse`
         """
         if not grant_user:
             raise AccessDeniedError(redirect_uri=redirect_uri)
@@ -156,9 +156,10 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
         params = [("code", code)]
         if self.request.payload.state:
             params.append(("state", self.request.payload.state))
-        uri = add_params_to_uri(redirect_uri, params)
-        headers = [("Location", uri)]
-        return 302, "", headers
+
+        return AuthorizationResponse(
+            redirect_uri, params, self.response_mode or self.RESPONSE_MODE
+        )
 
     def validate_token_request(self):
         """The client makes a request to the token endpoint by sending the
@@ -256,7 +257,7 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
                 "example_parameter":"example_value"
             }
 
-        :returns: (status_code, body, headers)
+        :returns: an :class:`~authlib.oauth2.rfc6749.OAuth2Response`
         """
         client = self.request.client
         authorization_code = self.request.authorization_code
@@ -276,7 +277,7 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
 
         self.save_token(token)
         self.delete_authorization_code(authorization_code)
-        return 200, token, self.TOKEN_RESPONSE_HEADER
+        return JsonResponse(token, headers=self.TOKEN_RESPONSE_HEADER)
 
     def generate_authorization_code(self):
         """ "The method to generate "code" value for authorization code data.
@@ -348,20 +349,8 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
 
 def validate_code_authorization_request(grant):
     request = grant.request
-    client_id = request.payload.client_id
-    log.debug("Validate authorization request of %r", client_id)
-
-    if client_id is None:
-        raise InvalidClientError(
-            description="Missing 'client_id' parameter.",
-        )
-
-    client = grant.server.query_client(client_id)
-    if not client:
-        raise InvalidClientError(
-            description="The client does not exist on this server.",
-        )
-
+    log.debug("Validate authorization request of %r", request.payload.client_id)
+    client = grant.query_authorization_client()
     redirect_uri = grant.validate_authorization_redirect_uri(request, client)
     response_type = request.payload.response_type
     if not client.check_response_type(response_type):

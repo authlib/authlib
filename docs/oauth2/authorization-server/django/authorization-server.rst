@@ -145,16 +145,21 @@ The Authorization Server has to provide endpoints:
 
 The ``AuthorizationServer`` has provided built-in methods to handle these endpoints::
 
+    from django.contrib.auth.views import redirect_to_login
     from django.shortcuts import render
     from django.views.decorators.http import require_http_methods
 
     # use ``server.create_authorization_response`` to handle authorization endpoint
 
     def authorize(request):
+        user = request.user if request.user.is_authenticated else None
         try:
-            grant = server.get_consent_grant(request, end_user=request.user)
+            grant = server.get_consent_grant(request, end_user=user)
         except OAuth2Error as error:
             return server.handle_error_response(request, error)
+
+        if "login" in grant.interactions:
+            return redirect_to_login(request.get_full_path())
 
         if request.method == 'GET':
             scope = grant.client.get_allowed_scope(grant.request.payload.scope)
@@ -173,6 +178,12 @@ The ``AuthorizationServer`` has provided built-in methods to handle these endpoi
     @require_http_methods(["POST"])  # we only allow POST for token endpoint
     def issue_token(request):
         return server.create_token_response(request)
+
+To let Authlib know if the user must give their consent, pass an
+:class:`~authlib.oauth2.rfc6749.AuthorizationSessionMixin` to
+``get_consent_grant`` instead of the user. Its ``is_consent_needed`` method
+adds ``"consent"`` to ``grant.interactions``. :ref:`django_oidc_max_age` shows a
+complete example.
 
 For now, you have set up the authorization server. But it won't work since it doesn't
 support any grant types yet. Let's head over to the next chapter.
