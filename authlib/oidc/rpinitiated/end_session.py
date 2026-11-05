@@ -206,14 +206,28 @@ class EndSessionEndpoint(Endpoint):
         if isinstance(jwks, dict):
             jwks = KeySet.import_key_set(jwks)
 
+        algorithms = [alg for alg in self.get_algorithms() if alg != "none"]
+        if not algorithms:
+            raise InvalidRequestError("No algorithm can verify the id_token_hint.")
+
         # rpinitiated §4: "When the OP detects errors in the RP-Initiated
         # Logout request, the OP MUST not perform post-logout redirection."
         try:
-            token = jwt.decode(id_token_hint, jwks, algorithms=self.get_algorithms())
+            token = jwt.decode(id_token_hint, jwks, algorithms=algorithms)
             claims_registry = _NonExpiringClaimsRegistry(nbf={"essential": False})
             claims_registry.validate(token.claims)
         except JoseError as exc:
             raise InvalidRequestError(exc.description) from exc
+
+        # Per RFC 8725 §3.11, other kinds of JWTs, like logout tokens or
+        # access tokens, use a typ header that ID tokens do not use.
+        typ = token.header.get("typ")
+        if typ is not None and typ.lower() not in ("jwt", "application/jwt"):
+            raise InvalidRequestError("The id_token_hint is not an ID token.")
+
+        # backchannel §2.4: a logout token MUST contain the events claim.
+        if "events" in token.claims:
+            raise InvalidRequestError("The id_token_hint is not an ID token.")
 
         return dict(token.claims)
 
@@ -265,7 +279,8 @@ class EndSessionEndpoint(Endpoint):
         """Return the list of allowed algorithms for ID token validation.
 
         By default, returns all algorithms compatible with the keys in the JWKS.
-        Override to restrict to specific algorithms.
+        Override to restrict to specific algorithms. The endpoint never
+        accepts ``none``, even when this method returns it.
         """
         jwks = self.get_server_jwks()
         if isinstance(jwks, dict):

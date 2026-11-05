@@ -500,3 +500,89 @@ def test_ui_locales_extracted(server, app, test_client, client_model, valid_id_t
     )
     assert rv.status_code == 200
     assert captured["ui_locales"] == "fr-FR en"
+
+
+ID_TOKEN_CLAIMS = {
+    "iss": "https://provider.test",
+    "sub": "user-1",
+    "aud": "client-id",
+    "exp": 9999999999,
+    "iat": 1000000000,
+}
+
+
+@pytest.mark.parametrize("typ", ["logout+jwt", "at+jwt"])
+def test_typed_jwt_hint_rejected(test_client, endpoint_server, client_model, typ):
+    """A JWT with another typ, like a logout token, is not an ID token."""
+    key = KeySet.import_key_set(read_file_path("jwks_private.json"))
+    hint = jwt.encode({"alg": "RS256", "typ": typ}, ID_TOKEN_CLAIMS, key)
+    rv = test_client.get(f"/logout?id_token_hint={hint}")
+
+    assert rv.status_code == 400
+    assert rv.json["error"] == "invalid_request"
+
+
+@pytest.mark.parametrize("typ", ["JWT", "jwt"])
+def test_jwt_typ_hint_accepted(test_client, endpoint_server, client_model, typ):
+    """An ID token with the JWT typ is accepted."""
+    key = KeySet.import_key_set(read_file_path("jwks_private.json"))
+    hint = jwt.encode({"alg": "RS256", "typ": typ}, ID_TOKEN_CLAIMS, key)
+    rv = test_client.get(f"/logout?id_token_hint={hint}")
+
+    assert rv.status_code == 200
+
+
+@pytest.mark.filterwarnings("ignore::joserfc.errors.SecurityWarning")
+def test_unsigned_hint_rejected_with_oct_key(server):
+    """An unsigned hint is refused, even if the server JWKS has an oct key."""
+
+    class OctKeyEndpoint(MyEndSessionEndpoint):
+        def get_server_jwks(self):
+            return {
+                "keys": [{"kty": "oct", "k": "c2VjcmV0LXNlY3JldC1zZWNyZXQtc2VjcmV0"}]
+            }
+
+    endpoint = OctKeyEndpoint(server)
+    hint = jwt.encode({"alg": "none"}, ID_TOKEN_CLAIMS, None, algorithms=["none"])
+    with pytest.raises(OAuth2Error):
+        endpoint._validate_id_token_hint(hint)
+
+
+@pytest.mark.filterwarnings("ignore::joserfc.errors.SecurityWarning")
+def test_unsigned_hint_rejected_with_none_algorithm(server):
+    """An unsigned hint is refused, even if get_algorithms returns none."""
+
+    class NoneEndpoint(MyEndSessionEndpoint):
+        def get_algorithms(self):
+            return ["none"]
+
+    endpoint = NoneEndpoint(server)
+    hint = jwt.encode({"alg": "none"}, ID_TOKEN_CLAIMS, None, algorithms=["none"])
+    with pytest.raises(OAuth2Error):
+        endpoint._validate_id_token_hint(hint)
+
+
+@pytest.mark.parametrize("typ", ["application/jwt", "Application/JWT"])
+def test_application_jwt_typ_hint_accepted(
+    test_client, endpoint_server, client_model, typ
+):
+    """The application/jwt typ is the same as JWT, per RFC 7515 §4.1.9."""
+    key = KeySet.import_key_set(read_file_path("jwks_private.json"))
+    hint = jwt.encode({"alg": "RS256", "typ": typ}, ID_TOKEN_CLAIMS, key)
+    rv = test_client.get(f"/logout?id_token_hint={hint}")
+
+    assert rv.status_code == 200
+
+
+def test_logout_token_hint_without_typ_rejected(
+    test_client, endpoint_server, client_model
+):
+    """A logout token is refused, even without a typ header."""
+    claims = dict(
+        ID_TOKEN_CLAIMS,
+        events={"http://schemas.openid.net/event/backchannel-logout": {}},
+    )
+    hint = create_id_token(claims)
+    rv = test_client.get(f"/logout?id_token_hint={hint}")
+
+    assert rv.status_code == 400
