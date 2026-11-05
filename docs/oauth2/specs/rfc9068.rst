@@ -41,6 +41,24 @@ This module brings tools to:
 - introspect JWT access tokens with :class:`~authlib.oauth2.rfc9068.JWTIntrospectionEndpoint`
 - deny JWT access tokens revokation attempts with :class:`~authlib.oauth2.rfc9068.JWTRevocationEndpoint`
 
+Audience
+--------
+
+Per :rfc:`9068#section-2.2`, the ``aud`` claim holds the identifier of the
+resource that receives the token. Per :rfc:`9068#section-3`, the authorization
+server uses a default resource when the request has no ``resource`` parameter.
+Return it from
+:meth:`~authlib.oauth2.rfc9068.JWTBearerTokenGenerator.get_audiences`::
+
+    class MyJWTBearerTokenGenerator(JWTBearerTokenGenerator):
+        def get_audiences(self, client, user, scope):
+            return "https://api.example.org"
+
+The method can also choose the resources from the client, the user or the
+scope. The resource server gives the same identifier to
+:class:`~authlib.oauth2.rfc9068.JWTBearerTokenValidator` as
+``resource_server``.
+
 UserInfo endpoint
 -----------------
 

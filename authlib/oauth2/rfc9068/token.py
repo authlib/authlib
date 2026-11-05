@@ -4,6 +4,7 @@ from joserfc import jwt
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.security import generate_token
+from authlib.deprecate import deprecate
 from authlib.oauth2.rfc6750.token import BearerTokenGenerator
 
 
@@ -21,6 +22,9 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
             def get_jwks(self): ...
 
             def get_extra_claims(self, client, grant_type, user, scope): ...
+
+            def get_audiences(self, client, user, scope):
+                return "https://resource-server.example.org"
 
 
         authorization_server.register_token_generator(
@@ -43,6 +47,7 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         )
         self.issuer = issuer
         self.alg = alg
+        self._client_id_audience_warned = False
 
     def get_jwks(self):
         """Return the JWKs that will be used to sign the JWT access token.
@@ -64,16 +69,27 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         return {}
 
     def get_audiences(self, client, user, scope) -> str | list[str]:
-        """Return the audience for the token. By default this simply returns
-        the client ID. Developers MAY re-implement this method to add extra
-        audiences::
+        """Return the identifier of the resource, or the list of identifiers,
+        that receives the token. Developers MUST re-implement this method. The
+        result can depend on the client, the user or the scope::
 
             def get_audiences(self, client, user, scope):
-                return [
-                    client.get_client_id(),
-                    resource_server.get_id(),
-                ]
+                if "admin" in scope_to_list(scope):
+                    return [API_URL, ADMIN_API_URL]
+                return API_URL
+
+        The default implementation returns the client ID. It is deprecated, and
+        will raise :class:`NotImplementedError` in 1.11, like :meth:`get_jwks`.
         """
+        if not self._client_id_audience_warned:
+            self._client_id_audience_warned = True
+            deprecate(
+                f"'{type(self).__name__}' puts the client ID in the 'aud' claim. "
+                "Override 'get_audiences' to return the resource identifiers. "
+                "In 1.11, the default 'get_audiences' will raise "
+                "'NotImplementedError'.",
+            )
+
         return client.get_client_id()
 
     def get_acr(self, user) -> str | None:

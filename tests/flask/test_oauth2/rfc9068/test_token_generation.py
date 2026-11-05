@@ -1,3 +1,5 @@
+import warnings
+
 import pytest
 from joserfc import jwt
 from joserfc.jwk import KeySet
@@ -16,6 +18,7 @@ from ..models import User
 from ..models import save_authorization_code
 
 issuer = "https://authlib.test/"
+resource = "https://resource.test/"
 
 
 @pytest.fixture
@@ -59,6 +62,9 @@ def token_generator(server, jwks):
     class MyJWTBearerTokenGenerator(JWTBearerTokenGenerator):
         def get_jwks(self):
             return jwks
+
+        def get_audiences(self, client, user, scope):
+            return resource
 
     token_generator = MyJWTBearerTokenGenerator(issuer=issuer)
     server.register_token_generator("default", token_generator)
@@ -106,6 +112,7 @@ def test_generate_jwt_access_token(test_client, client, user, jwks):
     assert claims["sub"] == str(user.id)
     assert claims["scope"] == client.scope
     assert claims["client_id"] == client.client_id
+    assert claims["aud"] == resource
 
     # This specification registers the 'application/at+jwt' media type, which can
     # be used to indicate that the content is a JWT access token. JWT access tokens
@@ -240,6 +247,9 @@ def test_jwks_dict(client, user, jwks):
         def get_jwks(self):
             return read_file_path("jwks_private.json")
 
+        def get_audiences(self, client, user, scope):
+            return resource
+
     token_generator = DictJWTBearerTokenGenerator(issuer=issuer)
     with pytest.warns(AuthlibDeprecationWarning, match="KeySet.import_key_set"):
         access_token = token_generator.access_token_generator(
@@ -247,3 +257,49 @@ def test_jwks_dict(client, user, jwks):
         )
     claims = jwt.decode(access_token, jwks).claims
     assert claims["sub"] == str(user.id)
+
+
+def test_default_audiences(client, user, jwks):
+    """Without a get_audiences override, the client ID is used, with a warning."""
+
+    class MyJWTBearerTokenGenerator(JWTBearerTokenGenerator):
+        def get_jwks(self):
+            return jwks
+
+    token_generator = MyJWTBearerTokenGenerator(issuer=issuer)
+    with pytest.warns(AuthlibDeprecationWarning, match="get_audiences") as record:
+        for _ in range(2):
+            access_token = token_generator.access_token_generator(
+                client, "authorization_code", user, "profile"
+            )
+
+    assert len(record) == 1
+    assert jwt.decode(access_token, jwks).claims["aud"] == client.client_id
+
+
+def test_default_audiences_with_super(client, user, jwks):
+    """An override that calls the default get_audiences gets the warning."""
+
+    class MyJWTBearerTokenGenerator(JWTBearerTokenGenerator):
+        def get_jwks(self):
+            return jwks
+
+        def get_audiences(self, client, user, scope):
+            return [super().get_audiences(client, user, scope), resource]
+
+    token_generator = MyJWTBearerTokenGenerator(issuer=issuer)
+    with pytest.warns(AuthlibDeprecationWarning, match="get_audiences"):
+        token_generator.access_token_generator(
+            client, "authorization_code", user, "profile"
+        )
+
+
+def test_get_audiences_override(client, user, jwks, token_generator):
+    """Overriding get_audiences does not emit a warning."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", AuthlibDeprecationWarning)
+        access_token = token_generator.access_token_generator(
+            client, "authorization_code", user, "profile"
+        )
+
+    assert jwt.decode(access_token, jwks).claims["aud"] == resource
