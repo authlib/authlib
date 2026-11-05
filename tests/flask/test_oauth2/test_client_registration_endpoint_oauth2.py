@@ -1,3 +1,5 @@
+import time
+
 import pytest
 from flask import json
 from joserfc import jwt
@@ -363,3 +365,35 @@ def test_null_metadata_uses_default(test_client):
     resp = json.loads(rv.data)
     assert rv.status_code == 201
     assert resp["token_endpoint_auth_method"] == "client_secret_basic"
+
+
+@pytest.mark.parametrize(
+    "time_claims",
+    [{"exp": 1000000000}, {"nbf": 9999999999}],
+    ids=["expired", "not-yet-valid"],
+)
+def test_software_statement_time_claims(test_client, time_claims):
+    """An expired or not yet valid software statement is refused."""
+    payload = {"software_id": "uuid-123", "client_name": "Authlib", **time_claims}
+    key = RSAKey.import_key(read_file_path("rsa_private.pem"))
+    software_statement = jwt.encode({"alg": "RS256"}, payload, key)
+
+    headers = {"Authorization": "bearer abc"}
+    body = {"software_statement": software_statement}
+    rv = test_client.post("/create_client", json=body, headers=headers)
+    resp = json.loads(rv.data)
+    assert rv.status_code == 400
+    assert resp["error"] == "invalid_software_statement"
+
+
+def test_software_statement_clock_skew(test_client):
+    """A software statement issued a few seconds in the future is accepted."""
+    now = int(time.time())
+    payload = {"software_id": "uuid-123", "client_name": "Authlib", "iat": now + 5}
+    key = RSAKey.import_key(read_file_path("rsa_private.pem"))
+    software_statement = jwt.encode({"alg": "RS256"}, payload, key)
+
+    headers = {"Authorization": "bearer abc"}
+    body = {"software_statement": software_statement}
+    rv = test_client.post("/create_client", json=body, headers=headers)
+    assert rv.status_code == 201

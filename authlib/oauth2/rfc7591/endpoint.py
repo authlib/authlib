@@ -29,6 +29,10 @@ class ClientRegistrationEndpoint:
     #: e.g. ``software_statement_alg_values_supported = ['RS256']``
     software_statement_alg_values_supported = None
 
+    #: Seconds of clock skew allowed when checking the ``exp``, ``nbf`` and
+    #: ``iat`` claims of a software statement.
+    software_statement_leeway = 60
+
     def __init__(self, server=None, claims_classes=None):
         self.server = server
         self.claims_classes = claims_classes or [ClientMetadataClaims]
@@ -94,7 +98,11 @@ class ClientRegistrationEndpoint:
             key = import_any_key(key)
             algorithms = self.software_statement_alg_values_supported
             token = jwt.decode(software_statement, key, algorithms=algorithms)
-            # there is no need to validate claims
+
+            # Per RFC 7519 §4.1.4 and §4.1.5, a JWT must not be accepted after
+            # its exp or before its nbf.
+            registry = jwt.JWTClaimsRegistry(leeway=self.software_statement_leeway)
+            registry.validate(token.claims)
             return token.claims
         except JoseError as exc:
             raise InvalidSoftwareStatementError() from exc
