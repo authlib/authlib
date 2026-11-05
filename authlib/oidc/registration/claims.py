@@ -25,6 +25,27 @@ class ClientMetadataClaims(BaseClaims):
         "request_object_encryption_enc",
         "request_uris",
     ]
+    CLAIM_TYPES = {
+        "token_endpoint_auth_signing_alg": str,
+        "application_type": str,
+        "sector_identifier_uri": str,
+        "subject_type": str,
+        "id_token_signed_response_alg": str,
+        "id_token_encrypted_response_alg": str,
+        "id_token_encrypted_response_enc": str,
+        "userinfo_signed_response_alg": str,
+        "userinfo_encrypted_response_alg": str,
+        "userinfo_encrypted_response_enc": str,
+        "default_max_age": (int, float),
+        "require_auth_time": bool,
+        "default_acr_values": [str],
+        "initiate_login_uri": str,
+        "request_object_signing_alg": str,
+        "request_object_encryption_alg": str,
+        "request_object_encryption_enc": str,
+        "request_uris": [str],
+        "response_types": [str],
+    }
 
     def validate(self, now=None, leeway=0):
         super().validate(now, leeway)
@@ -230,10 +251,6 @@ class ClientMetadataClaims(BaseClaims):
         request parameter overrides this default value. If omitted, no default Maximum
         Authentication Age is specified.
         """
-        if self.get("default_max_age") is not None and not isinstance(
-            self["default_max_age"], (int, float)
-        ):
-            raise InvalidClaimError("default_max_age")
 
     def validate_require_auth_time(self):
         """Boolean value specifying whether the auth_time Claim in the ID Token is
@@ -245,10 +262,6 @@ class ClientMetadataClaims(BaseClaims):
         1.0 [OpenID.Core].) If omitted, the default value is false.
         """
         self.setdefault("require_auth_time", False)
-        if self.get("require_auth_time") is not None and not isinstance(
-            self["require_auth_time"], bool
-        ):
-            raise InvalidClaimError("require_auth_time")
 
     def validate_default_acr_values(self):
         """Default requested Authentication Context Class Reference values.

@@ -91,7 +91,7 @@ def test_post_logout_redirect_uris_insecure_public_client():
         },
         {},
     )
-    with pytest.raises(ValueError, match="public clients"):
+    with pytest.raises(InvalidClaimError, match="post_logout_redirect_uris"):
         claims.validate()
 
 
