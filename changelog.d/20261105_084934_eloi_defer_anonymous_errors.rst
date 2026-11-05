@@ -15,6 +15,12 @@ Breaking changes
   OpenID Connect implicit or hybrid request with ``response_mode=form_post``,
   the ``access_denied`` error is sent in the fragment, like the other errors.
 
+Changed
+~~~~~~~
+
+- ``grant.interactions`` contains ``"login"`` when the user is not logged in,
+  also without OpenID Connect.
+
 Added
 ~~~~~
 

@@ -29,7 +29,7 @@ def client(client, db):
 
 def test_get_authorize(test_client):
     rv = test_client.get(authorize_url)
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
 
 def test_confidential_client(test_client, db, client):

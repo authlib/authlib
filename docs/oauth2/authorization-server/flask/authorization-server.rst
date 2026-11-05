@@ -164,19 +164,20 @@ Now define an endpoint for authorization. This endpoint is used by
 ``authorization_code`` and ``implicit`` grants::
 
     from authlib.oauth2 import OAuth2Error
-    from flask import request, render_template
+    from flask import redirect, request, render_template, url_for
     from your_project.auth import current_user
 
     @app.route('/oauth/authorize', methods=['GET', 'POST'])
     def authorize():
+        user = current_user if current_user.is_authenticated else None
         try:
-            grant = server.get_consent_grant(end_user=current_user)
+            grant = server.get_consent_grant(end_user=user)
         except OAuth2Error as error:
-            return authorization.handle_error_response(request, error)
+            return server.handle_error_response(request, error)
 
-        # Login is required since we need to know the current resource owner.
-        # It can be done with a redirection to the login page, or a login
-        # form on this authorization page.
+        if "login" in grant.interactions:
+            return redirect(url_for('login', next=request.url))
+
         if request.method == 'GET':
             scope = grant.client.get_allowed_scope(grant.request.payload.scope)
 
@@ -186,14 +187,14 @@ Now define an endpoint for authorization. This endpoint is used by
             return render_template(
                 'authorize.html',
                 grant=grant,
-                user=current_user,
+                user=user,
                 scopes=scopes,
             )
 
         confirmed = request.form['confirm']
         if confirmed:
             # granted by resource owner
-            return server.create_authorization_response(grant=grant, grant_user=current_user)
+            return server.create_authorization_response(grant=grant, grant_user=user)
 
         # denied by resource owner
         return server.create_authorization_response(grant=grant, grant_user=None)

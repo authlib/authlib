@@ -270,7 +270,7 @@ def test_repeated_openid_parameter_without_openid_scope(test_client, server):
         "/oauth/authorize?response_type=code&client_id=client-id"
         "&scope=profile&prompt=login&prompt=consent"
     )
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
 
 def test_nonce_replay(test_client, server):
@@ -432,7 +432,7 @@ def test_prompt_create_unsupported_value_after_client(
     [
         (LimitedPromptValues, "openid profile", "login", b"login"),
         (PromptValues, "openid profile", "consent", b"login"),
-        (LimitedPromptValues, "profile", "consent", b"ok"),
+        (LimitedPromptValues, "profile", "consent", b"login"),
     ],
 )
 def test_prompt_create_supported_value(

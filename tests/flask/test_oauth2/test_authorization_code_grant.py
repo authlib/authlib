@@ -52,7 +52,7 @@ def server(server):
 
 def test_get_authorize(test_client):
     rv = test_client.get(authorize_url)
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
 
 def test_invalid_client_id(test_client):
@@ -291,7 +291,7 @@ def test_invalid_multiple_request_parameters(test_client):
 def test_repeated_undeclared_parameter(test_client):
     """A parameter that no grant or extension declares can be repeated."""
     rv = test_client.get(authorize_url + "&foo=bar&foo=baz")
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
 
 def get_authorization_key(app, server, url, method="GET", data=None):
@@ -533,7 +533,7 @@ def test_end_request(test_client, monkeypatch, user_id):
 
 def test_consent_needed(test_client, monkeypatch):
     """When the authorization session needs a consent, consent is an
-    interaction of the request."""
+    interaction of the request. An anonymous user must log in first."""
     monkeypatch.setattr(
         AuthorizationSession, "is_consent_needed", lambda self, request: True
     )
@@ -541,7 +541,7 @@ def test_consent_needed(test_client, monkeypatch):
     assert rv.data == b"consent"
 
     rv = test_client.get(authorize_url)
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
 
 def test_step_up_authentication(test_client, server):
@@ -573,3 +573,18 @@ def test_end_request_on_any_error(test_client, monkeypatch):
         test_client.get(authorize_url + "&user_id=1")
 
     assert ended == [1]
+
+
+def test_login_after_create(app, server, monkeypatch):
+    """The login of an anonymous user comes after the "create" interaction."""
+
+    def validate_consent_request(self):
+        self.interactions.append("create")
+
+    monkeypatch.setattr(
+        AuthorizationCodeGrant, "validate_consent_request", validate_consent_request
+    )
+    with app.test_request_context(authorize_url):
+        grant = server.get_consent_grant()
+
+    assert grant.interactions == ["create", "login"]

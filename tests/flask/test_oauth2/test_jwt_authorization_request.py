@@ -161,7 +161,7 @@ def test_request_parameter_get(test_client, server):
         authorize_url, {"client_id": "client-id", "request": request_obj}
     )
     rv = test_client.get(url)
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
 
 def test_request_uri_parameter_get(test_client, server):
@@ -180,7 +180,7 @@ def test_request_uri_parameter_get(test_client, server):
         },
     )
     rv = test_client.get(url)
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
 
 def test_request_and_request_uri_parameters(test_client, server):
@@ -217,7 +217,7 @@ def test_neither_request_nor_request_uri_parameter(test_client, server):
         authorize_url, {"response_type": "code", "client_id": "client-id"}
     )
     rv = test_client.get(url)
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
 
 def test_server_require_request_object(test_client, server, metadata):
@@ -581,7 +581,7 @@ def test_signature_requirement_with_explicit_algorithms(
             "Authorization requests must be signed with supported algorithms."
         )
     else:
-        assert response.data == b"ok"
+        assert response.data == b"login"
 
 
 @pytest.mark.parametrize(
@@ -650,7 +650,7 @@ def test_oidc_request_uri_validator_and_registration(
         )
     )
     if parameter == "request":
-        assert response.data == b"ok"
+        assert response.data == b"login"
         extension.validate_request_uri.assert_not_called()
         extension.get_request_object.assert_not_called()
     elif require_registration and not registered:
@@ -659,7 +659,7 @@ def test_oidc_request_uri_validator_and_registration(
         extension.get_request_object.assert_not_called()
         extension.validate_request_uri.assert_not_called()
     else:
-        assert response.data == b"ok"
+        assert response.data == b"login"
         extension.validate_request_uri.assert_called_once_with(request_uri, client)
         extension.get_request_object.assert_called_once_with(request_uri)
 
@@ -762,7 +762,7 @@ def test_jar_request_uri_does_not_require_oidc_registration(
             },
         )
     )
-    assert response.data == b"ok"
+    assert response.data == b"login"
     extension.get_client_request_uris.assert_not_called()
 
 
@@ -886,7 +886,7 @@ def test_request_object_openid_parameters_without_openid_scope(test_client, serv
     checked."""
     register_request_object_extension(server)
     rv = authorize_with_request_object(test_client, {"prompt": ["login"]})
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
 
 @pytest.mark.parametrize(
@@ -922,4 +922,4 @@ def test_request_object_parameter_numbers(test_client, server):
         authorize_url, {"client_id": "client-id", "request": request_obj}
     )
     rv = test_client.get(url)
-    assert rv.data == b"ok"
+    assert rv.data == b"login"

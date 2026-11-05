@@ -57,7 +57,7 @@ def test_has_code_challenge(test_client):
     rv = test_client.get(
         authorize_url + "&code_challenge=Zhs2POMonIVVHZteWfoU7cSXQSm0YjghikFGJSDI2_s"
     )
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
 
 def test_invalid_code_challenge(test_client):
@@ -76,7 +76,7 @@ def test_invalid_code_challenge_method(test_client):
 def test_supported_code_challenge_method(test_client):
     suffix = "&code_challenge=Zhs2POMonIVVHZteWfoU7cSXQSm0YjghikFGJSDI2_s&code_challenge_method=plain"
     rv = test_client.get(authorize_url + suffix)
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
 
 def test_multiple_code_challenge(test_client):
@@ -112,7 +112,7 @@ def test_trusted_client_without_code_challenge(test_client, db, client):
     db.session.commit()
 
     rv = test_client.get(authorize_url)
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
     rv = test_client.post(authorize_url, data={"user_id": "1"})
     assert "code=" in rv.location
@@ -151,7 +151,7 @@ def test_code_verifier_without_code_challenge(test_client, db, client):
     db.session.commit()
 
     rv = test_client.get(authorize_url)
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
     rv = test_client.post(authorize_url, data={"user_id": "1"})
     assert "code=" in rv.location
