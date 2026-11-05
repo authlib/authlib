@@ -9,6 +9,11 @@ Breaking changes
   raised when the token type cannot be revoked, like a JWT access token.
   It now inherits from ``OAuth2Error`` instead of ``ForbiddenError``, so it
   no longer takes ``auth_type`` and ``realm`` arguments.
+- The :rfc:`9068` revocation and introspection endpoints handle a JWT only if
+  its ``typ`` header is ``at+jwt``, per :rfc:`9068#section-2.1`. They no
+  longer use the ``token_type_hint``. A JWT access token sent with a
+  ``refresh_token`` hint is now handled. Other JWTs, like JWT refresh tokens,
+  go to the next endpoint.
 - The SQLAlchemy revocation endpoint no longer uses the ``token_type_hint``.
   Revoking an access token keeps the refresh token active, with or without a
   hint. Revoking a refresh token also revokes the access token, per

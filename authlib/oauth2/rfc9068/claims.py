@@ -3,6 +3,14 @@ from joserfc.jwt import JWTClaimsRegistry
 
 from authlib.oauth2.claims import JWTClaims
 
+_ACCESS_TOKEN_TYPES = ("at+jwt", "application/at+jwt")
+
+
+def _is_access_token(claims) -> bool:
+    """Tell if the JWT header declares an access token."""
+    typ = claims.header.get("typ")
+    return bool(typ) and typ.lower() in _ACCESS_TOKEN_TYPES
+
 
 class JWTAccessTokenClaimsValidator(JWTClaimsRegistry):
     def validate_auth_time(self, auth_time):
@@ -35,7 +43,7 @@ class JWTAccessTokenClaims(JWTClaims):
         return self.get("scope")
 
     def validate(self, **kwargs):
-        typ = self.header.get("typ")
-        if typ and typ.lower() not in ("at+jwt", "application/at+jwt"):
+        if self.header.get("typ") and not _is_access_token(self):
             raise InvalidClaimError("typ")
+
         super().validate(**kwargs)

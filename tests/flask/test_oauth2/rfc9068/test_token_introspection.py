@@ -264,3 +264,42 @@ def test_introspection_unknown_hint(test_client, client, access_token):
     assert rv.status_code == 200
     resp = json.loads(rv.data)
     assert resp["active"]
+
+
+def test_introspection_refresh_token_hint(test_client, client, access_token):
+    """Per RFC 7662 §2.1, a JWT access token with a refresh_token hint is
+    still found."""
+    headers = create_basic_header(client.client_id, client.client_secret)
+    rv = test_client.post(
+        "/oauth/introspect",
+        data={"token": access_token, "token_type_hint": "refresh_token"},
+        headers=headers,
+    )
+    assert rv.status_code == 200
+    resp = json.loads(rv.data)
+    assert resp["active"]
+
+
+@pytest.mark.parametrize("typ", ["rt+jwt", None])
+def test_introspection_other_jwt_skipped(
+    test_client, server, claims, jwks, client, typ
+):
+    """Per RFC 9068 §2.1, a JWT without the at+jwt typ is passed to the next
+    endpoint."""
+
+    class MyIntrospectionEndpoint(IntrospectionEndpoint):
+        def query_token(self, token, token_type_hint):
+            return None
+
+    server.register_endpoint(MyIntrospectionEndpoint)
+    header = {"alg": "RS256", "typ": typ} if typ else {"alg": "RS256"}
+    refresh_token = jwt.encode(header, claims, key=jwks)
+    headers = create_basic_header(client.client_id, client.client_secret)
+    rv = test_client.post(
+        "/oauth/introspect",
+        data={"token": refresh_token, "token_type_hint": "refresh_token"},
+        headers=headers,
+    )
+    assert rv.status_code == 200
+    resp = json.loads(rv.data)
+    assert not resp["active"]
