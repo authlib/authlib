@@ -20,6 +20,7 @@ jobs:
         uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e # v10.3.2
         with:
           enable-cache: true
+          cache-suffix: docs
       - run: |
           uv sync --all-groups
           uv run sphinx-build docs build/sphinx/html --fail-on-warning
