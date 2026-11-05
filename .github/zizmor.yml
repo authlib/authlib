@@ -1,0 +1,5 @@
+rules:
+  self-repository:
+    # act does not support the "$/" syntax yet: https://github.com/nektos/act/issues/6189
+    ignore:
+      - ci.yml
