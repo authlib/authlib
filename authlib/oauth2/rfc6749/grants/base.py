@@ -35,6 +35,11 @@ class BaseGrant(Hookable):
         #: The :class:`~authlib.oauth2.rfc6749.AuthorizationSessionMixin`
         #: passed to ``get_consent_grant``, or ``None``.
         self.authorization_session = None
+        #: Whether the request must be done without any user interaction,
+        #: such as with the OpenID Connect ``prompt=none``. Its errors are
+        #: then redirected even if the user is not logged in.
+        self.silent = False
+        self._deferred_error = None
         self._prompt = _UNSET
         self.redirect_uri = None
         self.request = request
@@ -247,10 +252,19 @@ class AuthorizationEndpointMixin(Hookable):
         """Check the :attr:`interactions` of the request.
 
         It runs after :meth:`validate_consent_request`, once the extensions
-        have added their interactions. It adds ``"consent"`` when the
-        authorization session says that the user must give their consent.
-        Extensions can also check the interactions here.
+        have added their interactions. It adds ``"login"`` when the user is
+        not logged in, unless the request is :attr:`silent`. It adds
+        ``"consent"`` when the authorization session says that the user must
+        give their consent. Extensions can also check the interactions here.
         """
+        if (
+            not self.request.user
+            and not self.silent
+            and "login" not in self.interactions
+        ):
+            index = 1 if self.interactions[:1] == ["create"] else 0
+            self.interactions.insert(index, "login")
+
         session = self.authorization_session
         if (
             session is not None

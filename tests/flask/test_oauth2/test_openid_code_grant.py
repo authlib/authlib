@@ -270,7 +270,7 @@ def test_repeated_openid_parameter_without_openid_scope(test_client, server):
         "/oauth/authorize?response_type=code&client_id=client-id"
         "&scope=profile&prompt=login&prompt=consent"
     )
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
 
 def test_nonce_replay(test_client, server):
@@ -432,7 +432,7 @@ def test_prompt_create_unsupported_value_after_client(
     [
         (LimitedPromptValues, "openid profile", "login", b"login"),
         (PromptValues, "openid profile", "consent", b"login"),
-        (LimitedPromptValues, "profile", "consent", b"ok"),
+        (LimitedPromptValues, "profile", "consent", b"login"),
     ],
 )
 def test_prompt_create_supported_value(
@@ -966,6 +966,29 @@ def test_prompt_none_with_custom_consent_validation(test_client, server):
     rv = test_client.get("/oauth/authorize?" + query)
     params = dict(url_decode(urlparse.urlparse(rv.location).query))
     assert params["error"] == "login_required"
+
+
+def test_error_of_anonymous_user(test_client, server):
+    """Per RFC 9700 §4.11.2, the error of an anonymous user waits for the
+    login, except with prompt=none. An invalid prompt is not silent."""
+    register_oidc_code_grant(server)
+    server.scopes_supported = ["openid", "profile"]
+    params = [(k, v) for k, v in PROMPT_PARAMS if k != "scope"]
+    params.append(("scope", "openid invalid"))
+    rv = test_client.get("/oauth/authorize?" + url_encode(params))
+    assert rv.data == b"login"
+
+    rv = test_client.get(
+        "/oauth/authorize?" + url_encode(params + [("prompt", "none")])
+    )
+    query = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert query["error"] == "invalid_scope"
+    assert query["state"] == "bar"
+
+    rv = test_client.get(
+        "/oauth/authorize?" + url_encode(params + [("prompt", "none login")])
+    )
+    assert rv.data == b"login"
 
 
 @pytest.mark.parametrize(

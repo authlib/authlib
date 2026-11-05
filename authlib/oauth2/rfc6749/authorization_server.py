@@ -1,3 +1,5 @@
+from functools import partial
+
 from authlib.common.errors import ContinueIteration
 from authlib.common.hooks import Hookable
 from authlib.deprecate import deprecate
@@ -26,6 +28,15 @@ class AuthorizationServer(Hookable):
 
     :param scopes_supported: A list of supported scopes by this authorization server.
     """
+
+    #: Per RFC 9700 §4.11.2, the server must authenticate the user before it
+    #: redirects them. When the request of an anonymous user has an error
+    #: for the redirect URI, :meth:`get_consent_grant` returns the grant with
+    #: the ``"login"`` interaction instead of raising it. The error is raised
+    #: after the login. An error without a grant, such as
+    #: ``unsupported_response_type``, is not redirected. Silent requests,
+    #: such as the OpenID Connect ``prompt=none``, are not concerned.
+    defer_anonymous_errors = True
 
     def __init__(self, scopes_supported=None):
         super().__init__()
@@ -274,6 +285,7 @@ class AuthorizationServer(Hookable):
         redirect_uri = None
         if client_id := request.payload.client_id:
             if client := self.query_client(client_id):
+                request.client = client
                 if requested_uri := request.payload.redirect_uri:
                     if client.check_redirect_uri(requested_uri):
                         redirect_uri = requested_uri
@@ -315,7 +327,7 @@ class AuthorizationServer(Hookable):
             grant.validate_no_multiple_request_parameter(request)
             request.authorization_key = grant.get_authorization_key()
             if session is not None:
-                request._request_time_loader = session.get_request_time
+                request._request_time_loader = partial(_load_request_time, grant)
 
             grant.validate_consent_request()
             grant.validate_interactions()
@@ -328,9 +340,18 @@ class AuthorizationServer(Hookable):
             # client.
             error.state = request.payload.state
             _set_error_response_mode(error, grant)
+            if self._is_deferred(request, grant, error):
+                error.redirect_uri = None
+                if grant is not None:
+                    grant.interactions = ["login"]
+                    grant._deferred_error = error
+                    _keep_request_time(request)
+                    return grant
+
             if session is not None:
                 session.end_request(request)
 
+            _check_error_redirect(session, request, error)
             raise
 
         except Exception:
@@ -340,6 +361,16 @@ class AuthorizationServer(Hookable):
             raise
 
         return grant
+
+    def _is_deferred(self, request, grant, error):
+        """Tell if an error must wait for the login of the user before it is
+        redirected. Per RFC 9700 §4.11.2."""
+        return (
+            self.defer_anonymous_errors
+            and error.redirect_uri is not None
+            and not request.user
+            and (grant is None or not grant.silent)
+        )
 
     def get_token_grant(self, request):
         """Find the token grant for current request.
@@ -429,6 +460,9 @@ class AuthorizationServer(Hookable):
         :raises TypeError: without ``grant``
         :raises ValueError: if ``grant_user`` is not the user of the
             authorization session
+
+        When :meth:`get_consent_grant` deferred an error until the login of
+        the user, the error is returned without redirection.
         """
         if grant is None:
             raise TypeError(
@@ -447,21 +481,28 @@ class AuthorizationServer(Hookable):
             if not isinstance(request, OAuth2Request):
                 request = self.create_oauth2_request(request)
 
-            try:
-                redirect_uri = grant.validate_authorization_request()
-                result = grant.create_authorization_response(redirect_uri, grant_user)
-                response = self._send_response(result)
-            except OAuth2Error as error:
-                error.state = request.payload.state
-                _set_error_response_mode(error, grant)
-                response = self.handle_error_response(request, error)
-
+            response = self._create_grant_response(request, grant, grant_user)
             grant.execute_hook("after_authorization_response", response)
         finally:
             if session is not None:
                 session.end_request(grant.request)
 
         return response
+
+    def _create_grant_response(self, request, grant, grant_user):
+        """Return the authorization response of a grant, or its error."""
+        if grant._deferred_error is not None:
+            return self.handle_error_response(request, grant._deferred_error)
+
+        try:
+            redirect_uri = grant.validate_authorization_request()
+            result = grant.create_authorization_response(redirect_uri, grant_user)
+            return self._send_response(result)
+        except OAuth2Error as error:
+            error.state = grant.request.payload.state
+            _set_error_response_mode(error, grant)
+            _check_error_redirect(grant.authorization_session, grant.request, error)
+            return self.handle_error_response(request, error)
 
     def create_token_response(self, request=None):
         """Validate token request and create token response.
@@ -538,6 +579,26 @@ def _create_grant(grant_cls, extensions, request, server):
         for ext in extensions:
             ext(grant)
     return grant
+
+
+def _check_error_redirect(session, request, error):
+    """Return the error without redirection when the authorization session
+    does not trust the redirect URI."""
+    if (
+        error.redirect_uri is not None
+        and session is not None
+        and not session.can_redirect_error(request, error)
+    ):
+        error.redirect_uri = None
+
+
+def _load_request_time(grant, request):
+    """Read the start time of the request from the authorization session,
+    unless the request is silent."""
+    if grant.silent:
+        return None
+
+    return grant.authorization_session.get_request_time(request)
 
 
 def _keep_request_time(request):

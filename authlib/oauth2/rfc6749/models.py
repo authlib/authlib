@@ -297,7 +297,8 @@ class AuthorizationSessionMixin:
         Authlib calls it on the first use of ``request.request_time``: when
         a rule needs the start time, for instance with ``prompt=login`` or
         ``max_age``, and when the user must go through an interaction. It is
-        not called with the OpenID Connect ``prompt=none``.
+        not called for a silent request, such as with the OpenID Connect
+        ``prompt=none``.
 
         An interaction that the request asks for, such as ``prompt=login`` or
         ``prompt=consent``, is done when it happens after this time. Without
@@ -337,6 +338,19 @@ class AuthorizationSessionMixin:
         :param request: the authorization request, with its ``user``
         """
         return False
+
+    def can_redirect_error(self, request, error):
+        """Tell if an error can be sent to the redirect URI of the client.
+
+        Per RFC 9700 §4.11.2, the server should only redirect the user to a
+        redirect URI it trusts. Otherwise, the error is returned without
+        redirection, and the application can inform the user. For instance,
+        return false for the clients that registered themselves.
+
+        :param request: the authorization request, with its ``client``
+        :param error: the :class:`~authlib.oauth2.OAuth2Error` to send
+        """
+        return True
 
     def end_request(self, request):
         """Called when the authorization request ends: after

@@ -29,7 +29,7 @@ def client(client, db):
 
 def test_get_authorize(test_client):
     rv = test_client.get(authorize_url)
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
 
 def test_confidential_client(test_client, db, client):
@@ -62,7 +62,7 @@ def test_unsupported_client(test_client, db, client):
     )
     db.session.add(client)
     db.session.commit()
-    rv = test_client.get(authorize_url)
+    rv = test_client.get(authorize_url + "&user_id=1")
     assert "unauthorized_client" in rv.location
 
 
@@ -71,7 +71,7 @@ def test_invalid_authorize(test_client, server):
     assert "#error=access_denied" in rv.location
 
     server.scopes_supported = ["profile"]
-    rv = test_client.post(authorize_url + "&scope=invalid")
+    rv = test_client.post(authorize_url + "&scope=invalid&user_id=1")
     assert "#error=invalid_scope" in rv.location
 
 

@@ -145,16 +145,21 @@ The Authorization Server has to provide endpoints:
 
 The ``AuthorizationServer`` has provided built-in methods to handle these endpoints::
 
+    from django.contrib.auth.views import redirect_to_login
     from django.shortcuts import render
     from django.views.decorators.http import require_http_methods
 
     # use ``server.create_authorization_response`` to handle authorization endpoint
 
     def authorize(request):
+        user = request.user if request.user.is_authenticated else None
         try:
-            grant = server.get_consent_grant(request, end_user=request.user)
+            grant = server.get_consent_grant(request, end_user=user)
         except OAuth2Error as error:
             return server.handle_error_response(request, error)
+
+        if "login" in grant.interactions:
+            return redirect_to_login(request.get_full_path())
 
         if request.method == 'GET':
             scope = grant.client.get_allowed_scope(grant.request.payload.scope)

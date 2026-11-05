@@ -45,6 +45,36 @@ It must come from a real authentication, with a password or another factor.
 Do not update it when the user switches to another account or resumes a
 session. It becomes the ``auth_time`` claim of the ID token.
 
+Errors
+------
+
+Per :rfc:`9700#section-4.11.2`, the server authenticates the user before it
+redirects them to the client with an error. When the request of an anonymous
+user has an error, ``get_consent_grant`` does not raise it. It returns the
+grant with the ``"login"`` interaction only. After the login,
+``get_consent_grant`` raises the error, and you redirect the user with
+``handle_error_response``. If ``create_authorization_response`` gets the grant
+of the anonymous user, it returns the error without redirection, and never
+issues a code. ``unsupported_response_type`` is returned without redirection
+to an anonymous user, because there is no grant.
+
+The user is anonymous when ``get_user`` returns ``None``. The anonymous users
+of Django and Flask-Login are objects, so return ``None`` for them::
+
+    class MyAuthorizationSession(AuthorizationSession):
+        def get_user(self):
+            return self.user if self.user.is_authenticated else None
+
+With the OpenID Connect ``prompt=none``, there is no login, so the errors are
+redirected at once. Set ``server.defer_anonymous_errors = False`` to redirect
+all the errors at once.
+
+The server should also only redirect the user to a redirect URI it trusts.
+Implement ``can_redirect_error`` to refuse it, for instance for the clients
+that registered themselves. The error is then returned without redirection.
+It applies to all the errors, including ``access_denied`` when the user denies
+the request. With ``prompt=none``, it is the only protection.
+
 Request Start Time
 ------------------
 
@@ -79,6 +109,10 @@ without a new login.
 Pitfalls
 --------
 
+- Call ``get_consent_grant`` before you redirect an anonymous user to the
+  login page, and redirect them when ``"login"`` is in ``grant.interactions``.
+  Otherwise, the start time of the request is not stored before the login,
+  and ``prompt=login`` asks the user to log in again.
 - If your login view clears or replaces the session, copy
   ``authlib_request_times`` into the new session. Otherwise, the user must
   log in twice. Django's ``login`` keeps the session data, unless another

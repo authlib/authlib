@@ -112,7 +112,6 @@ def validate_request_prompt(grant, redirect_uri, redirect_fragment=False):
         consent_required = "consent" in prompts
         account_selection_required = "select_account" in prompts and bool(request.user)
     else:
-        ignore_request_time(grant)
         login_required = is_login_required(
             request, session, max_age=max_age, fresh_login="login" in prompts
         )
@@ -143,14 +142,16 @@ def validate_request_prompt(grant, redirect_uri, redirect_fragment=False):
     return grant
 
 
-def ignore_request_time(grant):
-    """With ``prompt=none``, the request is done in one HTTP request. Its
-    start time is unknown, and the authorization session does not store it.
+def set_silent(grant):
+    """Mark the request as silent when ``prompt`` is ``none``.
+
+    Per OIDC Core §3.1.2.1, the server then does not display any user
+    interface. The request is done in one HTTP request: its start time is not
+    read, and its errors are redirected even if the user is not logged in.
 
     :param grant: the grant that validates the authorization request
     """
-    if "none" in get_prompt_values(grant.request):
-        grant.request.request_time = None
+    grant.silent = get_prompt_values(grant.request) == ["none"]
 
 
 def validate_prompt_none(grant, redirect_fragment=False):

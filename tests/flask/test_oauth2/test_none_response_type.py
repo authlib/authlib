@@ -62,7 +62,7 @@ def test_unauthorized_client(test_client, client, db):
     """A client must be allowed to use the none response type."""
     client.set_client_metadata({**client.client_metadata, "response_types": ["code"]})
     db.session.commit()
-    rv = test_client.get(authorize_url + "&state=bar")
+    rv = test_client.get(authorize_url + "&state=bar&user_id=1")
     params = query_params(rv)
     assert params["error"] == "unauthorized_client"
     assert params["state"] == "bar"
@@ -112,5 +112,6 @@ def test_issuer(test_client, server):
 
 def test_combined_response_type(test_client):
     """The none response type cannot be combined with another one."""
-    rv = test_client.get(authorize_url.replace("none", "none%20code"))
+    url = authorize_url.replace("none", "none%20code")
+    rv = test_client.get(url + "&user_id=1")
     assert query_params(rv)["error"] == "unsupported_response_type"

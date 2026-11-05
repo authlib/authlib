@@ -16,9 +16,9 @@ from ._legacy import LegacyMixin
 from .util import OPENID_AUTHORIZATION_PARAMETERS
 from .util import create_half_hash
 from .util import has_multiple_response_types
-from .util import ignore_request_time
 from .util import is_openid_scope
 from .util import resolve_auth_time
+from .util import set_silent
 from .util import validate_nonce
 from .util import validate_prompt_none
 from .util import validate_request_prompt
@@ -99,7 +99,7 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
         return redirect_uri
 
     def validate_consent_request(self):
-        ignore_request_time(self)
+        set_silent(self)
         redirect_uri = self.validate_authorization_request()
         self.redirect_uri = redirect_uri
         validate_request_prompt(self, redirect_uri, redirect_fragment=True)
@@ -110,18 +110,14 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
         validate_prompt_none(self, redirect_fragment=True)
 
     def create_authorization_response(self, redirect_uri, grant_user):
-        if grant_user:
-            self.request.user = grant_user
-            self.request.auth_time = resolve_auth_time(self)
+        if not grant_user:
+            raise AccessDeniedError(redirect_uri=redirect_uri, redirect_fragment=True)
 
-        state = self.request.payload.state
-        if grant_user:
-            params = self.create_granted_params(grant_user)
-            if state:
-                params.append(("state", state))
-        else:
-            error = AccessDeniedError(state=state)
-            params = error.get_body()
+        self.request.user = grant_user
+        self.request.auth_time = resolve_auth_time(self)
+        params = self.create_granted_params(grant_user)
+        if state := self.request.payload.state:
+            params.append(("state", state))
 
         if has_multiple_response_types(self.server):
             response_mode = self.response_mode or self.RESPONSE_MODE

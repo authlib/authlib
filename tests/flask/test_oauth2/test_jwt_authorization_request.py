@@ -6,7 +6,9 @@ from joserfc import jwk
 from joserfc import jwt
 
 from authlib.common.urls import add_params_to_uri
+from authlib.common.urls import url_decode
 from authlib.common.urls import url_encode
+from authlib.common.urls import urlparse
 from authlib.oauth2 import rfc7591
 from authlib.oauth2 import rfc9101
 from authlib.oauth2.multiple_response_types import MultipleResponseTypes
@@ -161,7 +163,24 @@ def test_request_parameter_get(test_client, server):
         authorize_url, {"client_id": "client-id", "request": request_obj}
     )
     rv = test_client.get(url)
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
+
+
+def test_denied_state_in_request_object(test_client, server):
+    """When the user denies the request, the state comes from the request
+    object."""
+    register_request_object_extension(server)
+    payload = {"response_type": "code", "client_id": "client-id", "state": "bar"}
+    request_obj = jwt.encode(
+        {"alg": "RS256"}, payload, jwk.import_key(read_file_path("jwk_private.json"))
+    )
+    url = add_params_to_uri(
+        authorize_url, {"client_id": "client-id", "request": request_obj}
+    )
+    rv = test_client.post(url)
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert params["error"] == "access_denied"
+    assert params["state"] == "bar"
 
 
 def test_request_uri_parameter_get(test_client, server):
@@ -180,7 +199,7 @@ def test_request_uri_parameter_get(test_client, server):
         },
     )
     rv = test_client.get(url)
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
 
 def test_request_and_request_uri_parameters(test_client, server):
@@ -217,7 +236,7 @@ def test_neither_request_nor_request_uri_parameter(test_client, server):
         authorize_url, {"response_type": "code", "client_id": "client-id"}
     )
     rv = test_client.get(url)
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
 
 def test_server_require_request_object(test_client, server, metadata):
@@ -581,7 +600,7 @@ def test_signature_requirement_with_explicit_algorithms(
             "Authorization requests must be signed with supported algorithms."
         )
     else:
-        assert response.data == b"ok"
+        assert response.data == b"login"
 
 
 @pytest.mark.parametrize(
@@ -650,7 +669,7 @@ def test_oidc_request_uri_validator_and_registration(
         )
     )
     if parameter == "request":
-        assert response.data == b"ok"
+        assert response.data == b"login"
         extension.validate_request_uri.assert_not_called()
         extension.get_request_object.assert_not_called()
     elif require_registration and not registered:
@@ -659,7 +678,7 @@ def test_oidc_request_uri_validator_and_registration(
         extension.get_request_object.assert_not_called()
         extension.validate_request_uri.assert_not_called()
     else:
-        assert response.data == b"ok"
+        assert response.data == b"login"
         extension.validate_request_uri.assert_called_once_with(request_uri, client)
         extension.get_request_object.assert_called_once_with(request_uri)
 
@@ -762,7 +781,7 @@ def test_jar_request_uri_does_not_require_oidc_registration(
             },
         )
     )
-    assert response.data == b"ok"
+    assert response.data == b"login"
     extension.get_client_request_uris.assert_not_called()
 
 
@@ -886,7 +905,7 @@ def test_request_object_openid_parameters_without_openid_scope(test_client, serv
     checked."""
     register_request_object_extension(server)
     rv = authorize_with_request_object(test_client, {"prompt": ["login"]})
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
 
 @pytest.mark.parametrize(
@@ -922,4 +941,4 @@ def test_request_object_parameter_numbers(test_client, server):
         authorize_url, {"client_id": "client-id", "request": request_obj}
     )
     rv = test_client.get(url)
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
