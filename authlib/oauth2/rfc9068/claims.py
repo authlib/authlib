@@ -43,7 +43,9 @@ class JWTAccessTokenClaims(JWTClaims):
         return self.get("scope")
 
     def validate(self, **kwargs):
-        if self.header.get("typ") and not _is_access_token(self):
+        # Per RFC 9068 §4, the resource server MUST verify that the typ header
+        # value is at+jwt or application/at+jwt.
+        if not _is_access_token(self):
             raise InvalidClaimError("typ")
 
         super().validate(**kwargs)
