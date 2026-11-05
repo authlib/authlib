@@ -134,7 +134,7 @@ def test_rfc9207_consent_error(test_client, server):
     """The iss parameter is in the errors of the consent page."""
     server.scopes_supported = ["profile", "address"]
     server.register_extension(IssuerParameter())
-    rv = test_client.get(authorize_url + "&scope=invalid")
+    rv = test_client.get(authorize_url + "&scope=invalid&user_id=1")
     params = dict(url_decode(urlparse.urlparse(rv.location).query))
     assert params["error"] == "invalid_scope"
     assert params["iss"] == "https://auth.test"

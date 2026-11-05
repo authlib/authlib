@@ -30,33 +30,33 @@ def client(user):
     client.delete()
 
 
-def test_get_consent_grant_client(factory, server, client):
+def test_get_consent_grant_client(factory, server, client, user):
     url = "/authorize?response_type=token"
     request = factory.get(url)
     with pytest.raises(errors.InvalidClientError):
-        server.get_consent_grant(request)
+        server.get_consent_grant(request, end_user=user)
 
     url = "/authorize?response_type=token&client_id=invalid-id"
     request = factory.get(url)
     with pytest.raises(errors.InvalidClientError):
-        server.get_consent_grant(request)
+        server.get_consent_grant(request, end_user=user)
 
     client.response_type = ""
     client.save()
     url = "/authorize?response_type=token&client_id=client-id"
     request = factory.get(url)
     with pytest.raises(errors.UnauthorizedClientError):
-        server.get_consent_grant(request)
+        server.get_consent_grant(request, end_user=user)
 
 
-def test_get_consent_grant_scope(factory, server):
+def test_get_consent_grant_scope(factory, server, user):
     server.scopes_supported = ["profile"]
 
     base_url = "/authorize?response_type=token&client_id=client-id"
     url = base_url + "&scope=invalid"
     request = factory.get(url)
     with pytest.raises(errors.InvalidScopeError):
-        server.get_consent_grant(request)
+        server.get_consent_grant(request, end_user=user)
 
 
 def test_create_authorization_response(factory, server):

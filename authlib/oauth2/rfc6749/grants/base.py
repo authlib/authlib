@@ -35,6 +35,11 @@ class BaseGrant(Hookable):
         #: The :class:`~authlib.oauth2.rfc6749.AuthorizationSessionMixin`
         #: passed to ``get_consent_grant``, or ``None``.
         self.authorization_session = None
+        #: Whether the request must be done without any user interaction,
+        #: such as with the OpenID Connect ``prompt=none``. Its errors are
+        #: then redirected even if the user is not logged in.
+        self.silent = False
+        self._deferred_error = None
         self._prompt = _UNSET
         self.redirect_uri = None
         self.request = request

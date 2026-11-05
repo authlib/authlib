@@ -106,7 +106,7 @@ def test_hook_changes_consent_errors(test_client, server, client, db):
     db.session.add(client)
     db.session.commit()
 
-    rv = test_client.get(f"{authorize_url}&response_type=code")
+    rv = test_client.get(f"{authorize_url}&response_type=code&user_id=1")
 
     params = get_params(rv.location, "code")
     assert params["error"] == "unauthorized_client"

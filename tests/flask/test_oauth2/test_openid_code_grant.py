@@ -968,6 +968,29 @@ def test_prompt_none_with_custom_consent_validation(test_client, server):
     assert params["error"] == "login_required"
 
 
+def test_error_of_anonymous_user(test_client, server):
+    """Per RFC 9700 §4.11.2, the error of an anonymous user waits for the
+    login, except with prompt=none. An invalid prompt is not silent."""
+    register_oidc_code_grant(server)
+    server.scopes_supported = ["openid", "profile"]
+    params = [(k, v) for k, v in PROMPT_PARAMS if k != "scope"]
+    params.append(("scope", "openid invalid"))
+    rv = test_client.get("/oauth/authorize?" + url_encode(params))
+    assert rv.data == b"login"
+
+    rv = test_client.get(
+        "/oauth/authorize?" + url_encode(params + [("prompt", "none")])
+    )
+    query = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert query["error"] == "invalid_scope"
+    assert query["state"] == "bar"
+
+    rv = test_client.get(
+        "/oauth/authorize?" + url_encode(params + [("prompt", "none login")])
+    )
+    assert rv.data == b"login"
+
+
 @pytest.mark.parametrize(
     "method,interaction,error",
     [

@@ -49,7 +49,7 @@ def client(client, db):
 
 
 def test_missing_code_challenge(test_client):
-    rv = test_client.get(authorize_url + "&code_challenge_method=plain")
+    rv = test_client.get(authorize_url + "&code_challenge_method=plain&user_id=1")
     assert "Missing" in rv.location
 
 
@@ -62,14 +62,14 @@ def test_has_code_challenge(test_client):
 
 def test_invalid_code_challenge(test_client):
     rv = test_client.get(
-        authorize_url + "&code_challenge=abc&code_challenge_method=plain"
+        authorize_url + "&code_challenge=abc&code_challenge_method=plain&user_id=1"
     )
     assert "Invalid" in rv.location
 
 
 def test_invalid_code_challenge_method(test_client):
     suffix = "&code_challenge=Zhs2POMonIVVHZteWfoU7cSXQSm0YjghikFGJSDI2_s&code_challenge_method=invalid"
-    rv = test_client.get(authorize_url + suffix)
+    rv = test_client.get(authorize_url + suffix + "&user_id=1")
     assert "Unsupported" in rv.location
 
 

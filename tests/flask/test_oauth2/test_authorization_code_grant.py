@@ -70,7 +70,7 @@ def test_invalid_authorize(test_client, server):
     assert "error=access_denied" in rv.location
 
     server.scopes_supported = ["profile"]
-    rv = test_client.post(authorize_url + "&scope=invalid&state=foo")
+    rv = test_client.post(authorize_url + "&scope=invalid&state=foo&user_id=1")
     assert "error=invalid_scope" in rv.location
     assert "state=foo" in rv.location
 
@@ -88,7 +88,7 @@ def test_unauthorized_client(test_client, client, db):
     db.session.add(client)
     db.session.commit()
 
-    rv = test_client.get(authorize_url)
+    rv = test_client.get(authorize_url + "&user_id=1")
     assert "unauthorized_client" in rv.location
 
 

@@ -221,6 +221,32 @@ def test_missing_openid_in_scope_does_not_redirect_to_unregistered_uri(test_clie
     assert rv.headers.get("Location") is None
 
 
+class UntrustedAuthorizationSession(AuthorizationSession):
+    def can_redirect_error(self, request, error):
+        return False
+
+
+@pytest.mark.parametrize(
+    "authorization_session", [UntrustedAuthorizationSession], indirect=True
+)
+def test_denied_untrusted_redirect_uri(test_client, authorization_session):
+    """When the authorization session does not trust the redirect URI, the
+    denial is returned without redirection."""
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "id_token",
+            "client_id": "client-id",
+            "scope": "openid profile",
+            "state": "bar",
+            "nonce": "abc",
+            "redirect_uri": "https://client.test/callback",
+        },
+    )
+    assert rv.status_code == 400
+    assert rv.json["error"] == "access_denied"
+
+
 def test_denied(test_client):
     rv = test_client.post(
         "/oauth/authorize",
@@ -321,7 +347,8 @@ def test_response_mode_unsupported(
 ):
     """The query response mode and unknown response modes are refused.
 
-    The error is returned in the fragment.
+    The error is returned in the fragment. Before the login, it is returned
+    without redirection.
     """
     data = {
         "response_type": "id_token",
@@ -340,6 +367,11 @@ def test_response_mode_unsupported(
 
     with nullcontext() if registered else deprecated_response_mode():
         rv = test_client.post("/oauth/authorize", data=data)
+
+    if not user_id:
+        assert rv.status_code == 400
+        assert rv.json["error"] == "invalid_request"
+        return
 
     assert rv.status_code == 302
     location = urlparse.urlparse(rv.location)
@@ -423,7 +455,8 @@ def test_response_mode_form_post(test_client, server, registered):
 @pytest.mark.parametrize("user_id", ["1", None])
 @pytest.mark.parametrize("registered", [True, False])
 def test_response_mode_form_post_values(test_client, server, user_id, registered):
-    """The client receives the form_post values unchanged."""
+    """The client receives the form_post values unchanged. Without the
+    extension, a denial is sent in the fragment, like the other errors."""
     if registered:
         register_form_post(server)
 
@@ -442,6 +475,12 @@ def test_response_mode_form_post_values(test_client, server, user_id, registered
 
     with nullcontext() if registered else deprecated_response_mode():
         rv = test_client.post("/oauth/authorize", data=data)
+
+    if not registered and not user_id:
+        params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+        assert params["error"] == "access_denied"
+        assert params["state"] == state
+        return
 
     form = parse_form(rv.data)
     assert form.values["state"] == state

@@ -151,8 +151,9 @@ The ``AuthorizationServer`` has provided built-in methods to handle these endpoi
     # use ``server.create_authorization_response`` to handle authorization endpoint
 
     def authorize(request):
+        user = request.user if request.user.is_authenticated else None
         try:
-            grant = server.get_consent_grant(request, end_user=request.user)
+            grant = server.get_consent_grant(request, end_user=user)
         except OAuth2Error as error:
             return server.handle_error_response(request, error)
 
