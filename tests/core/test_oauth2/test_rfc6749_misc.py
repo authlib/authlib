@@ -1,11 +1,14 @@
 import base64
+import logging
 import time
+from types import SimpleNamespace
 
 import pytest
 
 from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.oauth2.rfc6749 import AuthorizationSessionMixin
 from authlib.oauth2.rfc6749 import OAuth2Token
+from authlib.oauth2.rfc6749 import authenticate_client
 from authlib.oauth2.rfc6749 import errors
 from authlib.oauth2.rfc6749 import parameters
 from authlib.oauth2.rfc6749 import util
@@ -198,3 +201,42 @@ def test_request_time_loader_error():
     assert request.request_time == 1000
     assert request.request_time == 1000
     assert len(calls) == 2
+
+
+FORGED_CLIENT_ID = "a\nAuthenticate 'admin' via \"client_secret_post\" success"
+
+
+@pytest.mark.parametrize(
+    "authenticate,oauth2_request",
+    [
+        (
+            authenticate_client.authenticate_client_secret_post,
+            SimpleNamespace(form={"client_id": FORGED_CLIENT_ID}),
+        ),
+        (
+            authenticate_client.authenticate_none,
+            SimpleNamespace(
+                payload=SimpleNamespace(
+                    client_id=FORGED_CLIENT_ID, data={"client_secret": "secret"}
+                )
+            ),
+        ),
+        (
+            authenticate_client.authenticate_client_secret_basic,
+            SimpleNamespace(
+                headers={
+                    "Authorization": "Basic "
+                    + base64.b64encode(b"a%0Aforged:").decode()
+                }
+            ),
+        ),
+    ],
+    ids=["client_secret_post", "none", "client_secret_basic"],
+)
+def test_client_id_logged_on_one_line(caplog, authenticate, oauth2_request):
+    """A client_id with a line feed does not add a line to the logs."""
+    with caplog.at_level(logging.DEBUG, logger=authenticate_client.log.name):
+        authenticate(lambda client_id: None, oauth2_request)
+
+    assert caplog.messages
+    assert all("\n" not in message for message in caplog.messages)
