@@ -5,6 +5,7 @@ from authlib.common.hooks import Hookable
 from authlib.consts import default_json_headers
 from authlib.deprecate import deprecate
 
+from ..authenticate_client import _validate_client
 from ..errors import InvalidRequestError
 from ..errors import InvalidScopeError
 from ..requests import OAuth2Request
@@ -211,6 +212,19 @@ class AuthorizationEndpointMixin(Hookable):
                     "Missing 'redirect_uri' in request.", state=request.payload.state
                 )
             return redirect_uri
+
+    def query_authorization_client(self):
+        """Return the client of the authorization request.
+
+        Per RFC 6749 §3.2.1, the client authenticates at the token endpoint,
+        not at the authorization endpoint. Its ``token_endpoint_auth_method``
+        does not matter here.
+
+        :raises InvalidClientError: if ``client_id`` is missing or unknown
+        """
+        return _validate_client(
+            self.server.query_client, self.request.payload.client_id
+        )
 
     def validate_no_multiple_request_parameter(self, request: OAuth2Request):
         """For the Authorization Endpoint, request and response parameters MUST NOT be included

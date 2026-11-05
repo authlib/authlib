@@ -122,8 +122,7 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
         # ignore validate for response_type, since it is validated by
         # check_authorization_endpoint
 
-        # The implicit grant type is optimized for public clients
-        client = self.authenticate_token_endpoint_client()
+        client = self.query_authorization_client()
         log.debug("Validate authorization request of %r", client)
 
         redirect_uri = self.validate_authorization_redirect_uri(self.request, client)

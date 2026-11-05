@@ -89,8 +89,8 @@ with::
     # register it to grant endpoint
     server.register_grant(grants.ImplicitGrant)
 
-Implicit Grant is used by **public** clients which have no **client_secret**.
-Default allowed :ref:`client_auth_methods`: ``none``.
+The client does not authenticate, because the implicit flow does not use the
+token endpoint. Its ``token_endpoint_auth_method`` does not matter.
 
 Resource Owner Password Credentials Grant
 -----------------------------------------
