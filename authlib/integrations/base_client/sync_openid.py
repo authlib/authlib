@@ -1,3 +1,5 @@
+import time
+
 from joserfc import jwt
 from joserfc.errors import InvalidKeyIdError
 from joserfc.jwk import KeySet
@@ -41,7 +43,25 @@ def _get_claims_options(claims_options, metadata):
     return claims_options
 
 
+def _may_refresh_jwk_set(client):
+    """Tell if the JWK set can be fetched again for an unknown ``kid``, at
+    most once per ``jwks_refresh_interval`` seconds.
+    """
+    now = time.monotonic()
+    refreshed_at = client._jwk_set_refreshed_at
+    if refreshed_at is not None and now - refreshed_at < client.jwks_refresh_interval:
+        return False
+
+    client._jwk_set_refreshed_at = now
+    return True
+
+
 class OpenIDMixin:
+    #: Minimum number of seconds between two fetches of the JWK set caused by
+    #: an ID token with an unknown ``kid``.
+    jwks_refresh_interval = 60
+    _jwk_set_refreshed_at = None
+
     def fetch_jwk_set(self, force=False):
         metadata = self.load_server_metadata()
         jwk_set = metadata.get("jwks")
@@ -103,6 +123,9 @@ class OpenIDMixin:
                 registry=JWSRegistry(algorithms=alg_values, strict_check_header=False),
             )
         except InvalidKeyIdError:
+            if metadata.get("jwks_uri") and not _may_refresh_jwk_set(self):
+                raise
+
             key_set = KeySet.import_key_set(self.fetch_jwk_set(force=True))
             token = jwt.decode(
                 token["id_token"],

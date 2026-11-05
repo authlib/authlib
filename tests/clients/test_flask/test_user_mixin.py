@@ -5,6 +5,7 @@ import pytest
 from flask import Flask
 from joserfc import jwt
 from joserfc.errors import InvalidClaimError
+from joserfc.errors import InvalidKeyIdError
 from joserfc.errors import MissingClaimError
 from joserfc.errors import UnsupportedAlgorithmError
 from joserfc.jwk import KeySet
@@ -319,3 +320,35 @@ def test_parse_id_token_claims_options_iss_validate():
     claims_options = {"iss": {"validate": lambda claims, value: True}}
     with app.test_request_context():
         assert client.parse_id_token(token, "n", claims_options).sub == "123"
+
+
+def test_parse_id_token_unknown_kid_refresh_interval():
+    """An unknown kid fetches the JWK set again at most once per interval."""
+    app, client = _register_client(
+        id_token_signing_alg_values_supported=["HS256"],
+        jwks_uri="https://provider.test/jwks",
+    )
+    now = int(time.time())
+    claims = {"sub": "123", "iss": "https://provider.test", "aud": "dev"}
+    claims.update({"iat": now, "exp": now + 3600, "nonce": "n"})
+    id_token = jwt.encode({"alg": "HS256", "kid": "unknown"}, claims, secret_key)
+    fetches = []
+
+    def fake_send(sess, req, **kwargs):
+        fetches.append(req.url)
+        resp = mock.MagicMock()
+        resp.json = lambda: {"keys": [secret_key.as_dict()]}
+        resp.status_code = 200
+        return resp
+
+    with app.test_request_context():
+        with mock.patch("requests.sessions.Session.send", fake_send):
+            for _ in range(3):
+                with pytest.raises(InvalidKeyIdError):
+                    client.parse_id_token({"id_token": id_token}, nonce="n")
+            assert len(fetches) == 1
+
+            client._jwk_set_refreshed_at -= client.jwks_refresh_interval
+            with pytest.raises(InvalidKeyIdError):
+                client.parse_id_token({"id_token": id_token}, nonce="n")
+            assert len(fetches) == 2
