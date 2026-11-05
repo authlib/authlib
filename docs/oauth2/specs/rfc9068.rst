@@ -41,6 +41,62 @@ This module brings tools to:
 - introspect JWT access tokens with :class:`~authlib.oauth2.rfc9068.JWTIntrospectionEndpoint`
 - deny JWT access tokens revokation attempts with :class:`~authlib.oauth2.rfc9068.JWTRevocationEndpoint`
 
+UserInfo endpoint
+-----------------
+
+The :ref:`specs/oidc` :class:`~authlib.oidc.core.UserInfoEndpoint` is a
+protected resource (OpenID Connect Core §5.3). It accepts JWT access tokens if
+you protect it with a :class:`~authlib.oauth2.rfc9068.JWTBearerTokenValidator`.
+
+Per :rfc:`9068#section-4`, the validator checks that the ``aud`` claim contains
+the identifier of the resource server. Use the URL of the userinfo endpoint as
+this identifier::
+
+    USERINFO_URL = "https://authorization-server.example.org/oauth/userinfo"
+
+    class MyJWTBearerTokenValidator(JWTBearerTokenValidator):
+        def get_jwks(self): ...
+
+    resource_protector = ResourceProtector()
+    resource_protector.register_token_validator(
+        MyJWTBearerTokenValidator(
+            issuer="https://authorization-server.example.org",
+            resource_server=USERINFO_URL,
+        )
+    )
+
+The token generator must then add this URL to the audience of the tokens that
+are issued for a user with the ``openid`` scope. ``API_URL`` is the identifier
+of your other resource server::
+
+    class MyJWTBearerTokenGenerator(JWTBearerTokenGenerator):
+        def get_audiences(self, client, user, scope):
+            audiences = [API_URL]
+            if user and "openid" in (scope_to_list(scope) or []):
+                audiences.append(USERINFO_URL)
+            return audiences
+
+Tokens without a user, such as client credentials tokens, have the client ID
+in their ``sub`` claim. They must not reach the userinfo endpoint. Per
+:rfc:`9068#section-5`, if a client ID can be equal to a user ID, do not let
+clients choose their client ID.
+
+A JWT access token only carries identifiers. Override
+:meth:`~authlib.oidc.core.UserInfoEndpoint.get_token_client` and
+:meth:`~authlib.oidc.core.UserInfoEndpoint.get_token_user` to load the client
+and the user::
+
+    class UserInfoEndpoint(oidc.core.UserInfoEndpoint):
+        def get_token_client(self, token):
+            return self.server.query_client(token["client_id"])
+
+        def get_token_user(self, token):
+            return User.get(token["sub"])
+
+        ...
+
+    server.register_endpoint(UserInfoEndpoint(resource_protector=resource_protector))
+
 API Reference
 -------------
 
