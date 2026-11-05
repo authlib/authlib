@@ -63,4 +63,3 @@ class ClientMetadataClaims(BaseClaims):
         is_public = self.get("token_endpoint_auth_method") == "none"
         if is_public and not is_secure_transport(uri, allow_loopback=False):
             raise InvalidClaimError("backchannel_logout_uri")
-

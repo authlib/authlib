@@ -4,11 +4,12 @@ from authlib.common.encoding import json_loads
 from authlib.common.encoding import to_unicode
 from authlib.common.encoding import urlsafe_b64decode
 from authlib.jose.errors import DecodeError
+from authlib.jose.errors import ExceededSizeError
 
 
 def extract_header(header_segment, error_cls):
     if len(header_segment) > 256000:
-        raise ValueError("Value of header is too long")
+        raise ExceededSizeError(description="Value of header is too long")
 
     header_data = extract_segment(header_segment, error_cls, "header")
 
@@ -24,7 +25,7 @@ def extract_header(header_segment, error_cls):
 
 def extract_segment(segment, error_cls, name="payload"):
     if len(segment) > 256000:
-        raise ValueError(f"Value of {name} is too long")
+        raise ExceededSizeError(description=f"Value of {name} is too long")
 
     try:
         return urlsafe_b64decode(segment)

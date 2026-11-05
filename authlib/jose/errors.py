@@ -9,6 +9,14 @@ class DecodeError(JoseError):
     error = "decode_error"
 
 
+class ExceededSizeError(JoseError, ValueError):
+    """The serialization or one of its segments is too long. It is also a
+    ``ValueError``, as it was before.
+    """
+
+    error = "exceeded_size"
+
+
 class MissingAlgorithmError(JoseError):
     error = "missing_algorithm"
 

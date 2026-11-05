@@ -4,6 +4,7 @@ import pytest
 
 from authlib.jose import JsonWebSignature
 from authlib.jose import errors
+from authlib.jose.rfc7518.jwe_zips import DeflateZipAlgorithm
 from tests.util import read_file_path
 
 
@@ -326,3 +327,33 @@ def test_deserialize_json_empty_signatures():
 
     with pytest.raises(errors.BadSignatureError):
         jws.deserialize_json(data, "secret")
+
+
+@pytest.mark.parametrize(
+    "serialization",
+    [
+        "a" * 256001,
+        "a" * 256001 + ".e30.sig",
+        "eyJhbGciOiJIUzI1NiJ9." + "a" * 256001 + ".sig",
+    ],
+    ids=["serialization", "header", "payload"],
+)
+def test_too_long_compact_serialization(serialization):
+    """A too long serialization raises a JoseError, and a ValueError."""
+    jws = JsonWebSignature()
+    jws.MAX_CONTENT_LENGTH = 10**7 if serialization.count(".") else 256000
+    with pytest.raises(errors.ExceededSizeError) as exc_info:
+        jws.deserialize_compact(serialization, "secret")
+
+    assert isinstance(exc_info.value, errors.JoseError)
+    assert isinstance(exc_info.value, ValueError)
+
+
+def test_too_long_deflate_content():
+    """Too much decompressed content raises a JoseError, and a ValueError."""
+    algorithm = DeflateZipAlgorithm()
+    compressed = algorithm.compress(b"a" * 300 * 1024)
+    with pytest.raises(errors.ExceededSizeError) as exc_info:
+        algorithm.decompress(compressed)
+
+    assert isinstance(exc_info.value, ValueError)
