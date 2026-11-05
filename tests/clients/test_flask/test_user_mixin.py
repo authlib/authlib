@@ -6,6 +6,7 @@ from flask import Flask
 from joserfc import jwt
 from joserfc.errors import InvalidClaimError
 from joserfc.errors import MissingClaimError
+from joserfc.errors import UnsupportedAlgorithmError
 from joserfc.jwk import KeySet
 from joserfc.jwk import OctKey
 
@@ -206,3 +207,115 @@ def test_force_fetch_jwks_uri():
             token["id_token"] = id_token
             user = client.parse_id_token(token, nonce="n")
             assert user.sub == "123"
+
+
+def _create_id_token(alg, key, iss="https://provider.test"):
+    now = int(time.time())
+    claims = {
+        "sub": "123",
+        "iss": iss,
+        "aud": "dev",
+        "iat": now,
+        "exp": now + 3600,
+        "nonce": "n",
+    }
+    return jwt.encode({"alg": alg}, claims, key, algorithms=[alg])
+
+
+def _register_client(**kwargs):
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        jwks={"keys": [secret_key.as_dict()]},
+        issuer="https://provider.test",
+        **kwargs,
+    )
+    return app, client
+
+
+def test_parse_id_token_default_algorithm():
+    """Without id_token_signing_alg_values_supported, only RS256 is accepted."""
+    app, client = _register_client()
+    token = {"id_token": _create_id_token("HS256", secret_key)}
+    with app.test_request_context():
+        with pytest.raises(UnsupportedAlgorithmError):
+            client.parse_id_token(token, nonce="n")
+
+
+@pytest.mark.filterwarnings("ignore::joserfc.errors.SecurityWarning")
+def test_parse_id_token_none_algorithm():
+    """An unsigned ID token is refused, even if the provider allows none."""
+    app, client = _register_client(
+        id_token_signing_alg_values_supported=["RS256", "none"]
+    )
+    token = {"id_token": _create_id_token("none", None)}
+    with app.test_request_context():
+        with pytest.raises(UnsupportedAlgorithmError):
+            client.parse_id_token(token, nonce="n")
+
+
+def test_parse_id_token_claims_options_keep_issuer():
+    """Claims options without iss keep the issuer check."""
+    app, client = _register_client(id_token_signing_alg_values_supported=["HS256"])
+    token = {"id_token": _create_id_token("HS256", secret_key, "https://other.test")}
+    claims_options = {"email": {"essential": False}}
+    with app.test_request_context():
+        with pytest.raises(InvalidClaimError):
+            client.parse_id_token(token, nonce="n", claims_options=claims_options)
+
+
+@pytest.mark.filterwarnings("ignore::joserfc.errors.SecurityWarning")
+def test_parse_id_token_only_none_algorithm():
+    """When the provider lists only none, RS256 is used, not every algorithm."""
+    app, client = _register_client(id_token_signing_alg_values_supported=["none"])
+    token = {"id_token": _create_id_token("HS256", secret_key)}
+    with app.test_request_context():
+        with pytest.raises(UnsupportedAlgorithmError):
+            client.parse_id_token(token, nonce="n")
+
+
+def test_parse_id_token_algorithm_string():
+    """A single algorithm can be given as a string."""
+    app, client = _register_client(id_token_signing_alg_values_supported="HS256")
+    token = {"id_token": _create_id_token("HS256", secret_key)}
+    with app.test_request_context():
+        assert client.parse_id_token(token, nonce="n").sub == "123"
+
+
+def test_parse_id_token_claims_options_iss_without_value():
+    """An iss option without value keeps the issuer of the metadata."""
+    app, client = _register_client(id_token_signing_alg_values_supported=["HS256"])
+    token = {"id_token": _create_id_token("HS256", secret_key, "https://other.test")}
+    claims_options = {"iss": {"essential": True}}
+    with app.test_request_context():
+        with pytest.raises(InvalidClaimError):
+            client.parse_id_token(token, nonce="n", claims_options=claims_options)
+    assert claims_options == {"iss": {"essential": True}}
+
+
+def test_parse_id_token_claims_options_not_modified():
+    """The claims options of the application are not modified."""
+
+    def validate_sub(claims, value):
+        return value == "123"
+
+    app, client = _register_client(id_token_signing_alg_values_supported=["HS256"])
+    claims_options = {"sub": {"validate": validate_sub}}
+    with app.test_request_context():
+        for _ in range(2):
+            token = {"id_token": _create_id_token("HS256", secret_key)}
+            client.parse_id_token(token, nonce="n", claims_options=claims_options)
+    assert claims_options == {"sub": {"validate": validate_sub}}
+
+
+def test_parse_id_token_claims_options_iss_validate():
+    """An iss option with a validate function replaces the metadata issuer."""
+    app, client = _register_client(id_token_signing_alg_values_supported=["HS256"])
+    token = {"id_token": _create_id_token("HS256", secret_key, "https://other.test")}
+    claims_options = {"iss": {"validate": lambda claims, value: True}}
+    with app.test_request_context():
+        assert client.parse_id_token(token, "n", claims_options).sub == "123"

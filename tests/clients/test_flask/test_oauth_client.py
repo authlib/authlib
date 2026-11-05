@@ -477,6 +477,7 @@ def test_openid_authorize():
         authorize_url="https://provider.test/authorize",
         client_kwargs={"scope": "openid profile"},
         jwks={"keys": [key.as_dict()]},
+        id_token_signing_alg_values_supported=["HS256"],
     )
 
     with app.test_request_context():

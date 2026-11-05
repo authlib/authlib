@@ -10,6 +10,37 @@ from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core import UserInfo
 
 
+def _get_id_token_algorithms(metadata):
+    """Return the algorithms accepted for the ID token signature."""
+    algorithms = metadata.get("id_token_signing_alg_values_supported") or []
+    if isinstance(algorithms, str):
+        algorithms = [algorithms]
+
+    algorithms = [alg for alg in algorithms if alg != "none"]
+
+    # Per OpenID Connect Registration §2, a client receives RS256 ID tokens
+    # by default.
+    return algorithms or ["RS256"]
+
+
+def _get_claims_options(claims_options, metadata):
+    """Add the issuer check to the claims options, unless they check the
+    issuer themselves.
+    """
+    claims_options = {
+        key: dict(option) for key, option in (claims_options or {}).items()
+    }
+    issuer = metadata.get("issuer")
+    if not issuer:
+        return claims_options
+
+    iss = claims_options.setdefault("iss", {})
+    if not {"value", "values", "validate"} & iss.keys():
+        iss["values"] = [issuer]
+
+    return claims_options
+
+
 class OpenIDMixin:
     def fetch_jwk_set(self, force=False):
         metadata = self.load_server_metadata()
@@ -61,10 +92,8 @@ class OpenIDMixin:
                 claims_cls = ImplicitIDToken
 
         metadata = self.load_server_metadata()
-        if claims_options is None and "issuer" in metadata:
-            claims_options = {"iss": {"values": [metadata["issuer"]]}}
-
-        alg_values = metadata.get("id_token_signing_alg_values_supported")
+        claims_options = _get_claims_options(claims_options, metadata)
+        alg_values = _get_id_token_algorithms(metadata)
 
         key_set = KeySet.import_key_set(self.fetch_jwk_set())
         try:

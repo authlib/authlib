@@ -9,6 +9,9 @@ from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core import UserInfo
 
+from .sync_openid import _get_claims_options
+from .sync_openid import _get_id_token_algorithms
+
 __all__ = ["AsyncOpenIDMixin"]
 
 
@@ -58,12 +61,8 @@ class AsyncOpenIDMixin:
                 claims_cls = ImplicitIDToken
 
         metadata = await self.load_server_metadata()
-        if claims_options is None and "issuer" in metadata:
-            claims_options = {"iss": {"values": [metadata["issuer"]]}}
-
-        alg_values = metadata.get("id_token_signing_alg_values_supported")
-        if not alg_values:
-            alg_values = ["RS256"]
+        claims_options = _get_claims_options(claims_options, metadata)
+        alg_values = _get_id_token_algorithms(metadata)
 
         jwks = await self.fetch_jwk_set()
         key_set = KeySet.import_key_set(jwks)

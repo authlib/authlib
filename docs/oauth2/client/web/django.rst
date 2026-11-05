@@ -120,6 +120,13 @@ claims in the received token. Passing ``nonce=None`` to ``parse_id_token()`` omi
 nonce validation and should only be used when the application has deliberately
 chosen a flow without an expected nonce.
 
+The ID Token signature is checked with the algorithms of the provider
+``id_token_signing_alg_values_supported`` metadata, or ``RS256`` when this
+metadata is missing. Unsigned ID Tokens are always refused. If your provider
+uses another algorithm and does not publish this metadata, set it when you
+register the client. For ``HS256``, also add the client secret as an ``oct``
+key in ``jwks``.
+
 RP-Initiated Logout
 -------------------
 
