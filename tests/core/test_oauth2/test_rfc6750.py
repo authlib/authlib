@@ -96,6 +96,18 @@ def test_form_body_token_and_header():
         protector.parse_request_authorization(request)
 
 
+def test_empty_form_body_token_and_header():
+    """An empty body token is ignored, so the header token is used."""
+    protector = create_protector()
+    request = FormRequest(
+        "POST",
+        {"Authorization": "Bearer a1", "Content-Type": URLENCODED},
+        {"access_token": ""},
+    )
+    _, token_string = protector.parse_request_authorization(request)
+    assert token_string == "a1"
+
+
 @pytest.mark.parametrize("request_class", [OAuth2Request, JsonRequest])
 def test_form_body_token_without_form(request_class):
     """Requests without a form only use the Authorization header."""

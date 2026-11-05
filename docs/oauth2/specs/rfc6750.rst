@@ -41,7 +41,7 @@ The token is read from the body only if all these conditions are met:
 
 - the ``Content-Type`` is ``application/x-www-form-urlencoded``;
 - the HTTP method is not ``GET``;
-- the request has no ``Authorization`` header.
+- the ``access_token`` parameter is not empty.
 
 A request that sends the token both in the header and in the body gets an
 ``invalid_request`` error.

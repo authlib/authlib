@@ -153,6 +153,44 @@ def test_access_resource_with_token_in_body(factory, token):
     assert data["username"] == "foo"
 
 
+@pytest.mark.parametrize("method", ["put", "patch", "delete"])
+def test_access_resource_with_token_in_body_other_methods(factory, token, method):
+    """The access token can be sent in the form-encoded body of methods
+    other than POST."""
+
+    @require_oauth_with_body("profile")
+    def get_user_profile(request):
+        user = request.oauth_token.user
+        return JsonResponse(dict(sub=user.pk, username=user.username))
+
+    request = getattr(factory, method)(
+        "/user",
+        data="access_token=a1",
+        content_type="application/x-www-form-urlencoded",
+    )
+    resp = get_user_profile(request)
+    assert resp.status_code == 200
+    data = json.loads(resp.content)
+    assert data["username"] == "foo"
+
+
+def test_token_in_body_already_read(factory, token):
+    """The body token is ignored when the request body was already read."""
+
+    @require_oauth_with_body("profile")
+    def get_user_profile(request):
+        return JsonResponse({})
+
+    request = factory.put(
+        "/user",
+        data="access_token=a1",
+        content_type="application/x-www-form-urlencoded",
+    )
+    request.read()
+    resp = get_user_profile(request)
+    assert resp.status_code == 401
+
+
 def test_token_in_header_and_body(factory, token):
     """Sending the access token both in the header and in the body is refused."""
 
