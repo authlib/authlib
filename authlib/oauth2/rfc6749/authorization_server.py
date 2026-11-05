@@ -478,10 +478,14 @@ class AuthorizationServer(Hookable):
                         "'grant_user' is not the user of the authorization session."
                     )
 
-            if not isinstance(request, OAuth2Request):
-                request = self.create_oauth2_request(request)
+            try:
+                if not isinstance(request, OAuth2Request):
+                    request = self.create_oauth2_request(request)
+            except OAuth2Error as error:
+                response = self.handle_error_response(request, error)
+            else:
+                response = self._create_grant_response(request, grant, grant_user)
 
-            response = self._create_grant_response(request, grant, grant_user)
             grant.execute_hook("after_authorization_response", response)
         finally:
             if session is not None:

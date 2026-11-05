@@ -588,3 +588,21 @@ def test_login_after_create(app, server, monkeypatch):
         grant = server.get_consent_grant()
 
     assert grant.interactions == ["create", "login"]
+
+
+def test_insecure_transport_on_authorization_response(app, server, monkeypatch):
+    """create_authorization_response returns an insecure_transport error for
+    a plain HTTP request."""
+    user = db.session.get(User, 1)
+    with app.test_request_context(authorize_url, base_url="https://auth.test"):
+        grant = server.get_consent_grant(end_user=user)
+
+    with monkeypatch.context() as m:
+        m.delenv("AUTHLIB_INSECURE_TRANSPORT")
+        with app.test_request_context(
+            authorize_url, method="POST", base_url="http://auth.test"
+        ):
+            rv = server.create_authorization_response(grant=grant, grant_user=user)
+
+    assert rv.status_code == 400
+    assert rv.json["error"] == "insecure_transport"
