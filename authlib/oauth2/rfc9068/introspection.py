@@ -7,6 +7,7 @@ from authlib.oauth2.rfc6750.errors import InvalidTokenError
 from ..rfc6749 import JsonResponse
 from ..rfc7662 import IntrospectionEndpoint
 from .claims import JWTAccessTokenClaims
+from .claims import _is_access_token
 from .token_validator import JWTBearerTokenValidator
 
 
@@ -64,10 +65,6 @@ class JWTIntrospectionEndpoint(IntrospectionEndpoint):
         """"""
         self.check_params(request, client)
 
-        # do not attempt to decode refresh_tokens
-        if request.form.get("token_type_hint") not in ("access_token", None):
-            raise ContinueIteration()
-
         validator = JWTBearerTokenValidator(issuer=self.issuer, resource_server=None)
         validator.get_jwks = self.get_jwks
         try:
@@ -77,7 +74,11 @@ class JWTIntrospectionEndpoint(IntrospectionEndpoint):
         except InvalidTokenError as exc:
             raise ContinueIteration() from exc
 
-        if token and self.check_permission(token, client, request):
+        # Per RFC 9068 §2.1, JWT access tokens have an at+jwt typ header.
+        if not _is_access_token(token):
+            raise ContinueIteration()
+
+        if self.check_permission(token, client, request):
             return token
 
     def create_introspection_payload(self, token: JWTAccessTokenClaims):
