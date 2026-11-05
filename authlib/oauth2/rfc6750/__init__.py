@@ -9,6 +9,7 @@ The OAuth 2.0 Authorization Framework: Bearer Token Usage.
 
 from .errors import InsufficientScopeError
 from .errors import InvalidTokenError
+from .form_body import FormEncodedBodyToken
 from .parameters import add_bearer_token
 from .token import BearerTokenGenerator
 from .validator import BearerTokenValidator
@@ -24,4 +25,5 @@ __all__ = [
     "BearerToken",
     "BearerTokenGenerator",
     "BearerTokenValidator",
+    "FormEncodedBodyToken",
 ]

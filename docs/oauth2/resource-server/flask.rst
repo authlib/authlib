@@ -22,6 +22,9 @@ server. Authlib offers a **decorator** to protect your API endpoints::
     # only bearer token is supported currently
     require_oauth.register_token_validator(MyBearerTokenValidator())
 
+The access token is read from the ``Authorization`` header. To also accept it
+in a form-encoded request body, see :ref:`rfc6750_form_body`.
+
 When the resource server has no access to the ``Token`` model (database), and
 there is an introspection token endpoint in authorization server, you can
 :ref:`require_oauth_introspection`.
