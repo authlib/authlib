@@ -499,7 +499,7 @@ class AuthorizationServer(Hookable):
             result = grant.create_authorization_response(redirect_uri, grant_user)
             return self._send_response(result)
         except OAuth2Error as error:
-            error.state = request.payload.state
+            error.state = grant.request.payload.state
             _set_error_response_mode(error, grant)
             _check_error_redirect(grant.authorization_session, grant.request, error)
             return self.handle_error_response(request, error)

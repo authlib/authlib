@@ -30,3 +30,10 @@ Added
   returned without redirection. It also applies to ``access_denied``.
 - ``grant.silent`` is true when the request must be done without any user
   interaction, such as with the OpenID Connect ``prompt=none``.
+
+Fixed
+~~~~~
+
+- With a request object (:rfc:`9101`), the errors of
+  ``create_authorization_response``, such as ``access_denied``, contain the
+  ``state`` of the request object.

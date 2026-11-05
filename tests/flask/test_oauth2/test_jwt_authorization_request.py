@@ -6,7 +6,9 @@ from joserfc import jwk
 from joserfc import jwt
 
 from authlib.common.urls import add_params_to_uri
+from authlib.common.urls import url_decode
 from authlib.common.urls import url_encode
+from authlib.common.urls import urlparse
 from authlib.oauth2 import rfc7591
 from authlib.oauth2 import rfc9101
 from authlib.oauth2.multiple_response_types import MultipleResponseTypes
@@ -162,6 +164,23 @@ def test_request_parameter_get(test_client, server):
     )
     rv = test_client.get(url)
     assert rv.data == b"login"
+
+
+def test_denied_state_in_request_object(test_client, server):
+    """When the user denies the request, the state comes from the request
+    object."""
+    register_request_object_extension(server)
+    payload = {"response_type": "code", "client_id": "client-id", "state": "bar"}
+    request_obj = jwt.encode(
+        {"alg": "RS256"}, payload, jwk.import_key(read_file_path("jwk_private.json"))
+    )
+    url = add_params_to_uri(
+        authorize_url, {"client_id": "client-id", "request": request_obj}
+    )
+    rv = test_client.post(url)
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert params["error"] == "access_denied"
+    assert params["state"] == "bar"
 
 
 def test_request_uri_parameter_get(test_client, server):
