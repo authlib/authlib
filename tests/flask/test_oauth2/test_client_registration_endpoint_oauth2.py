@@ -316,3 +316,50 @@ def test_validate_jwks(test_client):
     rv = test_client.post("/create_client", json=body, headers=headers)
     resp = json.loads(rv.data)
     assert "jwks" in resp["error_description"]
+
+
+@pytest.mark.parametrize(
+    "client_metadata",
+    [
+        {"scope": 5},
+        {"scope": ["profile"]},
+        {"grant_types": 5},
+        {"grant_types": "authorization_code"},
+        {"response_types": [5]},
+        {"redirect_uris": [5]},
+        {"token_endpoint_auth_method": ["none"]},
+        {"client_name": {"en": "Client"}},
+        {"jwks": []},
+        {"jwks": {}},
+        {"jwks": {"keys": 5}},
+    ],
+)
+@pytest.mark.parametrize("with_metadata", [True, False])
+def test_invalid_metadata_type(test_client, metadata, client_metadata, with_metadata):
+    """Client metadata with an unexpected type is refused."""
+    if with_metadata:
+        metadata.update(
+            {
+                "scopes_supported": ["profile"],
+                "grant_types_supported": ["authorization_code"],
+                "response_types_supported": ["code"],
+                "token_endpoint_auth_methods_supported": ["none"],
+            }
+        )
+
+    headers = {"Authorization": "bearer abc"}
+    body = {"client_name": "Authlib", **client_metadata}
+    rv = test_client.post("/create_client", json=body, headers=headers)
+    resp = json.loads(rv.data)
+    assert rv.status_code == 400
+    assert resp["error"] == "invalid_client_metadata"
+
+
+def test_null_metadata_uses_default(test_client):
+    """A null client metadata is ignored, so its default value applies."""
+    headers = {"Authorization": "bearer abc"}
+    body = {"client_name": "Authlib", "token_endpoint_auth_method": None}
+    rv = test_client.post("/create_client", json=body, headers=headers)
+    resp = json.loads(rv.data)
+    assert rv.status_code == 201
+    assert resp["token_endpoint_auth_method"] == "client_secret_basic"
