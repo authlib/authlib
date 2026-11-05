@@ -28,6 +28,12 @@ class JWTAccessTokenClaims(JWTClaims):
         "entitlements",
     ]
 
+    def get_scope(self) -> str | None:
+        """Return the value of the ``scope`` claim, or ``None`` if the token
+        has no scope.
+        """
+        return self.get("scope")
+
     def validate(self, **kwargs):
         typ = self.header.get("typ")
         if typ and typ.lower() not in ("at+jwt", "application/at+jwt"):

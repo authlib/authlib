@@ -171,6 +171,18 @@ def test_bad_token(test_client):
     assert rv.headers["WWW-Authenticate"] == "Bearer"
 
 
+def test_token_without_user(test_client, db, token):
+    """A token without a user is rejected."""
+    token.user_id = None
+    db.session.add(token)
+    db.session.commit()
+
+    headers = {"Authorization": "Bearer access-token"}
+    rv = test_client.get("/oauth/userinfo", headers=headers)
+    assert rv.status_code == 401
+    assert json.loads(rv.data)["error"] == "invalid_token"
+
+
 def test_token_has_bad_scope(test_client, db, token):
     """Test that tokens without 'openid' scope cannot access the userinfo endpoint."""
 

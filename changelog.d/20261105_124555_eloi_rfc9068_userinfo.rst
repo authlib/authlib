@@ -1,0 +1,14 @@
+Fixed
+~~~~~
+
+- The OIDC userinfo endpoint accepts :rfc:`9068` JWT access tokens.
+  Override the new ``get_token_client`` and ``get_token_user`` methods of
+  ``UserInfoEndpoint`` to load the client and the user from the token claims.
+  If one of them returns ``None``, the endpoint returns an ``invalid_token``
+  error instead of a server error. :issue:`831`
+
+Changed
+~~~~~~~
+
+- The OIDC userinfo endpoint reads the token scope with ``get_scope()``.
+  Custom token classes used with this endpoint must implement it.
