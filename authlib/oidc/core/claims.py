@@ -47,11 +47,28 @@ class IDToken(JWTClaims):
                 raise MissingClaimError(k)
 
         super().validate(now, leeway)
+        self.validate_aud()
         self.validate_auth_time()
         self.validate_nonce()
         self.validate_amr()
         self.validate_azp()
         self.validate_at_hash()
+
+    def validate_aud(self):
+        """REQUIRED. Audience(s) that this ID Token is intended for. It MUST
+        contain the OAuth 2.0 client_id of the Relying Party as an audience
+        value. The Client MUST validate that the aud (audience) Claim contains
+        its client_id value registered at the Issuer identified by the iss
+        (issuer) Claim as an audience.
+        """
+        client_id = self.params.get("client_id")
+        if not client_id:
+            return
+
+        aud = self["aud"]
+        audiences = aud if isinstance(aud, list) else [aud]
+        if client_id not in audiences:
+            raise InvalidClaimError("aud")
 
     def validate_auth_time(self):
         """Time when the End-User authentication occurred. Its value is a JSON
@@ -111,13 +128,7 @@ class IDToken(JWTClaims):
         """
         aud = self.get("aud")
         client_id = self.params.get("client_id")
-        required = False
-        if aud and client_id:
-            if isinstance(aud, list) and len(aud) == 1:
-                aud = aud[0]
-            if aud != client_id:
-                required = True
-
+        required = bool(client_id) and isinstance(aud, list) and len(aud) > 1
         azp = self.get("azp")
         if required and not azp:
             raise MissingClaimError("azp")

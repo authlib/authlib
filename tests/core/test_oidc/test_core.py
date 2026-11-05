@@ -76,12 +76,24 @@ def test_validate_amr():
         claims.validate(1000)
 
 
+@pytest.mark.parametrize("aud", ["1", ["1", "3"]])
+def test_validate_aud(aud):
+    """The audience must contain the client_id, even with an azp claim."""
+    claims = CodeIDToken(
+        {"iss": "1", "sub": "1", "aud": aud, "azp": "2", "exp": 10000, "iat": 100},
+        {},
+    )
+    claims.params = {"client_id": "2"}
+    with pytest.raises(InvalidClaimError):
+        claims.validate(1000)
+
+
 def test_validate_azp():
     claims = CodeIDToken(
         {
             "iss": "1",
             "sub": "1",
-            "aud": "1",
+            "aud": ["1", "2"],
             "exp": 10000,
             "iat": 100,
         },
