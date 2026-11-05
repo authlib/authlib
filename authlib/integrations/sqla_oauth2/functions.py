@@ -77,10 +77,12 @@ def create_revocation_endpoint(session, token_model):
 
         def revoke_token(self, token, request):
             now = int(time.time())
-            hint = request.form.get("token_type_hint")
             token.access_token_revoked_at = now
-            if hint != "access_token":
+            # Per RFC 7009 §2.1, revoking a refresh token also invalidates
+            # the access token.
+            if request.form["token"] != token.access_token:
                 token.refresh_token_revoked_at = now
+
             session.add(token)
             session.commit()
 

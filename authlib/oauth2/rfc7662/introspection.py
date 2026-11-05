@@ -1,7 +1,6 @@
 from ..rfc6749 import InvalidRequestError
 from ..rfc6749 import JsonResponse
 from ..rfc6749 import TokenEndpoint
-from ..rfc6749 import UnsupportedTokenTypeError
 
 
 class IntrospectionEndpoint(TokenEndpoint):
@@ -32,9 +31,16 @@ class IntrospectionEndpoint(TokenEndpoint):
             introspection.
         """
         self.check_params(request, client)
-        token = self.query_token(
-            request.form["token"], request.form.get("token_type_hint")
-        )
+        # Per RFC 7662 §2.1, the server searches all its supported token types
+        # when the hint does not help, so an unknown hint is ignored.
+        hint = request.form.get("token_type_hint")
+        if hint not in self.SUPPORTED_TOKEN_TYPES:
+            hint = None
+
+        token = self.query_token(request.form["token"], hint)
+        if not token and hint is not None:
+            token = self.query_token(request.form["token"], None)
+
         if token and self.check_permission(token, client, request):
             return token
 
@@ -42,10 +48,6 @@ class IntrospectionEndpoint(TokenEndpoint):
         params = request.form
         if "token" not in params:
             raise InvalidRequestError()
-
-        hint = params.get("token_type_hint")
-        if hint and hint not in self.SUPPORTED_TOKEN_TYPES:
-            raise UnsupportedTokenTypeError()
 
     def create_endpoint_response(self, request):
         """Validate introspection request and create the response.
@@ -103,6 +105,10 @@ class IntrospectionEndpoint(TokenEndpoint):
                     if not tok:
                         tok = Token.query_by_refresh_token(token_string)
                 return tok
+
+        ``token_type_hint`` is ``None`` when the request has no hint or an
+        unknown one. If no token is found with the hint, the endpoint calls
+        this method again with ``None``.
         """
         raise NotImplementedError()
 

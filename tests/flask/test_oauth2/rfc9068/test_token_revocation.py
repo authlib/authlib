@@ -128,7 +128,7 @@ def test_revocation(test_client, client, access_token):
     rv = test_client.post(
         "/oauth/revoke", data={"token": access_token}, headers=headers
     )
-    assert rv.status_code == 401
+    assert rv.status_code == 400
     resp = json.loads(rv.data)
     assert resp["error"] == "unsupported_token_type"
 
@@ -180,6 +180,66 @@ def test_revocation_different_issuer(test_client, claims, jwks, client):
     rv = test_client.post(
         "/oauth/revoke", data={"token": access_token}, headers=headers
     )
-    assert rv.status_code == 401
+    assert rv.status_code == 400
     resp = json.loads(rv.data)
     assert resp["error"] == "unsupported_token_type"
+
+
+def test_revocation_unknown_hint(test_client, client, access_token):
+    """Per RFC 7009 §2.2, an unknown token type hint is ignored."""
+    headers = create_basic_header(client.client_id, client.client_secret)
+    rv = test_client.post(
+        "/oauth/revoke",
+        data={"token": access_token, "token_type_hint": "unknown"},
+        headers=headers,
+    )
+    assert rv.status_code == 400
+    resp = json.loads(rv.data)
+    assert resp["error"] == "unsupported_token_type"
+
+
+def test_revocation_refresh_token_hint(test_client, client, access_token):
+    """Per RFC 7009 §2.1, a JWT access token with a refresh_token hint is
+    still found."""
+    headers = create_basic_header(client.client_id, client.client_secret)
+    rv = test_client.post(
+        "/oauth/revoke",
+        data={"token": access_token, "token_type_hint": "refresh_token"},
+        headers=headers,
+    )
+    assert rv.status_code == 400
+    resp = json.loads(rv.data)
+    assert resp["error"] == "unsupported_token_type"
+
+
+@pytest.mark.parametrize("typ", ["rt+jwt", None])
+def test_revocation_other_jwt_skipped(test_client, server, claims, jwks, client, typ):
+    """Per RFC 9068 §2.1, a JWT without the at+jwt typ is passed to the next
+    endpoint."""
+    revoked = []
+
+    class RefreshToken:
+        def __init__(self, token_string):
+            self.token_string = token_string
+
+        def check_client(self, client):
+            return True
+
+    class MyRevocationEndpoint(RevocationEndpoint):
+        def query_token(self, token, token_type_hint):
+            return RefreshToken(token)
+
+        def revoke_token(self, token, request):
+            revoked.append(token.token_string)
+
+    server.register_endpoint(MyRevocationEndpoint)
+    header = {"alg": "RS256", "typ": typ} if typ else {"alg": "RS256"}
+    refresh_token = jwt.encode(header, claims, key=jwks)
+    headers = create_basic_header(client.client_id, client.client_secret)
+    rv = test_client.post(
+        "/oauth/revoke",
+        data={"token": refresh_token, "token_type_hint": "refresh_token"},
+        headers=headers,
+    )
+    assert rv.status_code == 200
+    assert revoked == [refresh_token]
