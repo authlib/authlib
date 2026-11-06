@@ -58,13 +58,10 @@ class BaseOAuth:
             return None
 
         overwrite, config = self._registry[name]
-        client_cls = config.pop("client_cls", None)
-
+        kwargs = dict(config)
+        client_cls = kwargs.pop("client_cls", None)
         if client_cls and client_cls.OAUTH_APP_CONFIG:
-            kwargs = client_cls.OAUTH_APP_CONFIG
-            kwargs.update(config)
-        else:
-            kwargs = config
+            kwargs = {**client_cls.OAUTH_APP_CONFIG, **kwargs}
 
         kwargs = self.generate_client_kwargs(name, overwrite, **kwargs)
         framework = self.framework_integration_cls(name, self.cache)
@@ -90,9 +87,23 @@ class BaseOAuth:
 
             oauth.register('twitter', client_id='', ...)
             oauth.twitter.get('timeline')
+
+        Registering the same name again replaces the remote application.
         """
         self._registry[name] = (overwrite, kwargs)
+        self._clients.pop(name, None)
         return self.create_client(name)
+
+    def remove_client(self, name):
+        """Remove a registered remote application::
+
+            oauth.remove_client("twitter")
+
+        :param name: Name of the remote application.
+        :raises KeyError: if no remote application has this name.
+        """
+        del self._registry[name]
+        self._clients.pop(name, None)
 
     def generate_client_kwargs(self, name, overwrite, **kwargs):
         fetch_token = kwargs.pop("fetch_token", None)
@@ -133,7 +144,7 @@ def _config_client(config, kwargs, overwrite):
             kwargs[k] = v
         elif overwrite and v:
             if isinstance(kwargs[k], dict):
-                kwargs[k].update(v)
+                kwargs[k] = {**kwargs[k], **v}
             else:
                 kwargs[k] = v
     return kwargs

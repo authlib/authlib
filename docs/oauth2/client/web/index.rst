@@ -68,6 +68,11 @@ application. You can access the remote application with::
     # or simply with
     github = oauth.github
 
+Registering the same name again replaces the remote application in
+``oauth.github`` and ``oauth.create_client('github')``. A client object you
+got before keeps the old configuration. Use ``oauth.remove_client('github')``
+to remove the remote application.
+
 The configuration of those parameters can be loaded from the framework
 configuration. Each framework has its own config system, read the framework
 specified documentation later.
