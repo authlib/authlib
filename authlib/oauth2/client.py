@@ -282,6 +282,8 @@ class OAuth2Client:
         if grant_type is None:
             grant_type = _guess_grant_type(kwargs)
             self.metadata["grant_type"] = grant_type
+        elif grant_type == "client_credentials":
+            self.metadata["grant_type"] = grant_type
 
         body = self._prepare_token_endpoint_body(body, grant_type, **kwargs)
 
