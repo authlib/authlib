@@ -133,7 +133,7 @@ type. For instance, with the authorization code grant:
         autonumber
         participant User as User's browser<br/>(User Agent)
         participant Client
-        box rgba(80, 120, 220, 0.12) JWTBearerClientAssertion
+        box rgba(80, 120, 220, 0.12) Authorization server
             participant AS as Authorization Server
         end
         participant RS as Resource Server
@@ -160,8 +160,8 @@ type. For instance, with the authorization code grant:
 5. The client sends ``grant_type=authorization_code``, the ``code``,
    ``client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer``
    and a JWT as ``client_assertion``. In the JWT, ``iss`` and ``sub`` are the
-   ``client_id``. ``JWTBearerClientAssertion`` checks the signature with the
-   client secret or public key.
+   ``client_id``. The authorization server checks the signature with the
+   client secret or public key, according to the method of the client.
 6. The authorization server returns the token response of the grant.
 7. The client calls the API of the Resource Server with the access token, in
    the ``Authorization: Bearer`` header.
@@ -173,16 +173,24 @@ The :class:`~authlib.oauth2.rfc6749.AuthorizationServer` has provided a method
 :meth:`~authlib.oauth2.rfc6749.AuthorizationServer.register_client_auth_method`
 to add more client authentication methods.
 
-In Authlib, ``client_secret_jwt`` and ``private_key_jwt`` share the same API,
-using :class:`JWTBearerClientAssertion` to create a new client authentication:
+Authlib provides one class for each method:
+
+* :class:`ClientSecretJWTAuthentication` for ``client_secret_jwt``. The client
+  signs the JWT with its secret, using ``HS256``, ``HS384`` or ``HS512``.
+* :class:`PrivateKeyJWTAuthentication` for ``private_key_jwt``. The client
+  signs the JWT with its private key, using an asymmetric algorithm such as
+  ``RS256``, ``PS256``, ``ES256`` or ``Ed25519``.
+
+Each class only accepts the clients registered with its method, in their
+``token_endpoint_auth_method``. A client registered with ``private_key_jwt``
+cannot authenticate with its secret, and an HMAC key in its JWK set is never
+used. Change ``ALGORITHMS`` to restrict the accepted algorithms:
 
 .. code-block:: python
 
     from joserfc.jwk import KeySet
 
-    class JWTClientAuth(JWTBearerClientAssertion):
-        CLIENT_AUTH_METHOD = 'private_key_jwt'
-
+    class ClientSecretJWTAuth(ClientSecretJWTAuthentication):
         def get_audiences(self):
             # Per RFC 7523 §3, aud identifies the authorization server.
             return ['https://example.com/oauth/token', 'https://example.com']
@@ -196,13 +204,28 @@ using :class:`JWTBearerClientAssertion` to create a new client authentication:
             cache.set(key, 1, timeout=3600)
             return True
 
+        def resolve_client_secret(self, client):
+            return client.client_secret
+
+    class PrivateKeyJWTAuth(PrivateKeyJWTAuthentication):
+        def get_audiences(self):
+            return ['https://example.com/oauth/token', 'https://example.com']
+
+        def validate_jti(self, claims, jti):
+            ...
+
         def resolve_client_public_key(self, client):
             return KeySet.import_key_set(client.jwks)
 
     authorization_server.register_client_auth_method(
-        JWTClientAuth.CLIENT_AUTH_METHOD,
-        JWTClientAuth()
+        ClientSecretJWTAuth.CLIENT_AUTH_METHOD, ClientSecretJWTAuth()
     )
+    authorization_server.register_client_auth_method(
+        PrivateKeyJWTAuth.CLIENT_AUTH_METHOD, PrivateKeyJWTAuth()
+    )
+
+``client_secret_jwt`` needs the secret of the client in plain text, so the
+server cannot store it as a hash. ``resolve_client_secret`` returns it.
 
 The ``get_audiences`` method returns the list of valid ``aud`` values
 accepted in client assertion JWTs. Per :rfc:`RFC 7523 §3 <7523#section-3>`,
@@ -211,10 +234,9 @@ URL MAY be used. The example also accepts the issuer identifier. The list
 must not be empty. Client
 assertions are rejected with ``invalid_client`` if it is empty.
 
-Now we have added this client auth method to authorization server, but no
-grant types support this authentication method, you need to add it to the
-supported grant types too, e.g. we want to support this in authorization
-code grant:
+Now we have added these client auth methods to authorization server, but no
+grant types support them, you need to add them to the supported grant types
+too, e.g. we want to support them in authorization code grant:
 
 .. code-block:: python
 
@@ -223,26 +245,14 @@ code grant:
     class AuthorizationCodeGrant(grants.AuthorizationCodeGrant):
         TOKEN_ENDPOINT_AUTH_METHODS = [
             'client_secret_basic',
-            JWTClientAuth.CLIENT_AUTH_METHOD,
+            'client_secret_jwt',
+            'private_key_jwt',
         ]
         # ...
 
-The key returned by ``resolve_client_public_key`` checks the signature of the
-client assertion. This example returns the public keys of the client, for
-``private_key_jwt``.
-
-The client authenticates only if its ``check_endpoint_auth_method`` accepts
-``CLIENT_AUTH_METHOD``. Its default value is ``client_assertion_jwt``. The
-example sets it to ``private_key_jwt``, the value of the client metadata
-(:rfc:`RFC 7591 §2 <7591#section-2>`). For ``client_secret_jwt``, set ``CLIENT_AUTH_METHOD``
-to ``client_secret_jwt``, and return the client secret as an ``OctKey``:
-
-.. code-block:: python
-
-    from joserfc.jwk import OctKey
-
-    def resolve_client_public_key(self, client):
-        return OctKey.import_key(client.client_secret)
+Earlier versions used :class:`JWTBearerClientAssertion` directly, with the
+``client_assertion_jwt`` method for both cases. This is deprecated, because
+the client could choose the method through the ``alg`` of its JWT.
 
 .. _ClientAuthentication: http://openid.net/specs/openid-connect-core-1_0.html#ClientAuthentication
 
@@ -294,6 +304,14 @@ API Reference
 -------------
 
 .. autoclass:: JWTBearerGrant
+    :member-order: bysource
+    :members:
+
+.. autoclass:: ClientSecretJWTAuthentication
+    :member-order: bysource
+    :members:
+
+.. autoclass:: PrivateKeyJWTAuthentication
     :member-order: bysource
     :members:
 
