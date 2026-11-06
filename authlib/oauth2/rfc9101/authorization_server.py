@@ -1,7 +1,9 @@
 from joserfc import jwt
 from joserfc.errors import DecodeError
 from joserfc.errors import JoseError
+from joserfc.errors import MissingKeyError
 from joserfc.errors import UnsupportedAlgorithmError
+from joserfc.jwk import OctKey
 from joserfc.jws import JWSRegistry
 
 from authlib._joserfc_helpers import import_any_key
@@ -205,8 +207,22 @@ class JWTAuthenticationRequest:
     def _decode_request_object(
         self, request, client: ClientMixin, raw_request_object: str
     ):
-        jwks = self.resolve_client_public_key(client)
-        key = import_any_key(jwks)
+        def resolve_key(obj):
+            # Per RFC 9101 §6.2, the signature is validated with a key
+            # associated with the client and the algorithm of the alg header.
+            if JWSRegistry.algorithms[obj.headers()["alg"]].key_type == "oct":
+                secret = self.resolve_client_secret(client)
+                if not secret:
+                    raise MissingKeyError(
+                        "No client secret to verify a Request Object signed "
+                        "with an HMAC algorithm."
+                    )
+
+                return OctKey.import_key(secret)
+
+            key = import_any_key(self.resolve_client_public_key(client))
+            return key(obj) if callable(key) else key
+
         algorithms = self.get_request_object_signing_algorithms(client)
         metadata = self.get_server_metadata()
         if self.get_client_require_signed_request_object(client) or metadata.get(
@@ -218,7 +234,9 @@ class JWTAuthenticationRequest:
         try:
             if not algorithms:
                 raise UnsupportedAlgorithmError()
-            request_object = jwt.decode(raw_request_object, key, algorithms=algorithms)
+            request_object = jwt.decode(
+                raw_request_object, resolve_key, algorithms=algorithms
+            )
             self.claims_validator.validate(request_object.claims)
         except UnsupportedAlgorithmError as error:
             raise InvalidRequestError(
@@ -327,8 +345,26 @@ class JWTAuthenticationRequest:
                         return KeySet.import_key_set(data)
 
                     return KeySet.import_key_set(client.jwks)
+
+        These keys verify the Request Objects signed with an asymmetric
+        algorithm. :meth:`resolve_client_secret` handles HMAC algorithms.
         """
         raise NotImplementedError()
+
+    def resolve_client_secret(self, client: ClientMixin) -> str | bytes | None:
+        """Return the secret of the client, in plain text, to verify the
+        Request Objects signed with ``HS256``, ``HS384`` or ``HS512``. Per
+        OpenID Connect Core §10.1, the key is the ``client_secret``.
+        Developers MAY implement this method::
+
+            def resolve_client_secret(self, client):
+                return client.client_secret
+
+        Return ``None`` when the client has no usable secret, for instance
+        when it has expired. By default, it returns ``None``, and Request
+        Objects signed with an HMAC algorithm are rejected.
+        """
+        return None
 
     def get_server_metadata(self) -> dict:
         """Return server metadata which includes supported grant types,
