@@ -14,6 +14,7 @@ from authlib.integrations.flask_client import FlaskOAuth2App
 from authlib.integrations.flask_client import OAuth
 from authlib.integrations.flask_client import OAuthError
 from authlib.oauth2.rfc6749.errors import MissingCodeException
+from authlib.oauth2.rfc7636 import create_s256_code_challenge
 from authlib.oidc.core.grants.util import create_half_hash
 from tests.util import HMAC_SECRET
 
@@ -422,7 +423,8 @@ def test_oauth2_authorize_with_metadata():
             assert resp.status_code == 302
 
 
-def test_oauth2_authorize_code_challenge():
+@pytest.mark.parametrize("method", ["S256", "plain"])
+def test_oauth2_authorize_code_challenge(method):
     app = Flask(__name__)
     app.secret_key = "!"
     oauth = OAuth(app)
@@ -432,22 +434,26 @@ def test_oauth2_authorize_code_challenge():
         api_base_url="https://resource.test/api",
         access_token_url="https://provider.test/token",
         authorize_url="https://provider.test/authorize",
-        client_kwargs={"code_challenge_method": "S256"},
+        client_kwargs={"code_challenge_method": method},
     )
 
     with app.test_request_context():
         resp = client.authorize_redirect("https://client.test/callback")
         assert resp.status_code == 302
         url = resp.headers.get("Location")
-        assert "code_challenge=" in url
-        assert "code_challenge_method=S256" in url
+        params = dict(url_decode(urlparse.urlparse(url).query))
+        assert params["code_challenge_method"] == method
 
-        state = dict(url_decode(urlparse.urlparse(url).query))["state"]
+        state = params["state"]
         assert state is not None
         data = session[f"_state_dev_{state}"]
 
         verifier = data["data"]["code_verifier"]
         assert verifier is not None
+        if method == "plain":
+            assert params["code_challenge"] == verifier
+        else:
+            assert params["code_challenge"] == create_s256_code_challenge(verifier)
 
     def fake_send(sess, req, **kwargs):
         assert f"code_verifier={verifier}" in req.body

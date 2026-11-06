@@ -11,6 +11,7 @@ from authlib.common.security import generate_token
 from authlib.common.urls import add_params_to_uri
 from authlib.common.urls import url_decode
 from authlib.common.urls import url_encode
+from authlib.common.urls import urlparse
 from authlib.integrations.base_client import MissingTokenError
 from authlib.integrations.requests_client import OAuth2Session
 from authlib.integrations.requests_client import OAuthError
@@ -141,6 +142,39 @@ def test_code_challenge():
     auth_url, _ = sess.create_authorization_url(url, code_verifier=generate_token(48))
     assert "code_challenge" in auth_url
     assert "code_challenge_method=S256" in auth_url
+
+
+def test_plain_code_challenge():
+    """With plain, the code_challenge is the code_verifier."""
+    sess = OAuth2Session(client_id="foo", code_challenge_method="plain")
+    code_verifier = generate_token(48)
+    auth_url, _ = sess.create_authorization_url(
+        "https://provider.test/authorize", code_verifier=code_verifier
+    )
+    params = dict(url_decode(urlparse.urlparse(auth_url).query))
+    assert params["code_challenge"] == code_verifier
+    assert params["code_challenge_method"] == "plain"
+
+
+def test_hybrid_code_challenge():
+    """A response_type that contains code gets a code_challenge."""
+    sess = OAuth2Session(client_id="foo", code_challenge_method="S256")
+    auth_url, _ = sess.create_authorization_url(
+        "https://provider.test/authorize",
+        code_verifier=generate_token(48),
+        response_type="code id_token",
+    )
+    params = dict(url_decode(urlparse.urlparse(auth_url).query))
+    assert params["code_challenge_method"] == "S256"
+
+
+def test_unsupported_code_challenge_method():
+    """An unknown code_challenge_method raises an error."""
+    sess = OAuth2Session(client_id="foo", code_challenge_method="s256")
+    with pytest.raises(ValueError, match="s256"):
+        sess.create_authorization_url(
+            "https://provider.test/authorize", code_verifier=generate_token(48)
+        )
 
 
 def test_token_from_fragment(token):
