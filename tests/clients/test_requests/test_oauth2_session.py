@@ -493,6 +493,23 @@ def test_auto_refresh_token2(token):
     assert update_token.called
 
 
+def test_auto_refresh_token_after_explicit_client_credentials(token):
+    sess = OAuth2Session("foo", token_endpoint="https://provider.test/token")
+    sess.send = mock_json_response(token)
+    sess.fetch_token(grant_type="client_credentials")
+
+    sess.token = dict(access_token="a", token_type="bearer", expires_at=100)
+    sess.get("https://resource.test/user")
+    assert sess.token["access_token"] == token["access_token"]
+
+
+def test_explicit_authorization_code_grant_is_not_remembered(token):
+    sess = OAuth2Session("foo", token_endpoint="https://provider.test/token")
+    sess.send = mock_json_response(token)
+    sess.fetch_token(grant_type="authorization_code", code="c")
+    assert sess.metadata.get("grant_type") is None
+
+
 def test_revoke_token():
     sess = OAuth2Session("a")
     answer = {"status": "ok"}

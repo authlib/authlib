@@ -365,6 +365,21 @@ def test_auto_refresh_token2():
         assert update_token.called is True
 
 
+def test_auto_refresh_token_after_explicit_client_credentials():
+    transport = WSGITransport(MockDispatch(default_token))
+
+    with OAuth2Client(
+        "foo",
+        token_endpoint="https://provider.test/token",
+        transport=transport,
+    ) as client:
+        client.fetch_token(grant_type="client_credentials")
+
+        client.token = dict(access_token="a", token_type="bearer", expires_at=100)
+        client.get("https://resource.test/user")
+        assert client.token["access_token"] == default_token["access_token"]
+
+
 def test_auto_refresh_token3():
     def _update_token(token, refresh_token=None, access_token=None):
         assert access_token == "a"
