@@ -780,3 +780,28 @@ def test_duplicate_body_parameters(token):
         "client_credentials"
     ]
     assert [value for key, value in params if key == "scope"] == ["openid"]
+
+
+def test_list_parameters(token):
+    """The resource and audience parameters accept a list of values."""
+    bodies = []
+
+    def fake_send(r, **kwargs):
+        bodies.append(r.body)
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        resp.json = lambda: token
+        return resp
+
+    url = "https://provider.test/token"
+    sess = OAuth2Session("foo", token=token)
+    sess.send = fake_send
+    sess.fetch_token(
+        url, grant_type="client_credentials", resource=["a", "b"], audience=["c"]
+    )
+    sess.refresh_token(url, refresh_token="r", resource=["a", "b"], audience=["c"])
+
+    for sent in bodies:
+        params = url_decode(sent)
+        assert [value for key, value in params if key == "resource"] == ["a", "b"]
+        assert [value for key, value in params if key == "audience"] == ["c"]

@@ -67,6 +67,14 @@ def test_prepare_grant_uri():
     )
 
 
+def test_prepare_token_request_with_list():
+    """A list is sent as a repeated parameter."""
+    body = parameters.prepare_token_request(
+        "client_credentials", resource=["a", "", "b"], audience=("c",), scope=None
+    )
+    assert body == "grant_type=client_credentials&resource=a&resource=b&audience=c"
+
+
 def test_list_to_scope():
     assert util.list_to_scope(["a", "b"]) == "a b"
     assert util.list_to_scope("a b") == "a b"
