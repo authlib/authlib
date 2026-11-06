@@ -286,6 +286,21 @@ By default, the token will be refreshed 60 seconds before its actual expiry time
 You can control this behaviour by setting the ``leeway`` parameter of the :class:`~requests_client.OAuth2Session`
 class.
 
+Automatically fetching new tokens
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``client_credentials`` grant has no refresh token. When the token has
+expired, Authlib fetches a new one if the client knows the grant. This is the
+case after ``fetch_token`` was called with this grant. If you create the client
+with a saved token instead, pass ``grant_type``::
+
+    >>> session = OAuth2Session(
+    ...     client_id, client_secret, token=token,
+    ...     token_endpoint=token_endpoint, grant_type="client_credentials",
+    ... )
+
+With the framework integrations, put ``grant_type`` in ``client_kwargs``.
+
 Manually refreshing tokens
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
