@@ -36,7 +36,7 @@ class AsyncAssertionClient(_AssertionClient, httpx2.AsyncClient):
         **kwargs,
     ):
         client_kwargs = extract_client_kwargs(kwargs)
-        httpx2.AsyncClient.__init__(self, **client_kwargs)
+        super(_AssertionClient, self).__init__(**client_kwargs)
 
         _AssertionClient.__init__(
             self,
@@ -97,7 +97,7 @@ class AssertionClient(_AssertionClient, httpx2.Client):
         **kwargs,
     ):
         client_kwargs = extract_client_kwargs(kwargs)
-        httpx2.Client.__init__(self, **client_kwargs)
+        super(_AssertionClient, self).__init__(**client_kwargs)
 
         _AssertionClient.__init__(
             self,
