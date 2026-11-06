@@ -633,6 +633,34 @@ def test_oauth2_access_token_with_post():
             assert token["access_token"] == "a"
 
 
+def test_oauth2_access_denied_with_post():
+    """An error response sent with form_post raises an OAuthError."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        access_token_url="https://provider.test/token",
+        authorize_url="https://provider.test/authorize",
+    )
+    payload = {
+        "error": "access_denied",
+        "error_description": "Not Allowed",
+        "error_uri": "https://provider.test/help",
+    }
+    with app.test_request_context(data=payload, method="POST"):
+        with mock.patch("requests.sessions.Session.send") as send:
+            with pytest.raises(OAuthError) as exc_info:
+                client.authorize_access_token()
+
+            assert exc_info.value.error == "access_denied"
+            assert exc_info.value.description == "Not Allowed"
+            assert exc_info.value.uri == "https://provider.test/help"
+            send.assert_not_called()
+
+
 def test_access_token_with_fetch_token():
     app = Flask(__name__)
     app.secret_key = "!"

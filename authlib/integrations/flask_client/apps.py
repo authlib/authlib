@@ -126,21 +126,14 @@ class FlaskOAuth2App(FlaskAppMixin, OAuth2Mixin, OpenIDMixin, BaseApp):
 
         :return: A token dict.
         """
-        if request.method == "GET":
-            error = request.args.get("error")
-            if error:
-                description = request.args.get("error_description")
-                raise OAuthError(error=error, description=description)
+        data = request.args if request.method == "GET" else request.form
+        error = data.get("error")
+        if error:
+            description = data.get("error_description")
+            uri = data.get("error_uri")
+            raise OAuthError(error=error, description=description, uri=uri)
 
-            params = {
-                "code": request.args.get("code"),
-                "state": request.args.get("state"),
-            }
-        else:
-            params = {
-                "code": request.form.get("code"),
-                "state": request.form.get("state"),
-            }
+        params = {"code": data.get("code"), "state": data.get("state")}
 
         state_data = self.framework.get_state_data(session, params.get("state"))
         self.framework.clear_state_data(session, params.get("state"))
