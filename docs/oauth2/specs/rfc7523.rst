@@ -132,7 +132,7 @@ type. For instance, with the authorization code grant:
         autonumber
         participant User as User's browser<br/>(User Agent)
         participant Client
-        box rgba(80, 120, 220, 0.12) JWTBearerClientAssertion
+        box rgba(80, 120, 220, 0.12) Authorization server
             participant AS as Authorization Server
         end
         participant RS as Resource Server
@@ -159,8 +159,8 @@ type. For instance, with the authorization code grant:
 5. The client sends ``grant_type=authorization_code``, the ``code``,
    ``client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer``
    and a JWT as ``client_assertion``. In the JWT, ``iss`` and ``sub`` are the
-   ``client_id``. ``JWTBearerClientAssertion`` checks the signature with the
-   client secret or public key.
+   ``client_id``. The authorization server checks the signature with the
+   client secret or public key, according to the method of the client.
 6. The authorization server returns the token response of the grant.
 7. The client calls the API of the Resource Server with the access token, in
    the ``Authorization: Bearer`` header.
@@ -172,18 +172,28 @@ The :class:`~authlib.oauth2.rfc6749.AuthorizationServer` has provided a method
 :meth:`~authlib.oauth2.rfc6749.AuthorizationServer.register_client_auth_method`
 to add more client authentication methods.
 
-In Authlib, ``client_secret_jwt`` and ``private_key_jwt`` share the same API,
-using :class:`JWTBearerClientAssertion` to create a new client authentication::
+Authlib provides one class for each method:
 
-    class JWTClientAuth(JWTBearerClientAssertion):
+* :class:`ClientSecretJWTAuthentication` for ``client_secret_jwt``. The client
+  signs the JWT with its secret, using ``HS256``, ``HS384`` or ``HS512``.
+* :class:`PrivateKeyJWTAuthentication` for ``private_key_jwt``. The client
+  signs the JWT with its private key, using an asymmetric algorithm such as
+  ``RS256``, ``PS256``, ``ES256`` or ``Ed25519``.
+
+Each class only accepts the clients registered with its method, in their
+``token_endpoint_auth_method``. A client registered with ``private_key_jwt``
+cannot authenticate with its secret, and an HMAC key in its JWK set is never
+used. Change ``ALGORITHMS`` to restrict the accepted algorithms::
+
+    from joserfc.jwk import KeySet
+
+    class ClientSecretJWTAuth(ClientSecretJWTAuthentication):
         def get_audiences(self):
             # Per RFC 7523 Section 3, both the token endpoint URL and the
             # authorization server's issuer identifier are valid audience values.
             return ['https://example.com/oauth/token', 'https://example.com']
 
         def validate_jti(self, claims, jti):
-            # validate_jti is required by OpenID Connect
-            # but it is optional by RFC7523
             # use cache to validate jti value
             key = 'jti:{}-{}'.format(claims['sub'], jti)
             if cache.get(key):
@@ -191,17 +201,28 @@ using :class:`JWTBearerClientAssertion` to create a new client authentication::
             cache.set(key, 1, timeout=3600)
             return True
 
-        def resolve_client_public_key(self, client, headers):
-            if headers['alg'] == 'HS256':
-                return client.client_secret
-            if headers['alg'] == 'RS256':
-                return client.public_key
-            # you may support other ``alg`` value
+        def resolve_client_secret(self, client):
+            return client.client_secret
+
+    class PrivateKeyJWTAuth(PrivateKeyJWTAuthentication):
+        def get_audiences(self):
+            return ['https://example.com/oauth/token', 'https://example.com']
+
+        def validate_jti(self, claims, jti):
+            ...
+
+        def resolve_client_public_key(self, client):
+            return KeySet.import_key_set(client.jwks)
 
     authorization_server.register_client_auth_method(
-        JWTClientAuth.CLIENT_AUTH_METHOD,
-        JWTClientAuth()
+        ClientSecretJWTAuth.CLIENT_AUTH_METHOD, ClientSecretJWTAuth()
     )
+    authorization_server.register_client_auth_method(
+        PrivateKeyJWTAuth.CLIENT_AUTH_METHOD, PrivateKeyJWTAuth()
+    )
+
+``client_secret_jwt`` needs the secret of the client in plain text, so the
+server cannot store it as a hash. ``resolve_client_secret`` returns it.
 
 The ``get_audiences`` method returns the list of valid ``aud`` values
 accepted in client assertion JWTs. Per RFC 7523 Section 3,
@@ -209,34 +230,23 @@ both the token endpoint URL and the authorization server's issuer
 identifier are valid audience values. The list must not be empty. Client
 assertions are rejected with ``invalid_client`` if it is empty.
 
-Now we have added this client auth method to authorization server, but no
-grant types support this authentication method, you need to add it to the
-supported grant types too, e.g. we want to support this in authorization
-code grant::
+Now we have added these client auth methods to authorization server, but no
+grant types support them, you need to add them to the supported grant types
+too, e.g. we want to support them in authorization code grant::
 
     from authlib.oauth2.rfc6749 import grants
 
     class AuthorizationCodeGrant(grants.AuthorizationCodeGrant):
         TOKEN_ENDPOINT_AUTH_METHODS = [
             'client_secret_basic',
-            JWTClientAuth.CLIENT_AUTH_METHOD,
+            'client_secret_jwt',
+            'private_key_jwt',
         ]
         # ...
 
-You may noticed that the value of ``CLIENT_AUTH_METHOD`` is
-``client_assertion_jwt``. It is not ``client_secret_jwt`` or
-``private_key_jwt``, because they have the same logic. In the above
-implementation::
-
-    def resolve_client_public_key(self, client, headers):
-        alg = headers['alg']
-
-If this ``alg`` is a MAC SHA like ``HS256``, it is called ``client_secret_jwt``,
-because the key used to sign a JWT is the client's ``client_secret`` value. If
-this ``alg`` is ``RS256`` or something else, it is called ``private_key_jwt``,
-because client will use its private key to sign the JWT. You can set a limitation
-in the implementation of ``resolve_client_public_key`` to accept only ``HS256``
-alg, in this case, you can also alter ``CLIENT_AUTH_METHOD = 'client_secret_jwt'``.
+Earlier versions used :class:`JWTBearerClientAssertion` directly, with the
+``client_assertion_jwt`` method for both cases. This is deprecated, because
+the client could choose the method through the ``alg`` of its JWT.
 
 .. _ClientAuthentication: http://openid.net/specs/openid-connect-core-1_0.html#ClientAuthentication
 
@@ -282,6 +292,14 @@ API Reference
 -------------
 
 .. autoclass:: JWTBearerGrant
+    :member-order: bysource
+    :members:
+
+.. autoclass:: ClientSecretJWTAuthentication
+    :member-order: bysource
+    :members:
+
+.. autoclass:: PrivateKeyJWTAuthentication
     :member-order: bysource
     :members:
 

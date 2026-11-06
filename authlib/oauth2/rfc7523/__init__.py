@@ -12,7 +12,9 @@ from .assertion import client_secret_jwt_sign
 from .assertion import private_key_jwt_sign
 from .auth import ClientSecretJWT
 from .auth import PrivateKeyJWT
+from .client import ClientSecretJWTAuthentication
 from .client import JWTBearerClientAssertion
+from .client import PrivateKeyJWTAuthentication
 from .jwt_bearer import JWTBearerGrant
 from .token import JWTBearerTokenGenerator
 from .validator import JWTBearerToken
@@ -21,6 +23,8 @@ from .validator import JWTBearerTokenValidator
 __all__ = [
     "JWTBearerGrant",
     "JWTBearerClientAssertion",
+    "ClientSecretJWTAuthentication",
+    "PrivateKeyJWTAuthentication",
     "client_secret_jwt_sign",
     "private_key_jwt_sign",
     "ClientSecretJWT",
