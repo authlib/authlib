@@ -66,6 +66,7 @@ class OAuth2ClientAuth(Auth, ClientAuth):
 
 class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
     SESSION_REQUEST_PARAMS = HTTPX_CLIENT_KWARGS
+    SESSION_CONFIG_PARAMS = HTTPX_CLIENT_KWARGS
 
     client_auth_class = OAuth2ClientAuth
     token_auth_class = OAuth2Auth
@@ -222,6 +223,7 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
 
 class OAuth2Client(_OAuth2Client, httpx2.Client):
     SESSION_REQUEST_PARAMS = HTTPX_CLIENT_KWARGS
+    SESSION_CONFIG_PARAMS = HTTPX_CLIENT_KWARGS
 
     client_auth_class = OAuth2ClientAuth
     token_auth_class = OAuth2Auth

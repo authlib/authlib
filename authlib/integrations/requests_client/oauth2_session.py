@@ -9,6 +9,7 @@ from ..base_client import InvalidTokenError
 from ..base_client import MissingTokenError
 from ..base_client import OAuthError
 from ..base_client import UnsupportedTokenTypeError
+from .utils import REQUESTS_SESSION_KWARGS
 from .utils import update_session_configure
 
 __all__ = ["OAuth2Session", "OAuth2Auth"]
@@ -75,6 +76,7 @@ class OAuth2Session(OAuth2Client, Session):
     client_auth_class = OAuth2ClientAuth
     token_auth_class = OAuth2Auth
     oauth_error_class = OAuthError
+    SESSION_CONFIG_PARAMS = REQUESTS_SESSION_KWARGS
     SESSION_REQUEST_PARAMS = (
         "allow_redirects",
         "timeout",

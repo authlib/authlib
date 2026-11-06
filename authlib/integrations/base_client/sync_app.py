@@ -228,6 +228,14 @@ class OAuth2Base:
     def _on_update_token(self, token, refresh_token=None, access_token=None):
         raise NotImplementedError()
 
+    def _update_server_metadata(self, metadata):
+        # The fetched document is passed to the client with the other metadata,
+        # so keys like "verify" or "hooks" would reconfigure its HTTP session.
+        for key in self.client_cls.SESSION_CONFIG_PARAMS:
+            metadata.pop(key, None)
+        metadata["_loaded_at"] = time.time()
+        self.server_metadata.update(metadata)
+
     def _get_session(self):
         session = self.client_cls(**self.client_kwargs)
         session.headers["User-Agent"] = self._user_agent
@@ -332,8 +340,7 @@ class OAuth2Mixin(_RequestMixin, OAuth2Base):
                 resp.raise_for_status()
                 metadata = resp.json()
 
-            metadata["_loaded_at"] = time.time()
-            self.server_metadata.update(metadata)
+            self._update_server_metadata(metadata)
         return self.server_metadata
 
     def create_authorization_url(self, redirect_uri=None, **kwargs):

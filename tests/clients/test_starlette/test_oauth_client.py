@@ -432,6 +432,41 @@ async def test_oauth2_fetch_metadata():
 
 
 @pytest.mark.asyncio
+async def test_oauth2_metadata_does_not_configure_client():
+    oauth = OAuth()
+    transport = ASGITransport(
+        AsyncPathMapDispatch(
+            {
+                "/.well-known/openid-configuration": {
+                    "body": {
+                        "authorization_endpoint": "https://provider.test/authorize",
+                        "base_url": "https://other.test/",
+                        "event_hooks": {"request": [None]},
+                    }
+                },
+                "/user": {"body": {"sub": "123"}},
+            }
+        )
+    )
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        api_base_url="https://resource.test/api",
+        access_token_url="https://provider.test/token",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+        client_kwargs={
+            "transport": transport,
+        },
+    )
+    resp = await client.get(
+        "/user", token={"access_token": "a", "token_type": "bearer"}
+    )
+    assert resp.json() == {"sub": "123"}
+    assert "event_hooks" not in client.server_metadata
+
+
+@pytest.mark.asyncio
 async def test_oauth2_authorize_with_metadata():
     oauth = OAuth()
     transport = ASGITransport(

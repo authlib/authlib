@@ -98,6 +98,7 @@ class OAuth2Client:
 
     EXTRA_AUTHORIZE_PARAMS = ("response_mode", "nonce", "prompt", "login_hint")
     SESSION_REQUEST_PARAMS = []
+    SESSION_CONFIG_PARAMS = ()
 
     def __init__(
         self,

@@ -479,6 +479,44 @@ def test_oauth2_fetch_metadata():
         assert send.call_count == 2
 
 
+def test_oauth2_metadata_does_not_configure_session():
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        api_base_url="https://resource.test/api",
+        access_token_url="https://provider.test/token",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+    with mock.patch("requests.sessions.Session.send") as send:
+
+        def check_request(req, **kwargs):
+            if req.url == "https://provider.test/.well-known/openid-configuration":
+                return mock_send_value(
+                    {
+                        "authorization_endpoint": "https://provider.test/authorize",
+                        "hooks": {"key": True},
+                        "verify": False,
+                    }
+                )
+            assert kwargs["verify"] is True
+            return mock_send_value({"sub": "123"})
+
+        send.side_effect = check_request
+
+        with app.test_request_context():
+            resp = client.get("user", token=get_bearer_token())
+
+    assert resp.json() == {"sub": "123"}
+    assert "hooks" not in client.server_metadata
+    assert client.server_metadata["authorization_endpoint"] == (
+        "https://provider.test/authorize"
+    )
+
+
 def test_oauth2_authorize_with_metadata():
     app = Flask(__name__)
     app.secret_key = "!"
