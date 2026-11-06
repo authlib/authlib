@@ -1,9 +1,13 @@
 import json
 import os
 import time
+from contextlib import contextmanager
 from unittest import mock
 
+import pytest
 import requests
+
+from authlib.integrations.base_client import InvalidIDTokenError
 
 ROOT = os.path.abspath(os.path.dirname(__file__))
 
@@ -46,3 +50,13 @@ def get_bearer_token():
         "expires_in": "3600",
         "expires_at": int(time.time()) + 3600,
     }
+
+
+@contextmanager
+def raises_id_token_error(cause):
+    """Expect an InvalidIDTokenError caused by the given joserfc error."""
+    with pytest.raises(InvalidIDTokenError) as exc_info:
+        yield exc_info
+
+    assert isinstance(exc_info.value.__cause__, cause)
+    assert exc_info.value.error == exc_info.value.__cause__.error
