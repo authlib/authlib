@@ -139,26 +139,25 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
 
     async def ensure_active_token(self, token=None):
         async with self._token_refresh_lock:
-            if token is None:
-                token = self.token
-            # After the lock, prefer the live client token so a concurrent
-            # refresh is not repeated and we do not use a stale refresh_token.
             token = self.token or token
             if not token.is_expired(leeway=self.leeway):
                 return True
+
             refresh_token = token.get("refresh_token")
             url = self.metadata.get("token_endpoint")
             if refresh_token and url:
                 await self.refresh_token(url, refresh_token=refresh_token)
                 return True
-            elif self.metadata.get("grant_type") == "client_credentials":
-                access_token = token["access_token"]
-                new_token = await self.fetch_token(url, grant_type="client_credentials")
-                if self.update_token:
-                    await self.update_token(new_token, access_token=access_token)
-                return True
-            else:
+
+            if self.metadata.get("grant_type") != "client_credentials":
                 raise InvalidTokenError()
+
+            access_token = token["access_token"]
+            new_token = await self.fetch_token(url, grant_type="client_credentials")
+            if self.update_token:
+                await self.update_token(new_token, access_token=access_token)
+
+            return True
 
     async def _fetch_token(
         self,

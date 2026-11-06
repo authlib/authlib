@@ -1,7 +1,5 @@
 Fixed
 ~~~~~
 
-- ``AsyncOAuth2Client.ensure_active_token`` re-reads ``self.token`` after the
-  refresh lock, matching the sync client. A concurrent refresh is not repeated,
-  and the refresh token is taken from the live client token rather than a stale
-  argument.
+- ``AsyncOAuth2Client`` no longer refreshes with an outdated refresh token when
+  concurrent requests find an expired token. :pr:`963`
