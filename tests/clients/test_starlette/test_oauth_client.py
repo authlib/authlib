@@ -1,5 +1,6 @@
 import json
 
+import httpx2
 import pytest
 from httpx2 import ASGITransport
 from starlette.config import Config
@@ -504,6 +505,47 @@ async def test_oauth2_authorize_form_post_callback():
 
     token = await client.authorize_access_token(req_post)
     assert token["access_token"] == "a"
+
+
+@pytest.mark.asyncio
+async def test_oauth2_access_denied_with_post():
+    """An error response sent with form_post raises an OAuthError."""
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx2.Response(200, json=get_bearer_token())
+
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        access_token_url="https://provider.test/token",
+        authorize_url="https://provider.test/authorize",
+        client_kwargs={"transport": httpx2.MockTransport(handler)},
+    )
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/callback",
+        "query_string": b"",
+        "headers": [(b"content-type", b"application/x-www-form-urlencoded")],
+        "session": {},
+    }
+
+    async def receive():
+        return {
+            "type": "http.request",
+            "body": b"error=access_denied&error_description=Not+Allowed",
+        }
+
+    with pytest.raises(OAuthError) as exc_info:
+        await client.authorize_access_token(Request(scope, receive=receive))
+
+    assert exc_info.value.error == "access_denied"
+    assert exc_info.value.description == "Not Allowed"
+    assert requests == []
 
 
 @pytest.mark.asyncio
