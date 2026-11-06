@@ -942,3 +942,76 @@ def test_request_object_parameter_numbers(test_client, server):
     )
     rv = test_client.get(url)
     assert rv.data == b"login"
+
+
+HMAC_SECRET = "a-client-secret-long-enough-for-hs512-" + "s" * 26
+
+
+class _SecretExtension(rfc9101.JWTAuthenticationRequest):
+    def resolve_client_secret(self, client):
+        return HMAC_SECRET
+
+
+class _OpenIDSecretExtension(OpenIDJWTAuthenticationRequest):
+    def resolve_client_secret(self, client):
+        return HMAC_SECRET
+
+
+def _hmac_request(test_client, alg="HS256", secret=HMAC_SECRET):
+    payload = {"response_type": "code", "client_id": "client-id"}
+    request_obj = jwt.encode(
+        {"alg": alg}, payload, jwk.import_key(secret, "oct"), algorithms=[alg]
+    )
+    url = add_params_to_uri(
+        authorize_url, {"client_id": "client-id", "request": request_obj}
+    )
+    return test_client.get(url)
+
+
+@pytest.mark.parametrize("extension_cls", [_SecretExtension, _OpenIDSecretExtension])
+@pytest.mark.parametrize("alg", ["HS256", "HS384", "HS512"])
+def test_hmac_request_object(test_client, server, extension_cls, alg):
+    """An HMAC Request Object is verified with the client secret."""
+    register_request_object_extension(
+        server,
+        metadata={"request_object_signing_alg_values_supported": [alg]},
+        extension_cls=extension_cls,
+    )
+    rv = _hmac_request(test_client, alg, HMAC_SECRET * 2)
+    assert json.loads(rv.data)["error"] == "invalid_request_object"
+
+    rv = _hmac_request(test_client, alg)
+    assert rv.data == b"login"
+
+
+def test_hmac_request_object_without_secret(test_client, server):
+    """Without resolve_client_secret, HS256 Request Objects are rejected."""
+    register_request_object_extension(server)
+    rv = _hmac_request(test_client)
+    assert json.loads(rv.data)["error"] == "invalid_request_object"
+
+
+def test_hmac_request_object_with_secret_in_public_keys(test_client, server):
+    """A symmetric key returned as a public key does not verify HS256."""
+    extension = register_request_object_extension(server)
+    extension.resolve_client_public_key = lambda client: jwk.KeySet(
+        [jwk.import_key(HMAC_SECRET, "oct")]
+    )
+    rv = _hmac_request(test_client)
+    assert json.loads(rv.data)["error"] == "invalid_request_object"
+
+
+def test_callable_public_key(test_client, server):
+    """resolve_client_public_key can return a key resolver."""
+    extension = register_request_object_extension(server)
+    public_key = jwk.import_key(read_file_path("jwk_public.json"))
+    extension.resolve_client_public_key = lambda client: lambda obj: public_key
+    payload = {"response_type": "code", "client_id": "client-id"}
+    request_obj = jwt.encode(
+        {"alg": "RS256"}, payload, jwk.import_key(read_file_path("jwk_private.json"))
+    )
+    url = add_params_to_uri(
+        authorize_url, {"client_id": "client-id", "request": request_obj}
+    )
+    rv = test_client.get(url)
+    assert rv.data == b"login"
