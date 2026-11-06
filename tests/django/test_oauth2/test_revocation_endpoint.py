@@ -85,8 +85,7 @@ def test_invalid_token(factory, server, token):
         HTTP_AUTHORIZATION=auth_header,
     )
     resp = server.create_endpoint_response(ENDPOINT_NAME, request)
-    data = json.loads(resp.content)
-    assert data["error"] == "unsupported_token_type"
+    assert resp.status_code == 200
 
     # case 3
     request = factory.post(

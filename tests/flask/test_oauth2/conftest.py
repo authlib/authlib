@@ -5,7 +5,9 @@ from flask import Flask
 
 from tests.flask.test_oauth2.oauth2_server import create_authorization_server
 
+from .models import AuthorizationSession
 from .models import Client
+from .models import StoredAuthorizationSession
 from .models import Token
 from .models import User
 
@@ -103,3 +105,19 @@ def token(db):
     db.session.commit()
     yield token
     db.session.delete(token)
+
+
+@pytest.fixture
+def authorization_session(request, app):
+    """The authorization session class that the authorization endpoint uses.
+    Parametrize it with ``None`` to test an endpoint without session."""
+    session_class = getattr(request, "param", AuthorizationSession)
+    app.config["AUTHORIZATION_SESSION"] = session_class
+    return session_class
+
+
+@pytest.fixture
+def request_time(app, authorization_session):
+    """Keep the start time of the authorization requests in the Flask
+    session."""
+    app.config["AUTHORIZATION_SESSION"] = StoredAuthorizationSession

@@ -36,6 +36,10 @@ OpenID Endpoints
 
 .. module:: authlib.oidc.core
 
+.. autoclass:: AuthorizationSessionMixin
+    :show-inheritance:
+    :members: is_account_selection_needed
+
 .. autoclass:: UserInfoEndpoint
     :show-inheritance:
     :members:

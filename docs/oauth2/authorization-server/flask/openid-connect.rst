@@ -120,9 +120,12 @@ First, we need to implement the missing methods for ``OpenIDCode``::
                 email=user.email,
             ).filter(scope)
 
-Second, since there is one more ``nonce`` value in the ``AuthorizationCode``
-data, we need to save this value into the database. In this case, we have to
-update our :ref:`flask_oauth2_code_grant` ``save_authorization_code`` method::
+Second, the ``AuthorizationCode`` data has two more values: the ``nonce``
+parameter, and the time of the user authentication. ``OpenIDCode`` sets this
+time in ``request.auth_time``, from the authorization session (see
+:ref:`flask_odic_max_age`). It becomes the
+``auth_time`` claim of the ID token. Save these values in the
+:ref:`flask_oauth2_code_grant` ``save_authorization_code`` method::
 
     class AuthorizationCodeGrant(_AuthorizationCodeGrant):
         def save_authorization_code(self, code, request):
@@ -131,10 +134,11 @@ update our :ref:`flask_oauth2_code_grant` ``save_authorization_code`` method::
             auth_code = AuthorizationCode(
                 code=code,
                 client_id=request.client.client_id,
-                redirect_uri=request.redirect_uri,
+                redirect_uri=request.payload.redirect_uri,
                 scope=request.scope,
                 user_id=request.user.id,
                 nonce=nonce,
+                auth_time=request.auth_time,
             )
             db.session.add(auth_code)
             db.session.commit()
@@ -242,10 +246,11 @@ is ``save_authorization_code``. You can implement it like this::
             item = AuthorizationCode(
                 code=code,
                 client_id=request.client.client_id,
-                redirect_uri=request.redirect_uri,
+                redirect_uri=request.payload.redirect_uri,
                 scope=request.scope,
                 user_id=request.user.id,
                 nonce=nonce,
+                auth_time=request.auth_time,
             )
             db.session.add(item)
             db.session.commit()
@@ -267,9 +272,62 @@ is ``save_authorization_code``. You can implement it like this::
     # register it to grant endpoint
     server.register_grant(OpenIDHybridGrant)
 
-
 Since all OpenID Connect Flow require ``exists_nonce``, ``resolve_client_private_key``,
-``get_client_claims``, ``get_client_algorithm`` and ``generate_user_info`` methods,
-you can create shared functions for them.
+``get_client_claims``, ``get_client_algorithm`` and ``generate_user_info``
+methods, you can create shared functions for them.
+
+.. _flask_odic_max_age:
+
+Authorization Session
+---------------------
+
+A client can ask for a recent login with ``prompt=login`` or ``max_age``, or
+for a new consent with ``prompt=consent``. Authlib applies these rules with an
+:class:`~authlib.oauth2.AuthorizationSession`.
+:ref:`authorization_session` explains the rules and the pitfalls.
+
+Store the time of the login in the session::
+
+    import time
+    from flask import session
+
+    def login(user):
+        session["user_id"] = user.id
+        session["auth_time"] = int(time.time())
+
+Subclass the authorization session. It keeps the start time of the requests
+in the Flask session. Give the time of the interactions, and tell if the user
+must give their consent::
+
+    from authlib.oauth2 import AuthorizationSession
+
+    class MyAuthorizationSession(AuthorizationSession):
+        def get_interaction_time(self, request, interaction):
+            if interaction == "login":
+                return self.session.get("auth_time")
+            if interaction == "consent":
+                consent = get_consent(self.user, request.client)
+                return consent.issued_at.timestamp() if consent else None
+            return None
+
+        def is_consent_needed(self, request):
+            consent = get_consent(self.user, request.client)
+            return consent is None or not consent.covers(request.scope)
+
+Pass it to ``get_consent_grant``. When the user must go through an
+interaction, such as a login, it is in ``grant.interactions``, and
+``grant.prompt`` is the first of them::
+
+    @app.route("/oauth/authorize", methods=["GET", "POST"])
+    def authorize():
+        authorization_session = MyAuthorizationSession(current_user(), session)
+        try:
+            grant = server.get_consent_grant(session=authorization_session)
+        except OAuth2Error as error:
+            return server.handle_error_response(request, error)
+
+        if request.method == "GET" and grant.prompt == "login":
+            return redirect(url_for("login", next=request.url))
+        ...
 
 Find the `example of OpenID Connect server <https://github.com/authlib/example-oidc-server>`_.

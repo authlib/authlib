@@ -103,8 +103,9 @@ def test_invalid_token(test_client):
         },
         headers=headers,
     )
+    assert rv.status_code == 200
     resp = json.loads(rv.data)
-    assert resp["error"] == "unsupported_token_type"
+    assert "error" not in resp
 
     rv = test_client.post(
         "/oauth/introspect",
@@ -155,3 +156,29 @@ def test_introspect_token_without_hint(test_client, token):
     assert rv.status_code == 200
     resp = json.loads(rv.data)
     assert resp["client_id"] == "client-id"
+
+
+def test_introspect_token_with_wrong_hint(test_client, token):
+    """Per RFC 7662 §2.1, the search is extended when the hint does not match."""
+    headers = create_basic_header("client-id", "client-secret")
+    rv = test_client.post(
+        "/oauth/introspect",
+        data={"token": token.refresh_token, "token_type_hint": "access_token"},
+        headers=headers,
+    )
+    assert rv.status_code == 200
+    resp = json.loads(rv.data)
+    assert resp["active"]
+
+
+def test_introspect_token_with_unknown_hint(test_client, token):
+    """Per RFC 7662 §2.1, an unknown token type hint is ignored."""
+    headers = create_basic_header("client-id", "client-secret")
+    rv = test_client.post(
+        "/oauth/introspect",
+        data={"token": "a1", "token_type_hint": "unknown"},
+        headers=headers,
+    )
+    assert rv.status_code == 200
+    resp = json.loads(rv.data)
+    assert resp["active"]

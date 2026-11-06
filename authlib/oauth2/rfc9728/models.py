@@ -6,6 +6,7 @@ from joserfc.jws import JWSRegistry
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.security import is_secure_transport
 from authlib.common.urls import is_valid_url
+from authlib.oauth2.rfc6749.resource_protector import ResourceProtector
 from authlib.oauth2.rfc8414.models import validate_array_value
 
 from .well_known import get_well_known_url
@@ -369,7 +370,8 @@ class ResourceMetadataExtension:
                 raise
 
         protector.register_hook(
-            "replace_validate_request", inject_www_authenticate_header
+            inject_www_authenticate_header,
+            replace=ResourceProtector.validate_request,
         )
 
 

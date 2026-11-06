@@ -29,25 +29,45 @@ def client(client, db):
 
 def test_get_authorize(test_client):
     rv = test_client.get(authorize_url)
-    assert rv.data == b"ok"
+    assert rv.data == b"login"
 
 
-def test_confidential_client(test_client, db, client):
+@pytest.mark.parametrize(
+    "grant_types", [["implicit"], ["implicit", "authorization_code"]]
+)
+def test_confidential_client(test_client, db, client, grant_types):
+    """Per RFC 6749 §3.2.1, the client does not authenticate at the
+    authorization endpoint, so its token_endpoint_auth_method does not matter,
+    and a client_secret parameter is ignored."""
     client.client_secret = "client-secret"
     client.set_client_metadata(
         {
             "redirect_uris": ["https://client.test/authorized"],
             "scope": "profile",
             "response_types": ["token"],
-            "grant_types": ["implicit"],
+            "grant_types": grant_types,
             "token_endpoint_auth_method": "client_secret_basic",
         }
     )
     db.session.add(client)
     db.session.commit()
 
-    rv = test_client.get(authorize_url)
-    assert b"invalid_client" in rv.data
+    rv = test_client.get(authorize_url + "&user_id=1")
+    assert rv.data == b"ok"
+
+    rv = test_client.post(authorize_url + "&user_id=1&client_secret=client-secret")
+    assert "access_token=" in rv.location
+
+
+def test_unknown_client(test_client):
+    """A missing or unknown client_id is refused without redirection."""
+    rv = test_client.get("/oauth/authorize?response_type=token")
+    assert rv.json["error"] == "invalid_client"
+    assert rv.json["error_description"] == "Missing 'client_id' parameter."
+
+    rv = test_client.get("/oauth/authorize?response_type=token&client_id=unknown")
+    assert rv.json["error"] == "invalid_client"
+    assert rv.json["error_description"] == "The client does not exist on this server."
 
 
 def test_unsupported_client(test_client, db, client):
@@ -62,7 +82,7 @@ def test_unsupported_client(test_client, db, client):
     )
     db.session.add(client)
     db.session.commit()
-    rv = test_client.get(authorize_url)
+    rv = test_client.get(authorize_url + "&user_id=1")
     assert "unauthorized_client" in rv.location
 
 
@@ -71,7 +91,7 @@ def test_invalid_authorize(test_client, server):
     assert "#error=access_denied" in rv.location
 
     server.scopes_supported = ["profile"]
-    rv = test_client.post(authorize_url + "&scope=invalid")
+    rv = test_client.post(authorize_url + "&scope=invalid&user_id=1")
     assert "#error=invalid_scope" in rv.location
 
 

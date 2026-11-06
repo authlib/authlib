@@ -1,7 +1,9 @@
 import time
+import warnings
 
 import pytest
 from flask import json
+from joserfc.jwk import ECKey
 from joserfc.jwk import RSAKey
 
 from authlib.deprecate import AuthlibDeprecationWarning
@@ -20,13 +22,17 @@ public_pem = read_file_path("rsa_public.pem")
 rsa_private = RSAKey.import_key(private_pem)
 rsa_public = RSAKey.import_key(public_pem)
 
-# Simulated trusted-issuer registry and JTI replay store
-_TRUSTED_ISSUERS = {"https://idp.example.com": rsa_public}
+other_issuer = "https://other-idp.example.com"
+other_key = ECKey.generate_key("P-256", private=True)
+
+# Simulated trusted-issuer registry, users of each issuer and JTI replay store
+_TRUSTED_ISSUERS = {"https://idp.example.com": rsa_public, other_issuer: other_key}
+_ISSUER_USERS = {"https://idp.example.com": {"foo"}, other_issuer: set()}
 _USED_JTIS: set = set()
 
 
-class IDJAGGrant(_IDJAGGrant):
-    """Concrete ID-JAG grant wired to the Flask test models."""
+class _Hooks:
+    """ID-JAG hooks wired to the Flask test models, except the user."""
 
     def get_audiences(self):
         return ["https://provider.test/token"]
@@ -37,17 +43,24 @@ class IDJAGGrant(_IDJAGGrant):
             raise InvalidGrantError(description="Untrusted issuer")
         return key
 
-    def authenticate_user(self, subject):
-        return User.query.filter_by(username=subject).first()
-
     def check_jti(self, claims, jti):
         if jti in _USED_JTIS:
             return False
         _USED_JTIS.add(jti)
         return True
 
-    def check_id_jag_permission(self, client, user, scopes):
+    def check_id_jag_permission(self, client, user, scopes, claims):
         return True
+
+
+class IDJAGGrant(_Hooks, _IDJAGGrant):
+    """Concrete ID-JAG grant wired to the Flask test models."""
+
+    def resolve_user(self, claims):
+        if claims["sub"] not in _ISSUER_USERS[claims["iss"]]:
+            return None
+
+        return User.query.filter_by(username=claims["sub"]).first()
 
 
 # -- fixtures ---------------------------------------------------------------
@@ -131,6 +144,19 @@ def test_sign_with_raw_key(test_client):
         data={"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": assertion},
     )
     assert "access_token" in json.loads(rv.data)
+
+
+def test_subject_of_another_issuer(test_client):
+    """An IdP cannot get an access token for a user of another IdP."""
+    assertion = _sign(key=other_key, issuer=other_issuer, alg="ES256")
+    rv = test_client.post(
+        "/oauth/token",
+        headers=create_basic_header("client-id", "client-secret"),
+        data={"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": assertion},
+    )
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_grant"
+    assert "sub" in resp["error_description"]
 
 
 def test_wrong_typ_header(test_client):
@@ -277,7 +303,7 @@ def test_jti_replay_rejected(test_client):
 
 def test_policy_denial(test_client, server):
     class DenyGrant(IDJAGGrant):
-        def check_id_jag_permission(self, client, user, scopes):
+        def check_id_jag_permission(self, client, user, scopes, claims):
             return False
 
     server._token_grants.clear()
@@ -412,3 +438,148 @@ def test_id_jag_client_secret_post(test_client, server, client, db, secret):
         assert response.status_code == 400
         assert response.json["error"] == "invalid_client"
         assert Token.query.count() == 0
+
+
+@pytest.fixture
+def read_write_client(client, db):
+    """Register the client for the read and write scopes."""
+    client.set_client_metadata({**client.client_metadata, "scope": "read write"})
+    db.session.commit()
+    return client
+
+
+def _request_token(test_client, assertion, scope=None):
+    """Redeem an assertion with valid client credentials."""
+    data = {"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": assertion}
+    if scope is not None:
+        data["scope"] = scope
+    return test_client.post(
+        "/oauth/token",
+        data=data,
+        headers=create_basic_header("client-id", "client-secret"),
+    )
+
+
+@pytest.mark.parametrize("scope", ["write", "read write"])
+def test_requested_scope_exceeding_scope_claim(test_client, read_write_client, scope):
+    """A client cannot get scopes that the IdP did not grant in the assertion."""
+    assertion = _sign(claims={"scope": "read"})
+    response = _request_token(test_client, assertion, scope)
+    assert response.status_code == 400
+    assert response.json["error"] == "invalid_scope"
+    assert Token.query.count() == 0
+
+
+def test_scope_claim_is_the_default_scope(test_client, server, read_write_client):
+    """Without a requested scope, the token gets the scope of the claim."""
+    received = []
+
+    class RecordingGrant(IDJAGGrant):
+        def check_id_jag_permission(self, client, user, scopes, claims):
+            received.append(scopes)
+            return True
+
+    server._token_grants.clear()
+    server.register_grant(RecordingGrant)
+
+    response = _request_token(test_client, _sign(claims={"scope": "read"}))
+    assert response.status_code == 200
+    assert response.json["scope"] == "read"
+    assert Token.query.one().scope == "read"
+    assert received == [["read"]]
+
+
+def test_requested_scope_within_scope_claim(test_client, read_write_client):
+    """A client can request less than the scope of the claim."""
+    assertion = _sign(claims={"scope": "read write"})
+    response = _request_token(test_client, assertion, "read")
+    assert response.status_code == 200
+    assert response.json["scope"] == "read"
+    assert Token.query.one().scope == "read"
+
+
+def test_requested_scope_without_scope_claim(test_client, read_write_client):
+    """Without a scope claim, the requested scope is checked by local policy."""
+    response = _request_token(test_client, _sign(), "read write")
+    assert response.status_code == 200
+    assert response.json["scope"] == "read write"
+
+
+@pytest.mark.parametrize("claim", [["read"], 42, None])
+def test_invalid_scope_claim_type(test_client, read_write_client, claim):
+    """A scope claim that is not a string is rejected."""
+    assertion = _sign(claims={"scope": claim})
+    response = _request_token(test_client, assertion, "read")
+    assert response.status_code == 400
+    assert response.json["error"] == "invalid_grant"
+    assert "scope" in response.json["error_description"]
+    assert Token.query.count() == 0
+
+
+@pytest.mark.parametrize("claim", [["acme"], 42])
+def test_invalid_tenant_claim_type(test_client, claim):
+    """A tenant claim that is not a string is rejected."""
+    response = _request_token(test_client, _sign(claims={"tenant": claim}))
+    assert response.status_code == 400
+    assert response.json["error"] == "invalid_grant"
+    assert "tenant" in response.json["error_description"]
+
+
+def test_permission_receives_claims(test_client, server):
+    """The policy receives the verified claims of the ID-JAG, whatever the
+    name of the argument."""
+    received = []
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", AuthlibDeprecationWarning)
+
+        class RecordingGrant(IDJAGGrant):
+            def check_id_jag_permission(self, client, user, scopes, id_jag, /):
+                received.append(id_jag)
+                return True
+
+    server._token_grants.clear()
+    server.register_grant(RecordingGrant)
+
+    response = _request_token(test_client, _sign(claims={"tenant": "acme"}))
+    assert response.status_code == 200
+    assert received[0]["tenant"] == "acme"
+
+
+def test_authenticate_user_is_deprecated(test_client, server):
+    """A grant that only implements authenticate_user still works."""
+    with pytest.warns(AuthlibDeprecationWarning, match="resolve_user"):
+
+        class LegacyGrant(_Hooks, _IDJAGGrant):
+            def authenticate_user(self, subject):
+                return User.query.filter_by(username=subject).first()
+
+    server._token_grants.clear()
+    server.register_grant(LegacyGrant)
+
+    response = _request_token(test_client, _sign())
+    assert response.status_code == 200
+
+
+def test_check_id_jag_permission_without_claims_is_deprecated(test_client, server):
+    """A policy without the claims argument still works."""
+    with pytest.warns(AuthlibDeprecationWarning, match="check_id_jag_permission"):
+
+        class LegacyGrant(IDJAGGrant):
+            def check_id_jag_permission(self, client, user, scopes):
+                return True
+
+    server._token_grants.clear()
+    server.register_grant(LegacyGrant)
+
+    response = _request_token(test_client, _sign())
+    assert response.status_code == 200
+
+
+def test_resolve_user_is_required():
+    """A grant without resolve_user cannot resolve the user."""
+
+    class IncompleteGrant(_Hooks, _IDJAGGrant):
+        pass
+
+    with pytest.raises(NotImplementedError):
+        IncompleteGrant(None, None).resolve_user({"sub": "foo"})

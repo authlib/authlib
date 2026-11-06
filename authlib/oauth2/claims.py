@@ -19,9 +19,27 @@ class ClaimsOption(TypedDict, total=False):
     validate: Callable[[BaseClaims, Any], bool]
 
 
+def _has_type(value, expected) -> bool:
+    """Tell if the value has the expected type, such as ``str`` or ``[str]``."""
+    if isinstance(expected, list):
+        return isinstance(value, list) and all(
+            _has_type(item, expected[0]) for item in value
+        )
+
+    if isinstance(value, bool) and expected is not bool:
+        return False
+
+    return isinstance(value, expected)
+
+
 class BaseClaims(dict):
     registry_cls = BaseClaimsRegistry
     REGISTERED_CLAIMS = []
+
+    #: Expected type of each claim, such as ``str``, ``(int, float)`` or
+    #: ``[str]`` for a list of strings. A claim with another type is invalid,
+    #: and a ``null`` claim is removed.
+    CLAIM_TYPES = {}
 
     def __init__(
         self,
@@ -50,6 +68,16 @@ class BaseClaims(dict):
             if validate and key in self and not validate(self, self[key]):
                 raise InvalidClaimError(key)
 
+    def _validate_claim_types(self):
+        for key, expected in self.CLAIM_TYPES.items():
+            if key not in self:
+                continue
+
+            if self[key] is None:
+                del self[key]
+            elif not _has_type(self[key], expected):
+                raise InvalidClaimError(key)
+
     def get_registered_claims(self):
         rv = {}
         for k in self.REGISTERED_CLAIMS:
@@ -58,6 +86,7 @@ class BaseClaims(dict):
         return rv
 
     def validate(self, now=None, leeway=0):
+        self._validate_claim_types()
         validator = self.registry_cls(**self.options)
         validator.validate(self)
         self._run_validate_hooks()
@@ -68,6 +97,7 @@ class JWTClaims(BaseClaims):
     REGISTERED_CLAIMS = ["iss", "sub", "aud", "exp", "nbf", "iat", "jti"]
 
     def validate(self, now=None, leeway=0):
+        self._validate_claim_types()
         if self.options:
             validator = self.registry_cls(now, leeway, **self.options)
         else:

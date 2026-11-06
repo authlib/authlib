@@ -197,31 +197,39 @@ def test_id_token_signing_alg_values_supported(test_client, metadata):
     assert resp["error"] == "invalid_client_metadata"
 
 
-def test_id_token_signing_alg_values_none(test_client, metadata):
-    # The value none MUST NOT be used as the ID Token alg value unless the Client uses
-    # only Response Types that return no ID Token from the Authorization Endpoint
-    # (such as when only using the Authorization Code Flow).
+@pytest.mark.parametrize(
+    "response_types",
+    [None, ["code"], ["code", "token"], ["code token"]],
+)
+def test_id_token_signing_alg_values_none(test_client, metadata, response_types):
+    """The none alg is accepted for clients that get no ID Token from the
+    authorization endpoint."""
     metadata["id_token_signing_alg_values_supported"] = ["none", "RS256", "ES256"]
-
-    # Nominal case
-    body = {
-        "id_token_signed_response_alg": "none",
-        "client_name": "Authlib",
-        "response_type": "code",
-    }
+    body = {"id_token_signed_response_alg": "none", "client_name": "Authlib"}
+    if response_types:
+        body["response_types"] = response_types
     rv = test_client.post(
         "/create_client", json=body, headers={"Authorization": "bearer abc"}
     )
     resp = json.loads(rv.data)
     assert "client_id" in resp
-    assert resp["client_name"] == "Authlib"
     assert resp["id_token_signed_response_alg"] == "none"
 
-    # Error case
+
+@pytest.mark.parametrize(
+    "response_types",
+    [["id_token"], ["code", "id_token token"], ["code id_token"], ["token id_token"]],
+)
+def test_id_token_signing_alg_values_none_with_id_token(
+    test_client, metadata, response_types
+):
+    """Per OpenID Connect Dynamic Client Registration §2, the none alg MUST NOT be
+    used when the client gets an ID Token from the authorization endpoint."""
+    metadata["id_token_signing_alg_values_supported"] = ["none", "RS256", "ES256"]
     body = {
         "id_token_signed_response_alg": "none",
         "client_name": "Authlib",
-        "response_type": "id_token",
+        "response_types": response_types,
     }
     rv = test_client.post(
         "/create_client", json=body, headers={"Authorization": "bearer abc"}
@@ -658,3 +666,51 @@ def test_backchannel_logout_uri(test_client, monkeypatch):
     assert rv.status_code == 400
     resp = json.loads(rv.data)
     assert resp["error"] == "invalid_client_metadata"
+
+
+@pytest.mark.parametrize(
+    "client_metadata",
+    [
+        {"default_acr_values": 5},
+        {"default_acr_values": [{"acr": "1"}]},
+        {"default_max_age": "60"},
+        {"response_types": [5], "id_token_signed_response_alg": "none"},
+        {"default_max_age": True},
+        {"require_auth_time": "true"},
+        {"request_uris": "https://client.test/request"},
+        {"id_token_signed_response_alg": ["RS256"]},
+        {"backchannel_logout_session_required": "true"},
+    ],
+)
+@pytest.mark.parametrize("with_metadata", [True, False])
+def test_invalid_metadata_type(test_client, metadata, client_metadata, with_metadata):
+    """OpenID Connect client metadata with an unexpected type is refused."""
+    if with_metadata:
+        metadata["acr_values_supported"] = ["urn:mace:incommon:iap:silver"]
+
+    headers = {"Authorization": "bearer abc"}
+    body = {"client_name": "Authlib", **client_metadata}
+    rv = test_client.post("/create_client", json=body, headers=headers)
+    resp = json.loads(rv.data)
+    assert rv.status_code == 400
+    assert resp["error"] == "invalid_client_metadata"
+
+
+def test_default_max_age_float(test_client):
+    """default_max_age is a JSON number, so a float is accepted."""
+    headers = {"Authorization": "bearer abc"}
+    body = {"client_name": "Authlib", "default_max_age": 3600.0}
+    rv = test_client.post("/create_client", json=body, headers=headers)
+    assert rv.status_code == 201
+
+
+def test_null_response_types(test_client):
+    """A null response_types is ignored by the OpenID Connect checks."""
+    headers = {"Authorization": "bearer abc"}
+    body = {
+        "client_name": "Authlib",
+        "response_types": None,
+        "id_token_signed_response_alg": "none",
+    }
+    rv = test_client.post("/create_client", json=body, headers=headers)
+    assert rv.status_code == 201

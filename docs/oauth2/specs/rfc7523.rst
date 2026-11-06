@@ -71,7 +71,7 @@ methods in order to use it. Here is an example::
             # if using client_id as issuer
             return Client.objects.get(client_id=issuer)
 
-        def resolve_client_key(self, client, headers, payload):
+        def resolve_client_public_key(self, client):
             # if client has `jwks` column
             key_set = KeySet.import_key_set(client.jwks)
             return key_set
@@ -206,7 +206,8 @@ using :class:`JWTBearerClientAssertion` to create a new client authentication::
 The ``get_audiences`` method returns the list of valid ``aud`` values
 accepted in client assertion JWTs. Per RFC 7523 Section 3,
 both the token endpoint URL and the authorization server's issuer
-identifier are valid audience values.
+identifier are valid audience values. The list must not be empty. Client
+assertions are rejected with ``invalid_client`` if it is empty.
 
 Now we have added this client auth method to authorization server, but no
 grant types support this authentication method, you need to add it to the

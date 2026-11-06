@@ -28,3 +28,7 @@ repos:
           "--scope",
           "jose,oauth,oidc,client",
         ]
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.32.0
+    hooks:
+      - id: zizmor

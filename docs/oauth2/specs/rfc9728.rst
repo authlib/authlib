@@ -149,7 +149,7 @@ clients can discover its metadata endpoint. Use
 An unauthenticated request to ``/api/userinfo`` will receive::
 
     HTTP/1.1 401 Unauthorized
-    WWW-Authenticate: Bearer resource_metadata="https://api.example.com/.well-known/oauth-protected-resource", error="missing_authorization", ...
+    WWW-Authenticate: Bearer resource_metadata="https://api.example.com/.well-known/oauth-protected-resource"
 
 The extension sends the same ``resource_metadata`` URL for all the routes of
 the protector. The ``resource`` value must be a prefix of all these routes.

@@ -3,6 +3,7 @@ import time
 import pytest
 from flask import json
 from flask import jsonify
+from joserfc import jws
 from joserfc import jwt
 from joserfc.jwk import KeySet
 
@@ -188,7 +189,8 @@ def test_missing_authorization(test_client):
     rv = test_client.get("/protected")
     assert rv.status_code == 401
     resp = json.loads(rv.data)
-    assert resp["error"] == "missing_authorization"
+    assert "error" not in resp
+    assert rv.headers["WWW-Authenticate"].startswith("Bearer")
 
 
 def test_unsupported_token_type(test_client):
@@ -196,7 +198,8 @@ def test_unsupported_token_type(test_client):
     rv = test_client.get("/protected", headers=headers)
     assert rv.status_code == 401
     resp = json.loads(rv.data)
-    assert resp["error"] == "unsupported_token_type"
+    assert "error" not in resp
+    assert rv.headers["WWW-Authenticate"].startswith("Bearer")
 
 
 def test_invalid_token(test_client):
@@ -224,6 +227,16 @@ def test_typ(test_client, access_token, claims, jwks):
     assert resp["username"] == "foo"
 
     access_token = create_access_token(claims, jwks, typ="invalid")
+
+    headers = {"Authorization": f"Bearer {access_token}"}
+    rv = test_client.get("/protected", headers=headers)
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_token"
+
+
+def test_missing_typ(test_client, claims, jwks):
+    """A JWT without typ, like an ID token, is not an access token."""
+    access_token = jws.serialize_compact({"alg": "RS256"}, json.dumps(claims), jwks)
 
     headers = {"Authorization": f"Bearer {access_token}"}
     rv = test_client.get("/protected", headers=headers)

@@ -8,6 +8,69 @@ Here you can see the full list of changes between each Authlib release.
 
 .. scriv-insert-here
 
+.. _changelog-1.9.5:
+
+Version 1.9.5 — 2026-11-05
+--------------------------
+
+Security
+~~~~~~~~
+
+- ``authlib.jose`` refuses as an HMAC secret every OpenSSH public key or
+  certificate that it can load as an RSA, EC or OKP key. It used to accept a
+  key with a tab after the key type, and certificates. These keys verify
+  ``RS256`` and ``EdDSA`` tokens, so anyone who knew the public key could
+  forge an ``HS256`` token for an application that did not restrict the
+  algorithms. This completes the fix for CVE-2026-114615.
+  `GHSA-f7j6-p4qx-gq99 <https://github.com/authlib/authlib/security/advisories/GHSA-f7j6-p4qx-gq99>`_
+
+.. _changelog-1.9.4:
+
+Version 1.9.4 — 2026-11-04
+--------------------------
+
+Security
+~~~~~~~~
+
+- ``IDJAGGrant`` stores the verified claims of the ID-JAG in
+  ``request.id_jag_claims``. ``authenticate_user`` can use them to resolve
+  the user with the ``iss`` and ``sub`` claims, and ``tenant`` for a
+  multi-tenant IdP. The documentation used to resolve the user with ``sub``
+  alone. An IdP, or a tenant of an IdP, could then get access tokens for the
+  users of another one. Update ``authenticate_user`` if your server trusts
+  several IdPs or a multi-tenant IdP.
+  `GHSA-9qr6-8289-9j56 <https://github.com/authlib/authlib/security/advisories/GHSA-9qr6-8289-9j56>`_
+
+.. _changelog-1.9.3:
+
+Version 1.9.3 — 2026-11-03
+--------------------------
+
+Security
+~~~~~~~~
+
+- The OpenID Connect implicit and hybrid grants refuse ``response_mode=form_post``
+  when the redirect URI does not use the ``http`` or ``https`` scheme. They
+  return an ``invalid_request`` error and do not redirect. A client with a
+  ``javascript:`` redirect URI could run a script in the origin of the
+  authorization server, even when the user denied the authorization.
+  `GHSA-gp2m-377p-m4j3 <https://github.com/authlib/authlib/security/advisories/GHSA-gp2m-377p-m4j3>`_
+
+.. _changelog-1.9.2:
+
+Version 1.9.2 — 2026-11-01
+--------------------------
+
+Security
+~~~~~~~~
+
+- ``IDJAGGrant`` limits the access token to the scopes in the ``scope`` claim
+  of the ID-JAG. A client used to get any scope allowed by its registration,
+  even when the IdP granted fewer scopes. Without a ``scope`` request
+  parameter, the access token now gets the scopes of the claim instead of no
+  scope.
+  `GHSA-f3fg-34g9-v7jx <https://github.com/authlib/authlib/security/advisories/GHSA-f3fg-34g9-v7jx>`_
+
 .. _changelog-1.9.1:
 
 Version 1.9.1 — 2026-10-14

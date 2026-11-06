@@ -4,10 +4,13 @@ RFC9207: OAuth 2.0 Authorization Server Issuer Identification
 =============================================================
 
 This section contains the generic implementation of :rfc:`RFC9207 <9207>`.
+The authorization server adds an ``iss`` parameter to its authorization
+responses, including error responses. The client can check which
+authorization server sent a response, and detect mix-up attacks.
 
-In summary, RFC9207 advise to return an ``iss`` parameter in authorization code responses.
-This can simply be done by implementing the :meth:`~authlib.oauth2.rfc9207.parameter.IssuerParameter.get_issuer` method in the :class:`~authlib.oauth2.rfc9207.parameter.IssuerParameter` class,
-and pass it as a :class:`~authlib.oauth2.rfc6749.grants.AuthorizationCodeGrant` extension::
+Implement :meth:`~authlib.oauth2.rfc9207.IssuerParameter.get_issuer`, and
+register :class:`~authlib.oauth2.rfc9207.IssuerParameter` on the
+authorization server::
 
     from authlib.oauth2 import rfc9207
 
@@ -15,9 +18,26 @@ and pass it as a :class:`~authlib.oauth2.rfc6749.grants.AuthorizationCodeGrant` 
         def get_issuer(self) -> str:
             return "https://auth.example.org"
 
-    ...
-
     authorization_server.register_extension(IssuerParameter())
+
+The ``iss`` parameter follows the response mode of the response: it is in
+the query, in the fragment, or in the form of a :ref:`form_post
+<specs/form_post>` response.
+
+Per :rfc:`9207#section-3`, advertise it in the authorization server
+metadata::
+
+    {
+        "issuer": "https://auth.example.org",
+        "authorization_response_iss_parameter_supported": true
+    }
+
+The ``iss`` parameter is added to the responses of the grants that return an
+:class:`~authlib.oauth2.rfc6749.AuthorizationResponse`, as all the built-in
+grants do. Without the :ref:`Multiple Response Types
+<specs/multiple_response_types>` extension, the OpenID Connect implicit and
+hybrid grants send their ``form_post`` responses without ``iss``. This use of
+``form_post`` without the extension is deprecated.
 
 API Reference
 -------------

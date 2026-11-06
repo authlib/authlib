@@ -34,11 +34,14 @@ class ClientMetadataClaims(BaseClaims):
         "backchannel_logout_uri",
         "backchannel_logout_session_required",
     ]
+    CLAIM_TYPES = {
+        "backchannel_logout_uri": str,
+        "backchannel_logout_session_required": bool,
+    }
 
     def validate(self, now=None, leeway=0):
         super().validate(now, leeway)
         self._validate_backchannel_logout_uri()
-        self._validate_backchannel_logout_session_required()
 
     def _validate_backchannel_logout_uri(self):
         # backchannel §2.2: "The back-channel logout URI MUST be an absolute URI
@@ -60,13 +63,3 @@ class ClientMetadataClaims(BaseClaims):
         is_public = self.get("token_endpoint_auth_method") == "none"
         if is_public and not is_secure_transport(uri, allow_loopback=False):
             raise InvalidClaimError("backchannel_logout_uri")
-
-    def _validate_backchannel_logout_session_required(self):
-        # backchannel §2.2: "backchannel_logout_session_required - OPTIONAL.
-        # Boolean value specifying whether the RP requires that a sid (session ID)
-        # Claim be included in the Logout Token to identify the RP session with
-        # the OP when the backchannel_logout_uri is used. If omitted, the default
-        # value is false."
-        value = self.get("backchannel_logout_session_required")
-        if value is not None and not isinstance(value, bool):
-            raise InvalidClaimError("backchannel_logout_session_required")

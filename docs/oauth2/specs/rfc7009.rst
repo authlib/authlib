@@ -22,19 +22,18 @@ implemented::
     from authlib.oauth2.rfc7009 import RevocationEndpoint
 
     class MyRevocationEndpoint(RevocationEndpoint):
-        def query_token(self, token, token_type_hint, client):
-            q = Token.query.filter_by(client_id=client.client_id)
+        def query_token(self, token_string, token_type_hint):
             if token_type_hint == 'access_token':
-                return q.filter_by(access_token=token).first()
-            elif token_type_hint == 'refresh_token':
-                return q.filter_by(refresh_token=token).first()
+                return Token.query.filter_by(access_token=token_string).first()
+            if token_type_hint == 'refresh_token':
+                return Token.query.filter_by(refresh_token=token_string).first()
             # without token_type_hint
-            item = q.filter_by(access_token=token).first()
+            item = Token.query.filter_by(access_token=token_string).first()
             if item:
                 return item
-            return q.filter_by(refresh_token=token).first()
+            return Token.query.filter_by(refresh_token=token_string).first()
 
-        def revoke_token(self, token):
+        def revoke_token(self, token, request):
             token.revoked = True
             db.session.add(token)
             db.session.commit()
@@ -47,6 +46,11 @@ After the registration, you can create a response with::
     @app.route('/oauth/revoke', methods=['POST'])
     def revoke_token():
         return server.create_endpoint_response(MyRevocationEndpoint.ENDPOINT_NAME)
+
+``token_type_hint`` is ``None`` when the request has no hint or an unknown
+one. If no token is found with the hint, the endpoint calls ``query_token``
+again with ``None``. Per :rfc:`7009#section-2.1`, the hint may be wrong, so
+``revoke_token`` must not trust it to know which token was presented.
 
 
 API Reference

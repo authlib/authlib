@@ -27,6 +27,23 @@ class ClientMetadataClaims(BaseClaims):
         "software_id",
         "software_version",
     ]
+    CLAIM_TYPES = {
+        "redirect_uris": [str],
+        "token_endpoint_auth_method": str,
+        "grant_types": [str],
+        "response_types": [str],
+        "client_name": str,
+        "client_uri": str,
+        "logo_uri": str,
+        "scope": str,
+        "contacts": [str],
+        "tos_uri": str,
+        "policy_uri": str,
+        "jwks_uri": str,
+        "jwks": dict,
+        "software_id": str,
+        "software_version": str,
+    }
 
     def validate(self, now=None, leeway=0):
         super().validate(now, leeway)
@@ -121,8 +138,6 @@ class ClientMetadataClaims(BaseClaims):
         support requests for the client.  See Section 6 for information on
         Privacy Considerations.
         """
-        if "contacts" in self and not isinstance(self["contacts"], list):
-            raise InvalidClaimError("contacts")
 
     def validate_tos_uri(self):
         """URL string that points to a human-readable terms of service
@@ -179,7 +194,7 @@ class ClientMetadataClaims(BaseClaims):
             jwks = self["jwks"]
             try:
                 KeySet.import_key_set(jwks)
-            except (JoseError, ValueError) as exc:
+            except (JoseError, ValueError, KeyError, TypeError) as exc:
                 raise InvalidClaimError("jwks") from exc
 
     def validate_software_id(self):

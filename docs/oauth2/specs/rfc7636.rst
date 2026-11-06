@@ -98,7 +98,7 @@ method::
             auth_code = AuthorizationCode(
                 code=code,
                 client_id=request.client.client_id,
-                redirect_uri=request.redirect_uri,
+                redirect_uri=request.payload.redirect_uri,
                 scope=request.scope,
                 user_id=request.user.id,
                 code_challenge=code_challenge,

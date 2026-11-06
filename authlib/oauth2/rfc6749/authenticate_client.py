@@ -62,9 +62,9 @@ def authenticate_client_secret_basic(query_client, request):
     if client_id and client_secret:
         client = _validate_client(query_client, client_id, 401)
         if client.check_client_secret(client_secret):
-            log.debug(f'Authenticate {client_id} via "client_secret_basic" success')
+            log.debug('Authenticate %r via "client_secret_basic" success', client_id)
             return client
-    log.debug(f'Authenticate {client_id} via "client_secret_basic" failed')
+    log.debug('Authenticate %r via "client_secret_basic" failed', client_id)
 
 
 def authenticate_client_secret_post(query_client, request):
@@ -77,9 +77,9 @@ def authenticate_client_secret_post(query_client, request):
     if client_id and client_secret:
         client = _validate_client(query_client, client_id)
         if client.check_client_secret(client_secret):
-            log.debug(f'Authenticate {client_id} via "client_secret_post" success')
+            log.debug('Authenticate %r via "client_secret_post" success', client_id)
             return client
-    log.debug(f'Authenticate {client_id} via "client_secret_post" failed')
+    log.debug('Authenticate %r via "client_secret_post" failed', client_id)
 
 
 def authenticate_none(query_client, request):
@@ -89,9 +89,9 @@ def authenticate_none(query_client, request):
     client_id = request.payload.client_id
     if client_id and not request.payload.data.get("client_secret"):
         client = _validate_client(query_client, client_id)
-        log.debug(f'Authenticate {client_id} via "none" success')
+        log.debug('Authenticate %r via "none" success', client_id)
         return client
-    log.debug(f'Authenticate {client_id} via "none" failed')
+    log.debug('Authenticate %r via "none" failed', client_id)
 
 
 def _validate_client(query_client, client_id, status_code=400):

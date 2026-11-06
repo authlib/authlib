@@ -214,11 +214,39 @@ class ForbiddenError(OAuth2Error):
 
 
 class MissingAuthorizationError(ForbiddenError):
+    """The request has no authentication information.
+
+    Per :rfc:`6750#section-3.1`, the response has no error code. It only has a
+    ``WWW-Authenticate`` header with the expected authentication scheme.
+    """
+
     error = "missing_authorization"
     description = "Missing 'Authorization' in headers."
 
+    def __init__(self, auth_type="Bearer", realm=None):
+        super().__init__(auth_type or "Bearer", realm)
 
-class UnsupportedTokenTypeError(ForbiddenError):
+    def get_body(self):
+        return []
+
+    def get_headers(self):
+        headers = OAuth2Error.get_headers(self)
+        challenge = self.auth_type
+        if challenge.lower() == "bearer":
+            challenge = "Bearer"
+        if self.realm:
+            challenge += f' realm="{self.realm}"'
+        headers.append(("WWW-Authenticate", challenge))
+        return headers
+
+
+class UnsupportedTokenTypeError(OAuth2Error):
+    """The authorization server does not support the revocation of the
+    presented token type.
+
+    :rfc:`7009#section-2.2.1`
+    """
+
     error = "unsupported_token_type"
 
 

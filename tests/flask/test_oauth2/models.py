@@ -1,8 +1,13 @@
+import time
+
+from flask import session
 from flask_sqlalchemy import SQLAlchemy
 
 from authlib.integrations.sqla_oauth2 import OAuth2AuthorizationCodeMixin
 from authlib.integrations.sqla_oauth2 import OAuth2ClientMixin
 from authlib.integrations.sqla_oauth2 import OAuth2TokenMixin
+from authlib.oauth2 import AuthorizationSession as DefaultAuthorizationSession
+from authlib.oidc.core import AuthorizationSessionMixin
 from authlib.oidc.core import UserInfo
 
 db = SQLAlchemy()
@@ -105,6 +110,7 @@ def save_authorization_code(code, request):
         redirect_uri=request.payload.redirect_uri,
         scope=request.scope,
         nonce=request.payload.data.get("nonce"),
+        auth_time=getattr(request, "auth_time", None),
         user_id=request.user.id,
         code_challenge=request.payload.data.get("code_challenge"),
         code_challenge_method=request.payload.data.get("code_challenge_method"),
@@ -121,3 +127,34 @@ def exists_nonce(nonce, request):
         client_id=request.payload.client_id, nonce=nonce
     ).first()
     return bool(exists)
+
+
+def get_auth_time(request):
+    """Return the 'auth_time' request parameter, or the current time."""
+    auth_time = request.framework_request.values.get("auth_time")
+    return int(auth_time) if auth_time else int(time.time())
+
+
+class AuthorizationSession(AuthorizationSessionMixin):
+    """An authorization session whose login time is the 'auth_time' request
+    parameter."""
+
+    def __init__(self, user):
+        self.user = user
+
+    def get_user(self):
+        return self.user
+
+    def get_interaction_time(self, request, interaction):
+        if interaction == "login":
+            return get_auth_time(request)
+
+        return None
+
+
+class StoredAuthorizationSession(DefaultAuthorizationSession, AuthorizationSession):
+    """An authorization session that keeps the start time of the requests in
+    the Flask session."""
+
+    def __init__(self, user):
+        super().__init__(user, session)

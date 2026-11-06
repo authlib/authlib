@@ -1,5 +1,8 @@
 import secrets
 
+from cryptography.exceptions import UnsupportedAlgorithm
+from cryptography.hazmat.primitives.serialization import load_ssh_public_key
+
 from authlib.common.encoding import to_bytes
 from authlib.common.encoding import to_unicode
 from authlib.common.encoding import urlsafe_b64decode
@@ -15,6 +18,21 @@ POSSIBLE_UNSAFE_KEYS = (
     b"ssh-ed25519 ",
     b"ecdsa-sha2-",
 )
+
+_SSH_PUBLIC_PREFIXES = (b"ssh-rsa", b"ssh-ed25519", b"ecdsa-sha2-")
+
+
+def _is_ssh_public_key(raw_key):
+    """Tell if the asymmetric key classes would load the bytes as an SSH key."""
+    if not raw_key.startswith(_SSH_PUBLIC_PREFIXES):
+        return False
+
+    try:
+        load_ssh_public_key(raw_key)
+    except (ValueError, UnsupportedAlgorithm):
+        return False
+
+    return True
 
 
 class OctKey(Key):
@@ -71,6 +89,9 @@ class OctKey(Key):
 
         # PEM parsers accept leading text, including comments and whitespace.
         if any(marker in raw_key for marker in POSSIBLE_UNSAFE_KEYS):
+            raise ValueError("This key may not be safe to import")
+
+        if _is_ssh_public_key(raw_key):
             raise ValueError("This key may not be safe to import")
 
     @classmethod

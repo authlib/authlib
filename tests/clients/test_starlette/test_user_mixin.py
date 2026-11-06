@@ -5,7 +5,9 @@ from httpx2 import ASGITransport
 from joserfc import jwk
 from joserfc import jwt
 from joserfc.errors import InvalidClaimError
+from joserfc.errors import InvalidKeyIdError
 from joserfc.errors import MissingClaimError
+from joserfc.errors import UnsupportedAlgorithmError
 from joserfc.jwk import KeySet
 from starlette.requests import Request
 
@@ -197,3 +199,107 @@ async def test_force_fetch_jwks_uri():
     )
     user = await client.parse_id_token(token, nonce="n")
     assert user.sub == "123"
+
+
+@pytest.mark.filterwarnings("ignore::joserfc.errors.SecurityWarning")
+@pytest.mark.parametrize(
+    "alg,key,algorithms",
+    [("HS256", secret_key, None), ("none", None, ["RS256", "none"])],
+    ids=["default", "none"],
+)
+@pytest.mark.asyncio
+async def test_parse_id_token_refused_algorithm(alg, key, algorithms):
+    """Only RS256 is accepted by default, and none is always refused."""
+    now = int(time.time())
+    claims = {
+        "sub": "123",
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "iat": now,
+        "exp": now + 3600,
+        "nonce": "n",
+    }
+    id_token = jwt.encode({"alg": alg}, claims, key, algorithms=[alg])
+    metadata = {}
+    if algorithms:
+        metadata["id_token_signing_alg_values_supported"] = algorithms
+
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        jwks={"keys": [secret_key.as_dict()]},
+        issuer="https://provider.test",
+        **metadata,
+    )
+    with pytest.raises(UnsupportedAlgorithmError):
+        await client.parse_id_token({"id_token": id_token}, nonce="n")
+
+
+@pytest.mark.asyncio
+async def test_parse_id_token_claims_options_keep_issuer():
+    """Claims options without iss keep the issuer check."""
+    now = int(time.time())
+    claims = {
+        "sub": "123",
+        "iss": "https://other.test",
+        "aud": "dev",
+        "iat": now,
+        "exp": now + 3600,
+        "nonce": "n",
+    }
+    id_token = jwt.encode({"alg": "HS256"}, claims, secret_key)
+
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        jwks={"keys": [secret_key.as_dict()]},
+        issuer="https://provider.test",
+        id_token_signing_alg_values_supported=["HS256"],
+    )
+    with pytest.raises(InvalidClaimError):
+        await client.parse_id_token(
+            {"id_token": id_token},
+            nonce="n",
+            claims_options={"email": {"essential": False}},
+        )
+
+
+@pytest.mark.asyncio
+async def test_parse_id_token_unknown_kid_refresh_interval():
+    """An unknown kid fetches the JWK set again at most once per interval."""
+    now = int(time.time())
+    claims = {"sub": "123", "iss": "https://provider.test", "aud": "dev"}
+    claims.update({"iat": now, "exp": now + 3600, "nonce": "n"})
+    id_token = jwt.encode({"alg": "HS256", "kid": "unknown"}, claims, secret_key)
+    fetches = []
+    transport = ASGITransport(
+        AsyncPathMapDispatch(
+            {"/jwks": {"body": {"keys": [secret_key.as_dict()]}}},
+            side_effects={"/jwks": fetches.append},
+        )
+    )
+
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        jwks={"keys": [secret_key.as_dict()]},
+        jwks_uri="https://provider.test/jwks",
+        issuer="https://provider.test",
+        id_token_signing_alg_values_supported=["HS256"],
+        client_kwargs={"transport": transport},
+    )
+    for _ in range(3):
+        with pytest.raises(InvalidKeyIdError):
+            await client.parse_id_token({"id_token": id_token}, nonce="n")
+    assert len(fetches) == 1
+
+    client._jwk_set_refreshed_at -= client.jwks_refresh_interval
+    with pytest.raises(InvalidKeyIdError):
+        await client.parse_id_token({"id_token": id_token}, nonce="n")
+    assert len(fetches) == 2

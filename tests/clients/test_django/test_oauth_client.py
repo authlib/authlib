@@ -219,6 +219,7 @@ def test_openid_authorize(factory):
         "dev",
         client_id="dev",
         jwks={"keys": [secret_key.as_dict()]},
+        id_token_signing_alg_values_supported=["HS256"],
         api_base_url="https://resource.test/api",
         access_token_url="https://provider.test/token",
         authorize_url="https://provider.test/authorize",

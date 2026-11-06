@@ -37,7 +37,7 @@ Implement this grant by subclassing :class:`AuthorizationCodeGrant`::
             auth_code = AuthorizationCode(
                 code=code,
                 client_id=client.client_id,
-                redirect_uri=request.redirect_uri,
+                redirect_uri=request.payload.redirect_uri,
                 scope=request.scope,
                 user_id=request.user.id,
             )
@@ -89,8 +89,8 @@ with::
     # register it to grant endpoint
     server.register_grant(grants.ImplicitGrant)
 
-Implicit Grant is used by **public** clients which have no **client_secret**.
-Default allowed :ref:`client_auth_methods`: ``none``.
+The client does not authenticate, because the implicit flow does not use the
+token endpoint. Its ``token_endpoint_auth_method`` does not matter.
 
 Resource Owner Password Credentials Grant
 -----------------------------------------
@@ -206,14 +206,16 @@ Creating a custom grant type with **BaseGrant**::
         def validate_authorization_request(self):
             # only needed if using AuthorizationEndpointMixin
 
-        def create_authorization_response(self, grant_user):
+        def create_authorization_response(self, redirect_uri, grant_user):
             # only needed if using AuthorizationEndpointMixin
+            # return an AuthorizationResponse(redirect_uri, params)
 
         def validate_token_request(self):
             # only needed if using TokenEndpointMixin
 
         def create_token_response(self):
             # only needed if using TokenEndpointMixin
+            # return a JsonResponse(token)
 
 For a better understanding, you can read the source code of the built-in
 grant types. And there are extended grant types defined by other specs:
@@ -238,3 +240,10 @@ For instance, there is the ``CodeChallenge`` extension in Authlib::
     server.register_grant(AuthorizationCodeGrant, [CodeChallenge(required=False)])
 
 Learn more about ``CodeChallenge`` at :ref:`specs/rfc7636`.
+
+An extension that adds parameters to the authorization request declares them,
+with their JSON types. The server rejects a request that repeats one of them::
+
+    class MyExtension:
+        def __call__(self, grant):
+            grant.register_authorization_parameters({"my_parameter": str})

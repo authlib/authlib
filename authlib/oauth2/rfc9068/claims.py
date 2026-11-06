@@ -3,6 +3,14 @@ from joserfc.jwt import JWTClaimsRegistry
 
 from authlib.oauth2.claims import JWTClaims
 
+_ACCESS_TOKEN_TYPES = ("at+jwt", "application/at+jwt")
+
+
+def _is_access_token(claims) -> bool:
+    """Tell if the JWT header declares an access token."""
+    typ = claims.header.get("typ")
+    return bool(typ) and typ.lower() in _ACCESS_TOKEN_TYPES
+
 
 class JWTAccessTokenClaimsValidator(JWTClaimsRegistry):
     def validate_auth_time(self, auth_time):
@@ -28,8 +36,16 @@ class JWTAccessTokenClaims(JWTClaims):
         "entitlements",
     ]
 
+    def get_scope(self) -> str | None:
+        """Return the value of the ``scope`` claim, or ``None`` if the token
+        has no scope.
+        """
+        return self.get("scope")
+
     def validate(self, **kwargs):
-        typ = self.header.get("typ")
-        if typ and typ.lower() not in ("at+jwt", "application/at+jwt"):
+        # Per RFC 9068 §4, the resource server MUST verify that the typ header
+        # value is at+jwt or application/at+jwt.
+        if not _is_access_token(self):
             raise InvalidClaimError("typ")
+
         super().validate(**kwargs)

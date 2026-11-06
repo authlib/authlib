@@ -1,8 +1,7 @@
 name: Release to PyPI
 
 permissions:
-  contents: write
-  id-token: write
+  contents: read
 
 on:
   push:
@@ -19,6 +18,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
 
     - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
       with:
@@ -63,13 +64,11 @@ jobs:
       contents: write
 
     steps:
-    - name: build changelog link
-      id: changelog
+    - name: create the release
+      env:
+        GH_TOKEN: ${{ github.token }}
       run: |
         version="${GITHUB_REF_NAME#v}"
-        echo "url=https://docs.authlib.org/en/stable/upgrades/changelog.html#changelog-${version//./-}" >> "$GITHUB_OUTPUT"
-
-    - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
-      with:
-        body: "Changelog: ${{ steps.changelog.outputs.url }}"
-        generate_release_notes: true
+        url="https://docs.authlib.org/en/stable/upgrades/changelog.html#changelog-${version//./-}"
+        gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+          --notes "Changelog: $url" --generate-notes

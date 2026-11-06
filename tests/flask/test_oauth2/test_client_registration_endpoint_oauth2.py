@@ -1,3 +1,5 @@
+import time
+
 import pytest
 from flask import json
 from joserfc import jwt
@@ -19,7 +21,7 @@ class ClientRegistrationEndpoint(_ClientRegistrationEndpoint):
 
     def authenticate_token(self, request):
         auth_header = request.headers.get("Authorization")
-        if auth_header:
+        if auth_header and auth_header != "bearer invalid_token":
             request.user_id = 1
             return auth_header
 
@@ -54,10 +56,48 @@ def server(server, app, metadata):
     return server
 
 
-def test_access_denied(test_client):
+def test_missing_token(test_client):
+    """A request without token gets a 401 response with no error code."""
     rv = test_client.post("/create_client", json={})
     resp = json.loads(rv.data)
-    assert resp["error"] == "access_denied"
+    assert rv.status_code == 401
+    assert "error" not in resp
+    assert rv.headers["WWW-Authenticate"] == "Bearer"
+
+
+def test_invalid_token(test_client):
+    """An invalid initial access token gets a 401 invalid_token error."""
+    headers = {"Authorization": "bearer invalid_token"}
+    rv = test_client.post("/create_client", json={}, headers=headers)
+    resp = json.loads(rv.data)
+    assert rv.status_code == 401
+    assert resp["error"] == "invalid_token"
+    assert rv.headers["WWW-Authenticate"].startswith('Bearer error="invalid_token"')
+
+
+def test_open_registration(test_client, app, server, metadata):
+    """Open registration accepts requests without token."""
+
+    class OpenClientRegistration(ClientRegistrationEndpoint):
+        ENDPOINT_NAME = "open_client_registration"
+
+        def authenticate_token(self, request):
+            request.user_id = 1
+            return True
+
+        def get_server_metadata(self):
+            return metadata
+
+    server.register_endpoint(OpenClientRegistration)
+
+    @app.route("/open_create_client", methods=["POST"])
+    def open_create_client():
+        return server.create_endpoint_response("open_client_registration")
+
+    rv = test_client.post("/open_create_client", json={"client_name": "Authlib"})
+    resp = json.loads(rv.data)
+    assert rv.status_code == 201
+    assert resp["client_name"] == "Authlib"
 
 
 def test_invalid_request(test_client):
@@ -278,3 +318,82 @@ def test_validate_jwks(test_client):
     rv = test_client.post("/create_client", json=body, headers=headers)
     resp = json.loads(rv.data)
     assert "jwks" in resp["error_description"]
+
+
+@pytest.mark.parametrize(
+    "client_metadata",
+    [
+        {"scope": 5},
+        {"scope": ["profile"]},
+        {"grant_types": 5},
+        {"grant_types": "authorization_code"},
+        {"response_types": [5]},
+        {"redirect_uris": [5]},
+        {"token_endpoint_auth_method": ["none"]},
+        {"client_name": {"en": "Client"}},
+        {"jwks": []},
+        {"jwks": {}},
+        {"jwks": {"keys": 5}},
+    ],
+)
+@pytest.mark.parametrize("with_metadata", [True, False])
+def test_invalid_metadata_type(test_client, metadata, client_metadata, with_metadata):
+    """Client metadata with an unexpected type is refused."""
+    if with_metadata:
+        metadata.update(
+            {
+                "scopes_supported": ["profile"],
+                "grant_types_supported": ["authorization_code"],
+                "response_types_supported": ["code"],
+                "token_endpoint_auth_methods_supported": ["none"],
+            }
+        )
+
+    headers = {"Authorization": "bearer abc"}
+    body = {"client_name": "Authlib", **client_metadata}
+    rv = test_client.post("/create_client", json=body, headers=headers)
+    resp = json.loads(rv.data)
+    assert rv.status_code == 400
+    assert resp["error"] == "invalid_client_metadata"
+
+
+def test_null_metadata_uses_default(test_client):
+    """A null client metadata is ignored, so its default value applies."""
+    headers = {"Authorization": "bearer abc"}
+    body = {"client_name": "Authlib", "token_endpoint_auth_method": None}
+    rv = test_client.post("/create_client", json=body, headers=headers)
+    resp = json.loads(rv.data)
+    assert rv.status_code == 201
+    assert resp["token_endpoint_auth_method"] == "client_secret_basic"
+
+
+@pytest.mark.parametrize(
+    "time_claims",
+    [{"exp": 1000000000}, {"nbf": 9999999999}],
+    ids=["expired", "not-yet-valid"],
+)
+def test_software_statement_time_claims(test_client, time_claims):
+    """An expired or not yet valid software statement is refused."""
+    payload = {"software_id": "uuid-123", "client_name": "Authlib", **time_claims}
+    key = RSAKey.import_key(read_file_path("rsa_private.pem"))
+    software_statement = jwt.encode({"alg": "RS256"}, payload, key)
+
+    headers = {"Authorization": "bearer abc"}
+    body = {"software_statement": software_statement}
+    rv = test_client.post("/create_client", json=body, headers=headers)
+    resp = json.loads(rv.data)
+    assert rv.status_code == 400
+    assert resp["error"] == "invalid_software_statement"
+
+
+def test_software_statement_clock_skew(test_client):
+    """A software statement issued a few seconds in the future is accepted."""
+    now = int(time.time())
+    payload = {"software_id": "uuid-123", "client_name": "Authlib", "iat": now + 5}
+    key = RSAKey.import_key(read_file_path("rsa_private.pem"))
+    software_statement = jwt.encode({"alg": "RS256"}, payload, key)
+
+    headers = {"Authorization": "bearer abc"}
+    body = {"software_statement": software_statement}
+    rv = test_client.post("/create_client", json=body, headers=headers)
+    assert rv.status_code == 201

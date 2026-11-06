@@ -1,7 +1,7 @@
 # ruff: noqa: I001
 # The import order below is intentional: httpx compatibility must be loaded
 # before anyio so import errors refer to httpx.
-import typing
+from collections.abc import Generator
 from contextlib import asynccontextmanager
 
 from ._compat import httpx2
@@ -37,7 +37,7 @@ class OAuth2Auth(Auth, TokenAuth):
 
     requires_request_body = True
 
-    def auth_flow(self, request: Request) -> typing.Generator[Request, Response, None]:
+    def auth_flow(self, request: Request) -> Generator[Request, Response, None]:
         try:
             url, headers, body = self.prepare(
                 str(request.url), request.headers, request.content
@@ -54,7 +54,7 @@ class OAuth2Auth(Auth, TokenAuth):
 class OAuth2ClientAuth(Auth, ClientAuth):
     requires_request_body = True
 
-    def auth_flow(self, request: Request) -> typing.Generator[Request, Response, None]:
+    def auth_flow(self, request: Request) -> Generator[Request, Response, None]:
         url, headers, body = self.prepare(
             request.method, str(request.url), request.headers, request.content
         )
