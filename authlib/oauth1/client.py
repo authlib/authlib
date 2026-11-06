@@ -1,4 +1,5 @@
 from authlib.common.encoding import json_loads
+from authlib.common.encoding import to_unicode
 from authlib.common.urls import add_params_to_uri
 from authlib.common.urls import url_decode
 from authlib.common.urls import urlparse
@@ -36,7 +37,7 @@ class OAuth1Client:
             client_secret=client_secret,
             token=token,
             token_secret=token_secret,
-            redirect_uri=redirect_uri,
+            redirect_uri=to_unicode(redirect_uri),
             signature_method=signature_method,
             signature_type=signature_type,
             rsa_key=rsa_key,
@@ -52,7 +53,7 @@ class OAuth1Client:
 
     @redirect_uri.setter
     def redirect_uri(self, uri):
-        self.auth.redirect_uri = uri
+        self.auth.redirect_uri = to_unicode(uri)
 
     @property
     def token(self):
@@ -99,7 +100,7 @@ class OAuth1Client:
         kwargs["oauth_token"] = request_token or self.auth.token
         if self.auth.redirect_uri:
             kwargs["oauth_callback"] = self.auth.redirect_uri
-        return add_params_to_uri(url, kwargs.items())
+        return add_params_to_uri(to_unicode(url), kwargs.items())
 
     def fetch_request_token(self, url, **kwargs):
         """Method for fetching an access token from the token endpoint.
@@ -141,12 +142,12 @@ class OAuth1Client:
                     back from the OAuth provider to you, the client.
         :returns: A dict of parameters extracted from the URL.
         """
-        token = dict(url_decode(urlparse.urlparse(url).query))
+        token = dict(url_decode(urlparse.urlparse(to_unicode(url)).query))
         self.token = token
         return token
 
     def _fetch_token(self, url, **kwargs):
-        resp = self.session.post(url, auth=self.auth, **kwargs)
+        resp = self.session.post(to_unicode(url), auth=self.auth, **kwargs)
         token = self.parse_response_token(resp.status_code, resp.text)
         self.token = token
         self.auth.verifier = None
