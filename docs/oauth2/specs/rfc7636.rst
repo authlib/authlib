@@ -113,10 +113,10 @@ Now you can register your ``AuthorizationCodeGrant`` with the extension::
     from authlib.oauth2.rfc7636 import CodeChallenge
     server.register_grant(MyAuthorizationCodeGrant, [CodeChallenge(required=True)])
 
-With ``required=True``, public clients must use PKCE. The check happens at
-the token endpoint: a public client that sends no ``code_verifier`` gets an
-``invalid_request`` error. The authorization endpoint does not reject a request
-without ``code_challenge``, but the code it returns cannot be exchanged.
+With ``required=True``, public clients must use PKCE. Per
+:rfc:`7636#section-4.4.1`, the authorization endpoint rejects a public client
+that sends no ``code_challenge`` with an ``invalid_request`` error. The token
+endpoint rejects a public client that sends no ``code_verifier``.
 
 With ``required=False``, PKCE is optional for all clients.
 
@@ -127,6 +127,15 @@ In both modes:
 * If the authorization request contained no ``code_challenge``, a token
   request with a ``code_verifier`` is rejected.
 * Confidential clients may use PKCE, but are not required to.
+
+Per :rfc:`9700#section-2.1.1`, clients should use ``S256``. To refuse
+``plain``, limit the supported methods::
+
+    class MyCodeChallenge(CodeChallenge):
+        SUPPORTED_CODE_CHALLENGE_METHOD = ["S256"]
+
+A request without ``code_challenge_method`` is then rejected, because the
+method defaults to ``plain`` (:rfc:`7636#section-4.3`).
 
 Using ``code_challenge`` in Client
 ----------------------------------
