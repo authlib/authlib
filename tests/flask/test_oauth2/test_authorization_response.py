@@ -53,7 +53,7 @@ def client(client, db):
 
 
 def change_response(server, response):
-    response.status_code = 303
+    response.status_code = 302
     response.params.append(("extra", "value"))
     response.headers.append(("X-Custom", "value"))
 
@@ -87,7 +87,7 @@ def test_hook_changes_the_response(
     assert params["extra"] == "value"
     assert params["state"] == "bar"
     assert ("error" in params) is not bool(user_id)
-    assert rv.status_code == 303
+    assert rv.status_code == 302
     assert rv.headers["X-Custom"] == "value"
 
 

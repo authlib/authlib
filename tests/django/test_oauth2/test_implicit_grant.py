@@ -65,7 +65,7 @@ def test_create_authorization_response(factory, server):
     grant = server.get_consent_grant(request)
 
     resp = server.create_authorization_response(request, grant=grant)
-    assert resp.status_code == 302
+    assert resp.status_code == 303
     params = dict(url_decode(urlparse.urlparse(resp["Location"]).fragment))
     assert params["error"] == "access_denied"
 
@@ -73,7 +73,7 @@ def test_create_authorization_response(factory, server):
     resp = server.create_authorization_response(
         request, grant=grant, grant_user=grant_user
     )
-    assert resp.status_code == 302
+    assert resp.status_code == 303
     params = dict(url_decode(urlparse.urlparse(resp["Location"]).fragment))
     assert "access_token" in params
 

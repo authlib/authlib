@@ -1,0 +1,9 @@
+Breaking changes
+~~~~~~~~~~~~~~~~
+
+- The OAuth 2 and OpenID Connect authorization server redirects with a 303
+  status code instead of 302, per :rfc:`9700#section-4.12`. This covers
+  authorization responses, errors sent to the redirect URI, and the
+  RP-Initiated Logout redirection. With 303, the browser always uses GET after
+  a POST, such as a consent form. With 302, this choice was left to the
+  browser.

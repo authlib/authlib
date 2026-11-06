@@ -110,14 +110,14 @@ def test_create_authorization_response(factory, server):
     grant = server.get_consent_grant(request)
 
     resp = server.create_authorization_response(request, grant=grant)
-    assert resp.status_code == 302
+    assert resp.status_code == 303
     assert "error=access_denied" in resp["Location"]
 
     grant_user = User.objects.get(username="foo")
     resp = server.create_authorization_response(
         request, grant=grant, grant_user=grant_user
     )
-    assert resp.status_code == 302
+    assert resp.status_code == 303
     assert "code=" in resp["Location"]
 
 
@@ -191,7 +191,7 @@ def get_token_response(factory, server):
     resp = server.create_authorization_response(
         request, grant=grant, grant_user=grant_user
     )
-    assert resp.status_code == 302
+    assert resp.status_code == 303
 
     params = dict(url_decode(urlparse.urlparse(resp["Location"]).query))
     code = params["code"]
