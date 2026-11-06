@@ -290,7 +290,7 @@ def test_validate_jwks(test_client):
     headers = {"Authorization": "bearer abc"}
 
     keyset = KeySet.generate_key_set("EC", "P-256", count=1)
-    valid_jwks = keyset.as_dict()
+    valid_jwks = keyset.as_dict(private=False)
 
     body = {"client_name": "Authlib", "jwks": valid_jwks}
     rv = test_client.post("/create_client", json=body, headers=headers)
@@ -327,7 +327,9 @@ def test_validate_jwks(test_client):
         KeySet.generate_key_set("EC", "P-256", count=1).as_dict(private=True),
         {
             "keys": [
-                *KeySet.generate_key_set("EC", "P-256", count=1).as_dict()["keys"],
+                *KeySet.generate_key_set("EC", "P-256", count=1).as_dict(private=False)[
+                    "keys"
+                ],
                 *KeySet.generate_key_set("oct", 256, count=1).as_dict()["keys"],
             ]
         },
