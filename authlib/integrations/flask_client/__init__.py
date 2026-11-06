@@ -44,6 +44,7 @@ class OAuth(BaseOAuth):
 
     def register(self, name, overwrite=False, **kwargs):
         self._registry[name] = (overwrite, kwargs)
+        self._clients.pop(name, None)
         if self.app:
             return self.create_client(name)
         return LocalProxy(lambda: self.create_client(name))

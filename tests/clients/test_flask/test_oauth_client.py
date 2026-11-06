@@ -108,6 +108,94 @@ def test_create_client():
     assert oauth.create_client("dev") is not None
 
 
+def test_register_again():
+    """Registering a name again replaces the remote application."""
+    app = Flask(__name__)
+    oauth = OAuth(app)
+    oauth.register("dev", client_id="dev-1")
+    assert oauth.dev.client_id == "dev-1"
+
+    client = oauth.register("dev", client_id="dev-2")
+    assert client.client_id == "dev-2"
+    assert oauth.dev.client_id == "dev-2"
+    assert oauth.create_client("dev").client_id == "dev-2"
+
+
+def test_register_again_before_init_app():
+    """Registering a name again before init_app replaces the remote application."""
+    oauth = OAuth()
+    oauth.register("dev", client_id="dev-1")
+    remote = oauth.register("dev", client_id="dev-2")
+    oauth.init_app(Flask(__name__))
+    assert remote.client_id == "dev-2"
+
+
+def test_remove_client():
+    """A removed remote application is no longer available."""
+    app = Flask(__name__)
+    oauth = OAuth(app)
+    oauth.register("dev", client_id="dev")
+    assert oauth.dev.client_id == "dev"
+
+    oauth.remove_client("dev")
+    assert oauth.create_client("dev") is None
+    with pytest.raises(AttributeError):
+        oauth.dev  # noqa:B018
+
+    with pytest.raises(KeyError):
+        oauth.remove_client("dev")
+
+
+def test_remove_client_before_init_app():
+    """A remote application can be removed before it is created."""
+    oauth = OAuth()
+    oauth.register("dev", client_id="dev")
+    oauth.remove_client("dev")
+    oauth.init_app(Flask(__name__))
+    assert oauth.create_client("dev") is None
+
+
+def test_custom_client_config_is_not_shared():
+    """Registering a custom client class does not change its OAUTH_APP_CONFIG."""
+
+    class CustomRemoteApp(FlaskOAuth2App):
+        OAUTH_APP_CONFIG = {"authorize_url": "https://provider.test/custom"}
+
+    app = Flask(__name__)
+    oauth = OAuth(app)
+    oauth.register("dev-1", client_id="dev-1", client_cls=CustomRemoteApp)
+    oauth.register("dev-2", client_id="dev-2", client_cls=CustomRemoteApp)
+    assert CustomRemoteApp.OAUTH_APP_CONFIG == {
+        "authorize_url": "https://provider.test/custom"
+    }
+    assert oauth.create_client("dev-1").client_id == "dev-1"
+
+    client = oauth.register("dev-1", client_id="dev-3", client_cls=CustomRemoteApp)
+    assert isinstance(client, CustomRemoteApp)
+    assert client.client_id == "dev-3"
+
+
+def test_overwrite_does_not_change_registered_dicts():
+    """Framework config does not change the dicts given to register."""
+
+    class CustomRemoteApp(FlaskOAuth2App):
+        OAUTH_APP_CONFIG = {"authorize_params": {"foo": "class"}}
+
+    app = Flask(__name__)
+    app.config["DEV_AUTHORIZE_PARAMS"] = {"foo": "config"}
+    oauth = OAuth(app)
+    access_token_params = {"foo": "register"}
+    oauth.register(
+        "dev",
+        overwrite=True,
+        client_cls=CustomRemoteApp,
+        access_token_params=access_token_params,
+    )
+    assert oauth.dev.authorize_params == {"foo": "config"}
+    assert CustomRemoteApp.OAUTH_APP_CONFIG["authorize_params"] == {"foo": "class"}
+    assert access_token_params == {"foo": "register"}
+
+
 def test_register_oauth1_remote_app():
     app = Flask(__name__)
     oauth = OAuth(app)
