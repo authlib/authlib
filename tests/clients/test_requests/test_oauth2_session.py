@@ -9,6 +9,7 @@ from joserfc.jwk import RSAKey
 
 from authlib.common.security import generate_token
 from authlib.common.urls import add_params_to_uri
+from authlib.common.urls import url_decode
 from authlib.common.urls import url_encode
 from authlib.integrations.base_client import MissingTokenError
 from authlib.integrations.requests_client import OAuth2Session
@@ -719,3 +720,63 @@ def test_initial_client_credentials_missing_endpoint():
             client.get("https://resource.test/user")
 
         client.send.assert_not_called()
+
+
+def test_repeated_body_parameters(token):
+    """The RFC 8707 resource and RFC 8693 audience parameters keep all their values."""
+    bodies = []
+
+    def fake_send(r, **kwargs):
+        bodies.append(r.body)
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        resp.json = lambda: token
+        return resp
+
+    url = "https://provider.test/token"
+    body = (
+        "resource=https%3A%2F%2Fa.test%2F&resource=https%3A%2F%2Fb.test%2F"
+        "&audience=c&audience=d"
+    )
+    sess = OAuth2Session("foo", "bar", token=token)
+    sess.send = fake_send
+    sess.fetch_token(url, body=body, grant_type="client_credentials")
+    sess.refresh_token(url, refresh_token="b", body=body)
+    sess.revoke_token(url, "hi", body=body)
+    sess.introspect_token(url, "hi", body=body)
+
+    assert len(bodies) == 4
+    for sent in bodies:
+        params = url_decode(sent)
+        assert [value for key, value in params if key == "resource"] == [
+            "https://a.test/",
+            "https://b.test/",
+        ]
+        assert [value for key, value in params if key == "audience"] == ["c", "d"]
+        keys = [key for key, _ in params]
+        assert len(set(keys)) == len(keys) - 2
+
+
+def test_duplicate_body_parameters(token):
+    """Other body parameters given twice are sent once, with the last value."""
+    bodies = []
+
+    def fake_send(r, **kwargs):
+        bodies.append(r.body)
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        resp.json = lambda: token
+        return resp
+
+    sess = OAuth2Session("foo", scope="openid")
+    sess.send = fake_send
+    sess.fetch_token(
+        "https://provider.test/token",
+        body="grant_type=client_credentials&scope=profile",
+    )
+
+    params = url_decode(bodies[0])
+    assert [value for key, value in params if key == "grant_type"] == [
+        "client_credentials"
+    ]
+    assert [value for key, value in params if key == "scope"] == ["openid"]

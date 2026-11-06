@@ -7,10 +7,10 @@ from contextlib import asynccontextmanager
 from ._compat import httpx2
 from anyio import Lock  # Import after httpx so import errors refer to httpx
 
-from authlib.common.urls import url_decode
 from authlib.oauth2.auth import ClientAuth
 from authlib.oauth2.auth import TokenAuth
 from authlib.oauth2.client import OAuth2Client as _OAuth2Client
+from authlib.oauth2.client import _form_data
 
 from ..base_client import InvalidTokenError
 from ..base_client import MissingTokenError
@@ -173,7 +173,7 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
     ):
         if method.upper() == "POST":
             resp = await self.post(
-                url, data=dict(url_decode(body)), headers=headers, auth=auth, **kwargs
+                url, data=_form_data(body), headers=headers, auth=auth, **kwargs
             )
         else:
             if "?" in url:
@@ -197,7 +197,7 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
         **kwargs,
     ):
         resp = await self.post(
-            url, data=dict(url_decode(body)), headers=headers, auth=auth, **kwargs
+            url, data=_form_data(body), headers=headers, auth=auth, **kwargs
         )
 
         for hook in self.compliance_hook["refresh_token_response"]:
@@ -216,7 +216,7 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
         self, url, body=None, auth=USE_CLIENT_DEFAULT, headers=None, **kwargs
     ):
         return self.post(
-            url, data=dict(url_decode(body)), headers=headers, auth=auth, **kwargs
+            url, data=_form_data(body), headers=headers, auth=auth, **kwargs
         )
 
 

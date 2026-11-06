@@ -7,6 +7,7 @@ import pytest
 from httpx2 import WSGITransport
 
 from authlib.common.security import generate_token
+from authlib.common.urls import url_decode
 from authlib.common.urls import url_encode
 from authlib.integrations.base_client import MissingTokenError
 from authlib.integrations.httpx_client import OAuth2Client
@@ -599,3 +600,35 @@ def test_stream_automatically_fetches_initial_token():
         "https://example.com/oauth/token",
         "https://example.com/api/data",
     ]
+
+
+def test_repeated_body_parameters():
+    """The RFC 8707 resource and RFC 8693 audience parameters keep all their values."""
+    bodies = []
+
+    def mock_handler(request):
+        bodies.append(request.content.decode())
+        return httpx2.Response(200, json=default_token)
+
+    url = "https://provider.test/token"
+    body = (
+        "resource=https%3A%2F%2Fa.test%2F&resource=https%3A%2F%2Fb.test%2F"
+        "&audience=c&audience=d"
+    )
+    transport = httpx2.MockTransport(mock_handler)
+    with OAuth2Client("foo", "bar", token=default_token, transport=transport) as client:
+        client.fetch_token(url, body=body, grant_type="client_credentials")
+        client.refresh_token(url, refresh_token="b", body=body)
+        client.revoke_token(url, "hi", body=body)
+        client.introspect_token(url, "hi", body=body)
+
+    assert len(bodies) == 4
+    for sent in bodies:
+        params = url_decode(sent)
+        assert [value for key, value in params if key == "resource"] == [
+            "https://a.test/",
+            "https://b.test/",
+        ]
+        assert [value for key, value in params if key == "audience"] == ["c", "d"]
+        keys = [key for key, _ in params]
+        assert len(set(keys)) == len(keys) - 2
