@@ -32,6 +32,7 @@ class AsyncAssertionClient(_AssertionClient, httpx2.AsyncClient):
         token_placement="header",
         scope=None,
         client_id=None,
+        access_token_params=None,
         **kwargs,
     ):
         client_kwargs = extract_client_kwargs(kwargs)
@@ -49,6 +50,7 @@ class AsyncAssertionClient(_AssertionClient, httpx2.AsyncClient):
             token_placement=token_placement,
             scope=scope,
             client_id=client_id,
+            access_token_params=access_token_params,
             **kwargs,
         )
 
@@ -91,6 +93,7 @@ class AssertionClient(_AssertionClient, httpx2.Client):
         token_placement="header",
         scope=None,
         client_id=None,
+        access_token_params=None,
         **kwargs,
     ):
         client_kwargs = extract_client_kwargs(kwargs)
@@ -108,6 +111,7 @@ class AssertionClient(_AssertionClient, httpx2.Client):
             token_placement=token_placement,
             scope=scope,
             client_id=client_id,
+            access_token_params=access_token_params,
             **kwargs,
         )
 

@@ -18,6 +18,10 @@ class AssertionAuth(OAuth2Auth):
 class AssertionSession(AssertionClient, Session):
     """Constructs a new Assertion Framework for OAuth 2.0 Authorization Grants
     per :rfc:`7521`.
+
+    :param access_token_params: Extra parameters for the token request, such as
+        ``resource`` (:rfc:`8707`). A list is sent as a repeated parameter. The
+        other arguments, such as ``scope``, take precedence.
     """
 
     token_auth_class = AssertionAuth
@@ -40,6 +44,7 @@ class AssertionSession(AssertionClient, Session):
         client_id=None,
         default_timeout=None,
         leeway=60,
+        access_token_params=None,
         **kwargs,
     ):
         Session.__init__(self)
@@ -58,6 +63,7 @@ class AssertionSession(AssertionClient, Session):
             scope=scope,
             client_id=client_id,
             leeway=leeway,
+            access_token_params=access_token_params,
             **kwargs,
         )
 
