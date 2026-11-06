@@ -104,3 +104,17 @@ def test_raw_string_key_is_deprecated():
             alg="HS256",
         )
     assert decode(token)["iss"] == "client1"
+
+
+def test_key_kid_in_header():
+    """The kid of the key is added to the header, unless the header sets one."""
+    key = OctKey.import_key(HMAC_SECRET, {"kid": "key-1"})
+    header = {"typ": "JWT"}
+    token = sign_jwt_bearer_assertion(key, "iss", "aud", header=header, alg="HS256")
+    assert jwt.decode(token, key).header["kid"] == "key-1"
+    assert header == {"typ": "JWT"}
+
+    token = sign_jwt_bearer_assertion(
+        key, "iss", "aud", header={"kid": "other"}, alg="HS256"
+    )
+    assert jwt.decode(token, key).header["kid"] == "other"

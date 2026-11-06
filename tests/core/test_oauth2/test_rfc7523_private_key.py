@@ -2,8 +2,11 @@ import time
 from types import SimpleNamespace
 from unittest import mock
 
+import pytest
 from joserfc import jwt
+from joserfc.errors import JoseError
 from joserfc.jwk import ECKey
+from joserfc.jwk import OKPKey
 from joserfc.jwk import RSAKey
 
 from authlib.oauth2.rfc7523 import PrivateKeyJWT
@@ -260,6 +263,47 @@ def test_sign_with_ec_key():
     assert decoded.claims["sub"] == "client_id_1"
     assert decoded.claims["aud"] == "https://provider.test/oauth/access_token"
     assert decoded.header["alg"] == "ES256"
+
+
+@pytest.mark.parametrize(
+    "key,alg",
+    [
+        (ECKey.generate_key("P-256", private=True), "ES256"),
+        (OKPKey.generate_key("Ed25519", private=True), "Ed25519"),
+    ],
+)
+def test_sign_with_pem_key(key, alg):
+    """A non-RSA private key can be given as a PEM string."""
+    jwt_signer = PrivateKeyJWT(alg=alg)
+    pem = key.as_pem(private=True).decode()
+    auth = SimpleNamespace(client_id="client_id_1", client_secret=pem)
+
+    data = jwt_signer.sign(auth, "https://provider.test/oauth/access_token")
+    decoded = jwt.decode(data, key, algorithms=[alg])
+    assert decoded.claims["iss"] == "client_id_1"
+
+
+def test_sign_with_key_kid():
+    """The kid of the key is added to the header."""
+    key = ECKey.generate_key("P-256", parameters={"kid": "key-1"}, private=True)
+    auth = SimpleNamespace(client_id="client_id_1", client_secret=key)
+
+    data = PrivateKeyJWT(alg="ES256").sign(auth, "https://provider.test/token")
+    assert jwt.decode(data, key).header["kid"] == "key-1"
+
+    jwt_signer = PrivateKeyJWT(alg="ES256", headers={"kid": "other"})
+    data = jwt_signer.sign(auth, "https://provider.test/token")
+    assert jwt.decode(data, key).header["kid"] == "other"
+    assert jwt_signer.headers == {"kid": "other"}
+
+
+@pytest.mark.parametrize("alg", ["ES256", "HS256", "XX256"])
+def test_sign_with_pem_key_of_another_type(alg):
+    """A PEM key that does not match alg is refused."""
+    jwt_signer = PrivateKeyJWT(alg=alg)
+    auth = SimpleNamespace(client_id="client_id_1", client_secret=private_key)
+    with pytest.raises(JoseError):
+        jwt_signer.sign(auth, "https://provider.test/oauth/access_token")
 
 
 def test_sign_with_non_recommended_alg():
