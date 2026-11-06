@@ -289,7 +289,7 @@ def test_validate_contacts(test_client):
 def test_validate_jwks(test_client):
     headers = {"Authorization": "bearer abc"}
 
-    keyset = KeySet.generate_key_set("oct", 128, count=1)
+    keyset = KeySet.generate_key_set("EC", "P-256", count=1)
     valid_jwks = keyset.as_dict()
 
     body = {"client_name": "Authlib", "jwks": valid_jwks}
@@ -317,6 +317,29 @@ def test_validate_jwks(test_client):
     body = {"client_name": "Authlib", "jwks": {"keys": "hello"}}
     rv = test_client.post("/create_client", json=body, headers=headers)
     resp = json.loads(rv.data)
+    assert "jwks" in resp["error_description"]
+
+
+@pytest.mark.parametrize(
+    "jwks",
+    [
+        KeySet.generate_key_set("oct", 256, count=1).as_dict(private=True),
+        KeySet.generate_key_set("EC", "P-256", count=1).as_dict(private=True),
+        {
+            "keys": [
+                *KeySet.generate_key_set("EC", "P-256", count=1).as_dict()["keys"],
+                *KeySet.generate_key_set("oct", 256, count=1).as_dict()["keys"],
+            ]
+        },
+    ],
+)
+def test_jwks_rejects_private_keys(test_client, jwks):
+    """jwks only accepts public keys."""
+    headers = {"Authorization": "bearer abc"}
+    body = {"client_name": "Authlib", "jwks": jwks}
+    rv = test_client.post("/create_client", json=body, headers=headers)
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_client_metadata"
     assert "jwks" in resp["error_description"]
 
 

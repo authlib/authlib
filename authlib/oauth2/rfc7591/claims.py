@@ -186,16 +186,22 @@ class ClientMetadataClaims(BaseClaims):
         public URLs.  The "jwks_uri" and "jwks" parameters MUST NOT both
         be present in the same request or response.
         """
-        if "jwks" in self:
-            if "jwks_uri" in self:
-                #  The "jwks_uri" and "jwks" parameters MUST NOT both  be present
-                raise InvalidClaimError("jwks")
+        if "jwks" not in self:
+            return
 
-            jwks = self["jwks"]
-            try:
-                KeySet.import_key_set(jwks)
-            except (JoseError, ValueError, KeyError, TypeError) as exc:
-                raise InvalidClaimError("jwks") from exc
+        if "jwks_uri" in self:
+            #  The "jwks_uri" and "jwks" parameters MUST NOT both  be present
+            raise InvalidClaimError("jwks")
+
+        try:
+            key_set = KeySet.import_key_set(self["jwks"])
+        except (JoseError, ValueError, KeyError, TypeError) as exc:
+            raise InvalidClaimError("jwks") from exc
+
+        # Per RFC 7591 §2, jwks contains the public keys of the client.
+        # Symmetric keys are private keys.
+        if any(key.is_private for key in key_set):
+            raise InvalidClaimError("jwks")
 
     def validate_software_id(self):
         """A unique identifier string (e.g., a Universally Unique Identifier
