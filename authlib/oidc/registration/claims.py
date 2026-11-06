@@ -1,5 +1,6 @@
 from joserfc.errors import InvalidClaimError
 
+from authlib.common.security import is_secure_transport
 from authlib.common.urls import is_valid_url
 from authlib.oauth2.claims import BaseClaims
 
@@ -346,3 +347,10 @@ class ClientMetadataClaims(BaseClaims):
         value is no longer valid.
         """
         self._validate_uri("request_uris")
+        signed = self.get("request_object_signing_alg") not in (None, "none")
+        if signed or self.get("require_signed_request_object") is True:
+            return
+
+        uris = self.get("request_uris") or []
+        if not all(is_secure_transport(uri, allow_loopback=False) for uri in uris):
+            raise InvalidClaimError("request_uris")
