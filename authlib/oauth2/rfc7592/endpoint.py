@@ -160,7 +160,9 @@ class ClientConfigurationEndpoint:
                 auth = request.headers.get("Authorization")
                 return get_token_by_auth(auth)
 
-        The token only needs a ``check_client(client)`` method, as in
+        Return ``None`` for an unknown, expired or revoked token. The endpoint
+        does not check the token state itself. The token only needs a
+        ``check_client(client)`` method, as in
         :meth:`~authlib.oauth2.rfc6749.TokenMixin.check_client`. The other
         methods of :class:`~authlib.oauth2.rfc6749.TokenMixin` are not used.
         Requests are denied with ``invalid_token`` when the token was not

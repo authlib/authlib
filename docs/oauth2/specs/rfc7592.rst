@@ -48,6 +48,9 @@ Before register the endpoint, developers MUST implement the missing methods::
             auth_header = request.headers.get('Authorization')
             bearer_token = auth_header.split()[1]
             token = Token.get(bearer_token)
+            # an expired or revoked token is not valid
+            if token is None or token.is_expired() or token.is_revoked():
+                return None
             return token
 
         def authenticate_client(self, request):

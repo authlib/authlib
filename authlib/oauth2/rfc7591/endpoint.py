@@ -156,9 +156,11 @@ class ClientRegistrationEndpoint:
                 auth = request.headers.get("Authorization")
                 return get_token_by_auth(auth)
 
-        For open registration, return a truthy value for requests without
-        token. When it returns ``None``, the endpoint responds with HTTP 401,
-        per :rfc:`7591#section-3.2.2` and :rfc:`6750#section-3`.
+        Return ``None`` for an unknown, expired or revoked token. The endpoint
+        does not check the token state itself. For open registration, return a
+        truthy value for requests without token. When it returns ``None``, the
+        endpoint responds with HTTP 401, per :rfc:`7591#section-3.2.2` and
+        :rfc:`6750#section-3`.
 
         :return: token instance, or ``None`` if the request is not allowed
         """
