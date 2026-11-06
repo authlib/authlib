@@ -357,3 +357,21 @@ def test_too_long_deflate_content():
         algorithm.decompress(compressed)
 
     assert isinstance(exc_info.value, ValueError)
+
+
+@pytest.mark.parametrize("suffix", ["=", "==", "!!!!", "+"])
+def test_non_canonical_signature(suffix):
+    """A signature with padding or other characters is rejected."""
+    jws = JsonWebSignature(algorithms=["HS256"])
+    s = jws.serialize_compact({"alg": "HS256"}, "hello", "secret")
+    with pytest.raises(errors.DecodeError):
+        jws.deserialize_compact(s + suffix.encode(), "secret")
+
+
+def test_non_canonical_last_character():
+    """A signature with non-zero unused bits in its last character is rejected."""
+    jws = JsonWebSignature(algorithms=["HS256"])
+    s = jws.serialize_compact({"alg": "HS256"}, "hello", "secret")
+    altered = s[:-1] + (b"B" if s[-1:] != b"B" else b"C")
+    with pytest.raises(errors.DecodeError):
+        jws.deserialize_compact(altered, "secret")

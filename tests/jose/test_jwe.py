@@ -1487,7 +1487,7 @@ def test_decryption_fails_if_ciphertext_is_invalid():
             }
         ],
         "iv": "AAECAwQFBgcICQoLDA0ODw",
-        "ciphertext": "Az2IWsISEMDJvyc5XRL-3-d-RgNBOGolCsxFFoUXFY",  # invalid ciphertext
+        "ciphertext": "Az2IWsISEMDJvyc5XRL-3-d-RgNBOGolCsxFFoUXFQ",  # invalid ciphertext
         "tag": "HLb4fTlm8spGmij3RyOs2gJ4DpHM4hhVRwdF_hGb3WQ",
     }
 
