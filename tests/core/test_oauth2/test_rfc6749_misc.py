@@ -126,7 +126,7 @@ def test_extract_basic_authorization():
 
 def test_extract_basic_authorization_not_utf8():
     """Credentials that are not valid UTF-8 are ignored instead of raising."""
-    for raw in (b"\xff\xfe:secret", "caf\xe9:secret".encode("latin-1")):
+    for raw in (b"\xff\xfe:secret", "\xe9t\xe9:secret".encode("latin-1")):
         text = f"Basic {base64.b64encode(raw).decode()}"
         assert util.extract_basic_authorization({"Authorization": text}) == (
             None,
