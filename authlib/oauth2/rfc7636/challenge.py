@@ -77,6 +77,13 @@ class CodeChallenge:
         challenge = request.payload.data.get("code_challenge")
         method = request.payload.data.get("code_challenge_method")
         if not challenge and not method:
+            # Per RFC 7636 §4.4.1, a server that requires PKCE for public
+            # clients rejects a request without code_challenge.
+            if self.required and request.client.check_endpoint_auth_method(
+                "none", "token"
+            ):
+                raise InvalidRequestError("Missing 'code_challenge'")
+
             return
 
         if not challenge:
@@ -88,7 +95,9 @@ class CodeChallenge:
         if not CODE_CHALLENGE_PATTERN.match(challenge):
             raise InvalidRequestError("Invalid 'code_challenge'")
 
-        if method and method not in self.SUPPORTED_CODE_CHALLENGE_METHOD:
+        # Per RFC 7636 §4.3, a missing code_challenge_method means "plain".
+        method = method or self.DEFAULT_CODE_CHALLENGE_METHOD
+        if method not in self.SUPPORTED_CODE_CHALLENGE_METHOD:
             raise InvalidRequestError("Unsupported 'code_challenge_method'")
 
         if len(request.payload.datalist.get("code_challenge_method", [])) > 1:

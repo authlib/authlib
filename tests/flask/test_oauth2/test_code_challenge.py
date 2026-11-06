@@ -53,6 +53,36 @@ def test_missing_code_challenge(test_client):
     assert "Missing" in rv.location
 
 
+def test_public_client_without_code_challenge(test_client):
+    """A public client without code_challenge is rejected at the authorization endpoint."""
+    rv = test_client.get(authorize_url + "&user_id=1")
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert params["error"] == "invalid_request"
+    assert params["error_description"] == "Missing 'code_challenge'"
+
+
+def test_public_client_without_code_challenge_not_required(
+    test_client, server, monkeypatch
+):
+    """With required=False, a public client can skip PKCE."""
+    _, extensions = server._authorization_grants[0]
+    monkeypatch.setattr(extensions[0], "required", False)
+    rv = test_client.get(authorize_url)
+    assert rv.data == b"login"
+
+
+def test_missing_code_challenge_method_unsupported(test_client, monkeypatch):
+    """A missing code_challenge_method means plain, which may be unsupported."""
+    monkeypatch.setattr(CodeChallenge, "SUPPORTED_CODE_CHALLENGE_METHOD", ["S256"])
+    rv = test_client.get(
+        authorize_url
+        + "&code_challenge=Zhs2POMonIVVHZteWfoU7cSXQSm0YjghikFGJSDI2_s&user_id=1"
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert params["error"] == "invalid_request"
+    assert params["error_description"] == "Unsupported 'code_challenge_method'"
+
+
 def test_has_code_challenge(test_client):
     rv = test_client.get(
         authorize_url + "&code_challenge=Zhs2POMonIVVHZteWfoU7cSXQSm0YjghikFGJSDI2_s"
