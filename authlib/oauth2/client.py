@@ -249,6 +249,9 @@ class OAuth2Client:
         :param auth: An auth tuple or method as accepted by requests.
         :param grant_type: Use specified grant_type to fetch token.
         :param state: Optional "state" value to fetch token.
+        :param kwargs: Extra parameters for the token request. ``scope`` can be
+                       a list. ``resource`` and ``audience`` can be a list,
+                       sent as a repeated parameter.
         :return: A :class:`OAuth2Token` object (a dict too).
         """
         state = state or self.state
@@ -309,6 +312,9 @@ class OAuth2Client:
                      include in the token request. Prefer kwargs over body.
         :param auth: An auth tuple or method as accepted by requests.
         :param headers: Dict to default request headers with.
+        :param kwargs: Extra parameters for the token request. ``scope`` can be
+                       a list. ``resource`` and ``audience`` can be a list,
+                       sent as a repeated parameter.
         :return: A :class:`OAuth2Token` object (a dict too).
         """
         session_kwargs = self._extract_session_request_params(kwargs)
