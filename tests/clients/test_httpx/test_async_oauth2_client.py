@@ -9,6 +9,7 @@ from httpx2 import ASGITransport
 from httpx2 import AsyncClient
 
 from authlib.common.security import generate_token
+from authlib.common.urls import url_decode
 from authlib.common.urls import url_encode
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from authlib.integrations.httpx_client import OAuthError
@@ -574,3 +575,38 @@ async def test_async_stream_automatically_fetches_initial_token():
         "https://example.com/oauth/token",
         "https://example.com/api/data",
     ]
+
+
+@pytest.mark.asyncio
+async def test_repeated_body_parameters():
+    """The RFC 8707 resource and RFC 8693 audience parameters keep all their values."""
+    bodies = []
+
+    async def mock_handler(request):
+        bodies.append((await request.aread()).decode())
+        return httpx2.Response(200, json=default_token)
+
+    url = "https://provider.test/token"
+    body = (
+        "resource=https%3A%2F%2Fa.test%2F&resource=https%3A%2F%2Fb.test%2F"
+        "&audience=c&audience=d"
+    )
+    transport = httpx2.MockTransport(mock_handler)
+    async with AsyncOAuth2Client(
+        "foo", "bar", token=default_token, transport=transport
+    ) as client:
+        await client.fetch_token(url, body=body, grant_type="client_credentials")
+        await client.refresh_token(url, refresh_token="b", body=body)
+        await client.revoke_token(url, "hi", body=body)
+        await client.introspect_token(url, "hi", body=body)
+
+    assert len(bodies) == 4
+    for sent in bodies:
+        params = url_decode(sent)
+        assert [value for key, value in params if key == "resource"] == [
+            "https://a.test/",
+            "https://b.test/",
+        ]
+        assert [value for key, value in params if key == "audience"] == ["c", "d"]
+        keys = [key for key, _ in params]
+        assert len(set(keys)) == len(keys) - 2

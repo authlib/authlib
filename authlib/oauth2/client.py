@@ -39,6 +39,26 @@ def _load_token_response(resp):
     return token
 
 
+# Per RFC 8707 §2 and RFC 8693 §2.1, these parameters can be repeated.
+_REPEATABLE_PARAMETERS = {"resource", "audience"}
+
+
+def _form_data(body):
+    """Decode a form body into a dict for requests and httpx.
+
+    Repeatable parameters keep all their values. For other parameters, the
+    last value wins.
+    """
+    data = {}
+    for key, value in url_decode(body):
+        if key in _REPEATABLE_PARAMETERS:
+            data.setdefault(key, []).append(value)
+        else:
+            data[key] = value
+
+    return data
+
+
 class OAuth2Client:
     """Construct a new OAuth 2 protocol client.
 
@@ -443,7 +463,7 @@ class OAuth2Client:
     ):
         if method.upper() == "POST":
             resp = self.session.post(
-                url, data=dict(url_decode(body)), headers=headers, auth=auth, **kwargs
+                url, data=_form_data(body), headers=headers, auth=auth, **kwargs
             )
         else:
             if "?" in url:
@@ -526,7 +546,7 @@ class OAuth2Client:
 
     def _http_post(self, url, body=None, auth=None, headers=None, **kwargs):
         return self.session.post(
-            url, data=dict(url_decode(body)), headers=headers, auth=auth, **kwargs
+            url, data=_form_data(body), headers=headers, auth=auth, **kwargs
         )
 
     def __del__(self):
