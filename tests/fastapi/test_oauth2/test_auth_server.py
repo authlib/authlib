@@ -249,7 +249,7 @@ async def test_create_oauth2_request(app):
         new_callable=AsyncMock,
     ) as mock_create:
         mock_create.return_value = OAuth2Request(
-            "POST", "https://testserver/oauth/token", {}, {}
+            "POST", "https://testserver/oauth/token"
         )
         result = await server._create_oauth2_request(request)
 
@@ -420,8 +420,6 @@ def oauth2_request():
     return OAuth2Request(
         "GET",
         "https://example.com",
-        {},
-        {},
     )
 
 
@@ -544,7 +542,7 @@ def test_send_signal_unknown_name(server):
 @pytest.mark.asyncio
 async def test_create_authorization_response_branch_coverage(server):
     raw_request = MagicMock()
-    parsed_req = OAuth2Request("GET", "https://example.com/authorize", {}, {})
+    parsed_req = OAuth2Request("GET", "https://example.com/authorize")
     server._parse_request = AsyncMock(return_value=parsed_req)
 
     with patch(
@@ -556,7 +554,7 @@ async def test_create_authorization_response_branch_coverage(server):
         )
         server._parse_request.assert_awaited_once_with(raw_request)
 
-    valid_oauth_req = OAuth2Request("GET", "https://example.com/authorize", {}, {})
+    valid_oauth_req = OAuth2Request("GET", "https://example.com/authorize")
     server._parse_request.reset_mock()
 
     with patch(
@@ -572,7 +570,7 @@ async def test_create_authorization_response_branch_coverage(server):
 @pytest.mark.asyncio
 async def test_create_token_response_branch_coverage(server):
     raw_request = MagicMock()
-    parsed_req = OAuth2Request("POST", "https://example.com/token", {}, {})
+    parsed_req = OAuth2Request("POST", "https://example.com/token")
     server._parse_request = AsyncMock(return_value=parsed_req)
 
     with patch(
@@ -582,7 +580,7 @@ async def test_create_token_response_branch_coverage(server):
         await server.create_token_response(request=raw_request)
         server._parse_request.assert_awaited_once_with(raw_request)
 
-    valid_oauth_req = OAuth2Request("POST", "https://example.com/token", {}, {})
+    valid_oauth_req = OAuth2Request("POST", "https://example.com/token")
     server._parse_request.reset_mock()
 
     with patch(
@@ -630,7 +628,7 @@ def test_get_error_uri_no_config(server):
 # --- Тести для _create_json_request ---
 @pytest.mark.asyncio
 async def test_create_json_request_with_oauth2_request(server):
-    oauth2_req = OAuth2Request("POST", "https://example.com/token", {}, {})
+    oauth2_req = OAuth2Request("POST", "https://example.com/token")
     result = await server._create_json_request(oauth2_req)
     assert result is oauth2_req
 
@@ -655,7 +653,7 @@ async def test_create_json_request_with_starlette_request(server):
 # --- Тести для _create_oauth2_request ---
 @pytest.mark.asyncio
 async def test_create_oauth2_request_with_oauth2_request(server):
-    oauth2_req = OAuth2Request("POST", "https://example.com/token", {}, {})
+    oauth2_req = OAuth2Request("POST", "https://example.com/token")
     result = await server._create_oauth2_request(oauth2_req)
     assert result is oauth2_req
 
@@ -663,7 +661,7 @@ async def test_create_oauth2_request_with_oauth2_request(server):
 @pytest.mark.asyncio
 async def test_create_oauth2_request_with_starlette_request(server):
     request = Mock()
-    expected_req = OAuth2Request("POST", "https://example.com/token", {}, {})
+    expected_req = OAuth2Request("POST", "https://example.com/token")
 
     with patch(
         "authlib.integrations.fastapi_oauth2.authorization_server._create_oauth2_request",
