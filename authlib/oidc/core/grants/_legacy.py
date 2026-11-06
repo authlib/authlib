@@ -43,8 +43,11 @@ class LegacyMixin:
             def get_client_claims(self, client):
                 return {
                     "iss": "your-service-url",
-                    "aud": [client.get_client_id()],
+                    "aud": client.get_client_id(),
                 }
+
+        Per OpenID Connect Core §2, ``aud`` can be a single string or a list.
+        Without ``aud``, the ID token has ``[client_id]``.
         """
         raise NotImplementedError()
 
