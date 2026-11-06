@@ -17,8 +17,7 @@ def sign_jwt_bearer_assertion(
     header=None,
     **kwargs,
 ):
-    if header is None:
-        header = {}
+    header = dict(header or {})
     alg = kwargs.pop("alg", None)
     if alg:
         header["alg"] = alg
@@ -47,7 +46,14 @@ def sign_jwt_bearer_assertion(
     if claims:
         payload.update(claims)
 
-    return jwt.encode(header, payload, import_any_key(key), algorithms=[header["alg"]])
+    key = import_any_key(key)
+    # Per OpenID Connect Core §10.1, a kid value MUST be provided when the
+    # JWK Set of the signer has several keys.
+    kid = getattr(key, "kid", None)
+    if kid and "kid" not in header:
+        header["kid"] = kid
+
+    return jwt.encode(header, payload, key, algorithms=[header["alg"]])
 
 
 def client_secret_jwt_sign(
