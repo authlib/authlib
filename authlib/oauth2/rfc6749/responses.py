@@ -53,13 +53,15 @@ class JsonResponse(OAuth2Response):
 
 
 class RedirectResponse(OAuth2Response):
-    """A redirection to another URI.
+    """A redirection to another URI, with the 303 status code.
+
+    Per :rfc:`9700#section-4.12`, the browser then uses GET, even after a POST.
 
     :param location: the URI to redirect to
     """
 
     def __init__(self, location):
-        super().__init__(302, "", [("Location", location)])
+        super().__init__(303, "", [("Location", location)])
 
 
 class AuthorizationResponse(OAuth2Response):

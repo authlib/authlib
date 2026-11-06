@@ -519,7 +519,7 @@ def test_response_mode_unsupported(
         assert rv.json["error"] == "invalid_request"
         return
 
-    assert rv.status_code == 302
+    assert rv.status_code == 303
     location = urlparse.urlparse(rv.location)
     assert not location.query
     params = dict(url_decode(location.fragment))

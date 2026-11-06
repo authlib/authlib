@@ -59,5 +59,5 @@ class OAuth2Error(AuthlibHTTPError):
         if self.redirect_uri:
             params = self.get_body()
             loc = add_params_to_uri(self.redirect_uri, params, self.redirect_fragment)
-            return 302, "", [("Location", loc)]
+            return 303, "", [("Location", loc)]
         return super().__call__(uri=uri)

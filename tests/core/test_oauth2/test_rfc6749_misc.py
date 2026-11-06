@@ -248,3 +248,19 @@ def test_client_id_logged_on_one_line(caplog, authenticate, oauth2_request):
 
     assert caplog.messages
     assert all("\n" not in message for message in caplog.messages)
+
+
+def test_error_redirect():
+    """An error with a redirect_uri redirects to it with 303."""
+    error = errors.InvalidRequestError(
+        state="s", redirect_uri="https://client.test/callback"
+    )
+    status_code, body, headers = error()
+    assert status_code == 303
+    assert body == ""
+    assert headers == [
+        (
+            "Location",
+            "https://client.test/callback?error=invalid_request&state=s",
+        )
+    ]

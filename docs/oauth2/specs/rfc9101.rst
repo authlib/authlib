@@ -32,7 +32,7 @@ itself:
         end
         Note over AS: Verifies the request object
         Note over User,AS: The user logs in and approves
-        AS-->>User: 302 Found → redirect_uri?code=…
+        AS-->>User: 303 See Other → redirect_uri?code=…
 
 1. The client signs a JWT that contains the authorization request
    parameters. It redirects the browser to the authorization endpoint.

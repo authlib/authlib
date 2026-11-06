@@ -158,7 +158,7 @@ def test_logout_with_redirect_uri(
         "&post_logout_redirect_uri=https://client.test/logout"
     )
 
-    assert rv.status_code == 302
+    assert rv.status_code == 303
     assert rv.headers["Location"] == "https://client.test/logout"
 
 
@@ -172,7 +172,7 @@ def test_logout_with_redirect_uri_and_state(
         "&state=xyz123"
     )
 
-    assert rv.status_code == 302
+    assert rv.status_code == 303
     assert rv.headers["Location"] == "https://client.test/logout?state=xyz123"
 
 
@@ -210,7 +210,7 @@ def test_post_with_form_data(
         },
     )
 
-    assert rv.status_code == 302
+    assert rv.status_code == 303
     assert rv.headers["Location"] == "https://client.test/logout?state=abc"
 
 
@@ -257,7 +257,7 @@ def test_redirect_preserved_after_confirmation(
         },
     )
 
-    assert rv.status_code == 302
+    assert rv.status_code == 303
     assert rv.headers["Location"] == "https://client.test/logout"
 
 
@@ -368,7 +368,7 @@ def test_client_resolved_from_single_aud(
         "&post_logout_redirect_uri=https://client.test/logout"
     )
 
-    assert rv.status_code == 302
+    assert rv.status_code == 303
     assert rv.headers["Location"] == "https://client.test/logout"
 
 
@@ -411,7 +411,7 @@ def test_client_resolved_with_explicit_client_id(
         "&post_logout_redirect_uri=https://client.test/logout"
     )
 
-    assert rv.status_code == 302
+    assert rv.status_code == 303
     assert rv.headers["Location"] == "https://client.test/logout"
 
 
