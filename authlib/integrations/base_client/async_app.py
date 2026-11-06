@@ -1,5 +1,4 @@
 import logging
-import time
 
 from authlib.common.urls import urlparse
 
@@ -81,8 +80,7 @@ class AsyncOAuth2Mixin(OAuth2Base):
                 )
                 resp.raise_for_status()
                 metadata = resp.json()
-                metadata["_loaded_at"] = time.time()
-            self.server_metadata.update(metadata)
+            self._update_server_metadata(metadata)
         return self.server_metadata
 
     async def request(self, method, url, token=None, **kwargs):
