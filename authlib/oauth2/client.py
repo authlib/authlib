@@ -1,3 +1,4 @@
+from authlib.common.encoding import to_unicode
 from authlib.common.security import generate_token
 from authlib.common.urls import url_decode
 
@@ -182,6 +183,14 @@ class OAuth2Client:
         )
 
     @property
+    def redirect_uri(self):
+        return self._redirect_uri
+
+    @redirect_uri.setter
+    def redirect_uri(self, uri):
+        self._redirect_uri = to_unicode(uri)
+
+    @property
     def token(self):
         return self.token_auth.token
 
@@ -199,13 +208,17 @@ class OAuth2Client:
         :param kwargs: Extra parameters to include.
         :return: authorization_url, state
         """
+        url = to_unicode(url)
         if state is None:
             state = generate_token()
 
         response_type = self.metadata.get("response_type", "code")
         response_type = kwargs.pop("response_type", response_type)
-        if "redirect_uri" not in kwargs:
+        if "redirect_uri" in kwargs:
+            kwargs["redirect_uri"] = to_unicode(kwargs["redirect_uri"])
+        else:
             kwargs["redirect_uri"] = self.redirect_uri
+
         if "scope" not in kwargs:
             kwargs["scope"] = self.scope
 
@@ -262,7 +275,10 @@ class OAuth2Client:
         """
         state = state or self.state
         # implicit  grant_type
-        authorization_response = kwargs.pop("authorization_response", None)
+        authorization_response = to_unicode(kwargs.pop("authorization_response", None))
+        if "redirect_uri" in kwargs:
+            kwargs["redirect_uri"] = to_unicode(kwargs["redirect_uri"])
+
         if authorization_response and "#" in authorization_response:
             return self.token_from_fragment(authorization_response, state)
 
@@ -297,7 +313,12 @@ class OAuth2Client:
             url = self.metadata.get("token_endpoint")
 
         return self._fetch_token(
-            url, body=body, auth=auth, method=method, headers=headers, **session_kwargs
+            to_unicode(url),
+            body=body,
+            auth=auth,
+            method=method,
+            headers=headers,
+            **session_kwargs,
         )
 
     def token_from_fragment(self, authorization_response, state=None):
@@ -339,6 +360,7 @@ class OAuth2Client:
         if url is None:
             url = self.metadata.get("token_endpoint")
 
+        url = to_unicode(url)
         for hook in self.compliance_hook["refresh_token_request"]:
             url, headers, body = hook(url, headers, body)
 
@@ -521,6 +543,7 @@ class OAuth2Client:
         headers=None,
         **kwargs,
     ):
+        url = to_unicode(url)
         if token is None and self.token:
             token = self.token.get("refresh_token") or self.token.get("access_token")
 
