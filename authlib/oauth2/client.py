@@ -11,6 +11,12 @@ from .rfc6749.parameters import prepare_token_request
 from .rfc7009 import prepare_revoke_token_request
 from .rfc7636 import create_s256_code_challenge
 
+# Per RFC 7636 §4.2, with "plain" the code_challenge is the code_verifier.
+_CODE_CHALLENGE_METHODS = {
+    "S256": create_s256_code_challenge,
+    "plain": lambda code_verifier: code_verifier,
+}
+
 DEFAULT_HEADERS = {
     "Accept": "application/json",
     "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
@@ -73,7 +79,7 @@ class OAuth2Client:
     :param scope: Scope that you needed to access user resources.
     :param state: Shared secret to prevent CSRF attack.
     :param redirect_uri: Redirect URI you registered as callback.
-    :param code_challenge_method: PKCE method name, only S256 is supported.
+    :param code_challenge_method: PKCE method, ``S256`` or ``plain``.
     :param token: A dict of token attributes such as ``access_token``,
         ``token_type`` and ``expires_at``.
     :param token_placement: The place to put token in HTTP request. Available
@@ -203,13 +209,13 @@ class OAuth2Client:
         if "scope" not in kwargs:
             kwargs["scope"] = self.scope
 
-        if (
-            code_verifier
-            and response_type == "code"
-            and self.code_challenge_method == "S256"
-        ):
-            kwargs["code_challenge"] = create_s256_code_challenge(code_verifier)
-            kwargs["code_challenge_method"] = self.code_challenge_method
+        method = self.code_challenge_method
+        if method and method not in _CODE_CHALLENGE_METHODS:
+            raise ValueError(f"Unsupported code_challenge_method {method!r}.")
+
+        if code_verifier and method and "code" in response_type.split():
+            kwargs["code_challenge"] = _CODE_CHALLENGE_METHODS[method](code_verifier)
+            kwargs["code_challenge_method"] = method
 
         for k in self.EXTRA_AUTHORIZE_PARAMS:
             if k not in kwargs and k in self.metadata:

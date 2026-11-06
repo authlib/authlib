@@ -123,6 +123,9 @@ and ``fetch_token``::
     >>> # ...
     >>> token = client.fetch_token(..., code_verifier=code_verifier)
 
+The supported methods are ``S256`` and ``plain``. Prefer ``S256``, per
+:rfc:`9700#section-2.1.1`.
+
 
 OAuth2Session for Implicit
 --------------------------

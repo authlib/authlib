@@ -390,7 +390,9 @@ register your remote app with a ``code_challenge_method`` in ``client_kwargs``::
         client_kwargs={'code_challenge_method': 'S256'},
     )
 
-Note, the only supported ``code_challenge_method`` is ``S256``.
+The supported methods are ``S256`` and ``plain``. Prefer ``S256``, per
+:rfc:`9700#section-2.1.1`. Use ``plain`` only for a provider that does not
+support ``S256``.
 
 
 Compliance Fix for OAuth 2.0
