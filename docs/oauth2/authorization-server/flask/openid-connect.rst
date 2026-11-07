@@ -64,7 +64,9 @@ key
 
 A private key is required to generate a JWT. The key that you are going to use
 dependents on the ``alg`` you are using. For instance, the alg is ``RS256``,
-you need to use an RSA private key. It can be set with::
+you need to use an RSA private key. It can be set with:
+
+.. code-block:: python
 
     key = '''-----BEGIN RSA PRIVATE KEY-----\nMIIEog...'''
 
@@ -75,7 +77,9 @@ iss
 ~~~
 
 The ``iss`` value in the JWT payload. The value can be your website name or
-URL. For example, Google is using::
+URL. For example, Google is using:
+
+.. code-block:: python
 
     {"iss": "https://accounts.google.com"}
 
@@ -91,7 +95,9 @@ OpenID Connect Code flow is the same as Authorization Code flow, but with
 extended features. We can apply the :class:`OpenIDCode` extension to
 :ref:`flask_oauth2_code_grant`.
 
-First, we need to implement the missing methods for ``OpenIDCode``::
+First, we need to implement the missing methods for ``OpenIDCode``:
+
+.. code-block:: python
 
     from joserfc.jwk import KeySet
     from authlib.oidc.core import grants, UserInfo
@@ -115,7 +121,7 @@ First, we need to implement the missing methods for ``OpenIDCode``::
 
         def generate_user_info(self, user, scope):
             return UserInfo(
-                sub=user.id,
+                sub=str(user.id),
                 name=user.name,
                 email=user.email,
             ).filter(scope)
@@ -125,7 +131,9 @@ parameter, and the time of the user authentication. ``OpenIDCode`` sets this
 time in ``request.auth_time``, from the authorization session (see
 :ref:`flask_odic_max_age`). It becomes the
 ``auth_time`` claim of the ID token. Save these values in the
-:ref:`flask_oauth2_code_grant` ``save_authorization_code`` method::
+:ref:`flask_oauth2_code_grant` ``save_authorization_code`` method:
+
+.. code-block:: python
 
     class AuthorizationCodeGrant(_AuthorizationCodeGrant):
         def save_authorization_code(self, code, request):
@@ -147,7 +155,9 @@ time in ``request.auth_time``, from the authorization session (see
         # ...
 
 Finally, you can register ``AuthorizationCodeGrant`` with the ``OpenIDCode``
-extension::
+extension:
+
+.. code-block:: python
 
     # register it to grant endpoint
     server.register_grant(AuthorizationCodeGrant, [OpenIDCode(require_nonce=True)])
@@ -183,7 +193,9 @@ a scripting language. You need to implement the missing methods of
 
 Per OpenID Connect Core §2, the authorization server should not process the
 nonce, other than putting it in the ID token. The client checks it. This
-example accepts every nonce::
+example accepts every nonce:
+
+.. code-block:: python
 
     from joserfc.jwk import KeySet
     from authlib.oidc.core import grants
@@ -204,7 +216,7 @@ example accepts every nonce::
 
         def generate_user_info(self, user, scope):
             return UserInfo(
-                sub=user.id,
+                sub=str(user.id),
                 name=user.name,
                 email=user.email,
             ).filter(scope)
@@ -222,7 +234,9 @@ by Authorization Code Flow.
 
 OpenIDHybridGrant is a subclass of OpenIDImplicitGrant, so the missing methods
 are the same, except that OpenIDHybridGrant has one more missing method, that
-is ``save_authorization_code``. You can implement it like this::
+is ``save_authorization_code``. You can implement it like this:
+
+.. code-block:: python
 
     from joserfc.jwk import KeySet
     from authlib.oidc.core import grants
@@ -265,7 +279,7 @@ is ``save_authorization_code``. You can implement it like this::
 
         def generate_user_info(self, user, scope):
             return UserInfo(
-                sub=user.id,
+                sub=str(user.id),
                 name=user.name,
                 email=user.email,
             ).filter(scope)
@@ -288,7 +302,9 @@ for a new consent with ``prompt=consent``. Authlib applies these rules with an
 :class:`~authlib.oauth2.AuthorizationSession`.
 :ref:`authorization_session` explains the rules and the pitfalls.
 
-Store the time of the login in the session::
+Store the time of the login in the session:
+
+.. code-block:: python
 
     import time
     from flask import session
@@ -299,7 +315,9 @@ Store the time of the login in the session::
 
 Subclass the authorization session. It keeps the start time of the requests
 in the Flask session. Give the time of the interactions, and tell if the user
-must give their consent::
+must give their consent:
+
+.. code-block:: python
 
     from authlib.oauth2 import AuthorizationSession
 
@@ -318,7 +336,9 @@ must give their consent::
 
 Pass it to ``get_consent_grant``. When the user must go through an
 interaction, such as a login, it is in ``grant.interactions``, and
-``grant.prompt`` is the first of them::
+``grant.prompt`` is the first of them:
+
+.. code-block:: python
 
     @app.route("/oauth/authorize", methods=["GET", "POST"])
     def authorize():
@@ -333,3 +353,47 @@ interaction, such as a login, it is in ``grant.interactions``, and
         ...
 
 Find the `example of OpenID Connect server <https://github.com/authlib/example-oidc-server>`_.
+
+.. invisible-code-block: python
+
+    from urllib.parse import parse_qs, urlparse
+
+    from joserfc import jwt
+
+    db.create_all()
+    user = User(username="alice", name="Alice", email="alice@example.com")
+    db.session.add(user)
+    db.session.commit()
+    client = Client(user_id=user.id, client_id="client-id", client_secret="client-secret")
+    client.set_client_metadata({
+        "redirect_uris": ["https://client.example/cb"],
+        "grant_types": ["authorization_code"],
+        "response_types": ["code"],
+        "scope": "openid profile",
+    })
+    db.session.add(client)
+    db.session.commit()
+    http = app.test_client()
+
+    response = http.post("/test/authorize", query_string={
+        "response_type": "code",
+        "client_id": "client-id",
+        "redirect_uri": "https://client.example/cb",
+        "scope": "openid profile",
+        "nonce": "n-0S6_WzA2Mj",
+    })
+    assert response.status_code == 303, response.data
+    code = parse_qs(urlparse(response.location).query)["code"][0]
+
+    response = http.post("/test/token", data={
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": "https://client.example/cb",
+    }, auth=("client-id", "client-secret"))
+    assert response.status_code == 200, response.json
+
+    claims = jwt.decode(response.json["id_token"], public_jwks).claims
+    assert claims["nonce"] == "n-0S6_WzA2Mj"
+    assert claims["aud"] == ["client-id"]
+    assert claims["sub"] == str(user.id)
+    assert claims["name"] == "Alice"

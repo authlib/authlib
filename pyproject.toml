@@ -58,6 +58,7 @@ dev = [
     "pytest-env>=1.0",
     "pytest-xdist>=3.8.0",
     "scriv[toml]>=1.8.0",
+    "sybil>=10.1",
     "tox-uv >= 1.16.0",
 ]
 

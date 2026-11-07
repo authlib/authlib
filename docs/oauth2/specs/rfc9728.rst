@@ -70,7 +70,9 @@ example.
 Resource Server
 ---------------
 
-A minimal example serving metadata at the well-known URL::
+A minimal example serving metadata at the well-known URL:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc9728 import ProtectedResourceMetadata, get_well_known_url
 
@@ -94,7 +96,15 @@ authenticity independently of TLS, with
 :meth:`~ProtectedResourceMetadata.sign_metadata`. The ``iss`` claim of the JWT
 is the signer. It is the ``resource`` by default, or the ``issuer`` parameter.
 Consumers verify the signature with a key of this issuer. When the resource
-signs its own metadata, it can publish its keys at ``jwks_uri``::
+signs its own metadata, it can publish its keys at ``jwks_uri``:
+
+.. invisible-code-block: python
+
+    from flask import Flask
+
+    app = Flask("docs")
+
+.. code-block:: python
 
     from joserfc.jwk import KeySet, RSAKey
     from authlib.oauth2.rfc9728 import ProtectedResourceMetadata, get_well_known_url
@@ -126,7 +136,9 @@ WWW-Authenticate header
 When a protected resource returns a 401 response, it can include a
 ``resource_metadata`` parameter in the ``WWW-Authenticate`` header so that
 clients can discover its metadata endpoint. Use
-:class:`~ResourceMetadataExtension` to wire this automatically::
+:class:`~ResourceMetadataExtension` to wire this automatically:
+
+.. code-block:: python
 
     from authlib.integrations.flask_oauth2 import ResourceProtector
     from authlib.oauth2.rfc9728 import ProtectedResourceMetadata, ResourceMetadataExtension
@@ -146,7 +158,9 @@ clients can discover its metadata endpoint. Use
     def userinfo():
         ...
 
-An unauthenticated request to ``/api/userinfo`` will receive::
+An unauthenticated request to ``/api/userinfo`` will receive:
+
+.. code-block:: http
 
     HTTP/1.1 401 Unauthorized
     WWW-Authenticate: Bearer resource_metadata="https://api.example.com/.well-known/oauth-protected-resource"
@@ -166,7 +180,9 @@ For a different resource, use another protector.
 To send a different URL for each route, override
 :meth:`~ResourceMetadataExtension.get_resource_metadata_url`. You then have to
 serve a metadata document at each of these URLs, with the matching
-``resource`` value::
+``resource`` value:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc9728 import ResourceMetadataExtension, get_well_known_url
 
@@ -193,7 +209,19 @@ resource identifiers that accept tokens from this authorization server:
         ]
     }
 
-You can validate this field using the extension class::
+You can validate this field using the extension class:
+
+.. invisible-code-block: python
+
+    data = {
+        "issuer": "https://auth.example.com",
+        "authorization_endpoint": "https://auth.example.com/authorize",
+        "token_endpoint": "https://auth.example.com/token",
+        "response_types_supported": ["code"],
+        "protected_resources": ["https://api.example.com/"],
+    }
+
+.. code-block:: python
 
     from authlib.oauth2 import rfc8414, rfc9728
 

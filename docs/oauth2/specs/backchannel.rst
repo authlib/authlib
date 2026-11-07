@@ -67,7 +67,9 @@ Sending Logout Notifications
 -----------------------------
 
 :class:`BackchannelLogoutSender` sends the logout tokens. Subclass it, create
-one instance, and keep a reference to it::
+one instance, and keep a reference to it:
+
+.. code-block:: python
 
     from authlib.oidc.backchannel import BackchannelLogoutSender
 
@@ -85,7 +87,7 @@ one instance, and keep a reference to it::
             # Return a (client, sid) pair for each active session of this
             # user, or for each client of this session. Each client is a
             # ClientMixin with a client_metadata dict.
-            return [(s.client, s.sid) for s in db.query_sessions(sub=sub, sid=sid)]
+            return [(s.client, s.sid) for s in query_sessions(sub=sub, sid=sid)]
 
         def deliver_logout_token(self, client, uri, logout_token):
             # Perform the HTTP POST. Choose your own library and error handling.
@@ -98,7 +100,14 @@ one instance, and keep a reference to it::
     backchannel_logout = MyBackchannelLogoutSender()
 
 Then call :meth:`~BackchannelLogoutSender.send_logout` from anywhere a session
-ends — an endpoint, an admin view, a background task::
+ends — an endpoint, an admin view, a background task:
+
+.. invisible-code-block: python
+
+    def query_sessions(sub, sid):
+        return []
+
+.. code-block:: python
 
     backchannel_logout.send_logout(sub="user-123", sid="sess-abc")
 
@@ -133,7 +142,9 @@ The ``sub`` claim of the logout token must match the ``sub`` claim of the ID
 tokens of the client. By default, :meth:`~BackchannelLogoutSender.get_client_sub`
 returns ``sub`` unchanged. Override it when the ``sub`` claim of your ID tokens
 is not the user identifier. For instance, with pairwise subject identifiers,
-this value is different for each client::
+this value is different for each client:
+
+.. code-block:: python
 
     class MyBackchannelLogoutSender(BackchannelLogoutSender):
         def get_client_sub(self, client, sub):
@@ -145,7 +156,9 @@ Integration with RP-Initiated Logout
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A common pattern is to trigger backchannel logout from
-:class:`~authlib.oidc.rpinitiated.EndSessionEndpoint`::
+:class:`~authlib.oidc.rpinitiated.EndSessionEndpoint`:
+
+.. code-block:: python
 
     from authlib.oidc.rpinitiated import EndSessionEndpoint
 
@@ -192,7 +205,9 @@ a logout token.
 Authlib does not add the ``sid`` claim to ID tokens. If you advertise
 ``backchannel_logout_session_supported``, the spec requires the ``sid`` claim
 in the ID tokens. With the authorization code flow, you can add it with
-:class:`~authlib.oidc.core.grants.OpenIDCode`::
+:class:`~authlib.oidc.core.grants.OpenIDCode`:
+
+.. code-block:: python
 
     class MyOpenIDCode(OpenIDCode):
         def get_authorization_code_claims(self, authorization_code):
@@ -205,7 +220,9 @@ Fill it with the session ID of the user when you create the code.
 
 Call ``send_logout`` with the identifiers that you have.
 At least one of ``sub`` and ``sid`` is required.
-Without both, ``send_logout`` raises a ``ValueError``::
+Without both, ``send_logout`` raises a ``ValueError``:
+
+.. code-block:: python
 
     # Logout by subject only (all sessions for this user)
     backchannel_logout.send_logout(sub="user-123")
@@ -221,7 +238,9 @@ HTTP Delivery
 
 The spec requires a ``POST`` request with ``Content-Type: application/x-www-form-urlencoded``
 and a ``logout_token`` parameter. Implement this in
-:meth:`~BackchannelLogoutSender.deliver_logout_token`::
+:meth:`~BackchannelLogoutSender.deliver_logout_token`:
+
+.. code-block:: python
 
     def deliver_logout_token(self, client, uri, logout_token):
         try:
@@ -240,7 +259,9 @@ your implementation.
 The spec encourages OPs to send the logout requests in parallel. To do so,
 override :meth:`~BackchannelLogoutSender.deliver_logout_tokens`. It receives
 all the ``(client, uri, logout_token)`` tuples of a logout. For instance, you
-can push them to a task queue::
+can push them to a task queue:
+
+.. code-block:: python
 
     def deliver_logout_tokens(self, deliveries):
         for client, uri, logout_token in deliveries:
@@ -263,7 +284,9 @@ Logout tokens are generated automatically by :meth:`~BackchannelLogoutSender.sen
 They expire after :attr:`~BackchannelLogoutSender.EXPIRES_IN` seconds, 120 by
 default. The spec recommends at most two minutes.
 
-You can also create them directly with :func:`create_logout_token` if needed::
+You can also create them directly with :func:`create_logout_token` if needed:
+
+.. code-block:: python
 
     from authlib.oidc.backchannel import create_logout_token
 
@@ -297,7 +320,9 @@ Relying Parties register their back-channel logout endpoint via
 To support back-channel logout client metadata, add the claims class to your
 registration and configuration endpoints.
 ``MyClientRegistrationEndpoint`` is your subclass of
-:class:`~authlib.oauth2.rfc7591.ClientRegistrationEndpoint`::
+:class:`~authlib.oauth2.rfc7591.ClientRegistrationEndpoint`:
+
+.. code-block:: python
 
     from authlib.oauth2 import rfc7591
     from authlib.oidc import backchannel
@@ -338,13 +363,16 @@ Discovery
 ---------
 
 To advertise back-channel logout support in your OpenID Provider metadata, add
-the discovery class to your metadata validation::
+the discovery class to your metadata validation. ``provider_metadata`` holds
+the other values of your metadata:
+
+.. code-block:: python
 
     from authlib.oidc import backchannel
     from authlib.oidc import discovery
 
     metadata = discovery.OpenIDProviderMetadata({
-        ...,
+        **provider_metadata,
         "backchannel_logout_supported": True,
         "backchannel_logout_session_supported": True,
     })

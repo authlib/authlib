@@ -17,7 +17,9 @@ Register Revocation Endpoint
 
 The revocation endpoint can be easily registered to :ref:`flask_oauth2_server`
 or :ref:`django_oauth2_server`. But there are missing methods to be
-implemented. This example uses the Flask-SQLAlchemy token model::
+implemented. This example uses the Flask-SQLAlchemy token model:
+
+.. code-block:: python
 
     import time
 
@@ -46,7 +48,9 @@ implemented. This example uses the Flask-SQLAlchemy token model::
     # register it to authorization server
     authorization_server.register_endpoint(MyRevocationEndpoint)
 
-After the registration, you can create a response with::
+After the registration, you can create a response with:
+
+.. code-block:: python
 
     @app.route('/oauth/revoke', methods=['POST'])
     def revoke_token():
@@ -65,3 +69,15 @@ API Reference
     :member-order: bysource
     :members:
     :inherited-members:
+
+.. invisible-code-block: python
+
+    client = create_client()
+    token = create_token(client)
+    response = app.test_client().post(
+        "/oauth/revoke",
+        data={"token": token.refresh_token},
+        auth=("client-id", "client-secret"),
+    )
+    assert response.status_code == 200, response.json
+    assert token.is_revoked()

@@ -59,7 +59,9 @@ metadata is false or omitted, registration is optional.
 In both cases, the application must implement ``validate_request_uri()`` with a
 secure retrieval policy. Registration does not establish that a destination is
 safe. The default retrieval policy rejects all URIs. Missing registration or
-policy approval returns ``invalid_request_uri`` before retrieval::
+policy approval returns ``invalid_request_uri`` before retrieval:
+
+.. code-block:: python
 
     from authlib.oidc.core import OpenIDJWTAuthenticationRequest
 
@@ -126,7 +128,9 @@ OpenID Claims
 Dynamic client registration
 ---------------------------
 
-The `OpenID Connect Dynamic Client Registration <https://openid.net/specs/openid-connect-registration-1_0.html>`__ implementation is based on :ref:`RFC7591: OAuth 2.0 Dynamic Client Registration Protocol <specs/rfc7591>`. To handle OIDC client registration, you can extend your RFC7591 registration endpoint with OIDC claims::
+The `OpenID Connect Dynamic Client Registration <https://openid.net/specs/openid-connect-registration-1_0.html>`__ implementation is based on :ref:`RFC7591: OAuth 2.0 Dynamic Client Registration Protocol <specs/rfc7591>`. To handle OIDC client registration, you can extend your RFC7591 registration endpoint with OIDC claims:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc7591 import ClientMetadataClaims as OAuth2ClientMetadataClaims
     from authlib.oauth2.rfc7591 import ClientRegistrationEndpoint

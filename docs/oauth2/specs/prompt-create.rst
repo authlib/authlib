@@ -20,7 +20,9 @@ Authorization Endpoint
 ----------------------
 
 Register the :class:`PromptValues` extension on your authorization server,
-with the ``prompt`` values that your server supports::
+with the ``prompt`` values that your server supports:
+
+.. code-block:: python
 
     from authlib.oidc.prompt_create import PromptValues
 
@@ -49,7 +51,9 @@ When the list contains ``create`` and the authorization request of an
 anonymous user contains ``prompt=create``,
 ``"create"`` is the first of ``grant.interactions``, before ``"login"``, and
 ``grant.prompt`` is ``"create"``. Show the account creation page in your
-authorization endpoint::
+authorization endpoint:
+
+.. code-block:: python
 
     @app.route("/oauth/authorize")
     def authorize():
@@ -82,13 +86,16 @@ An OpenID Provider that supports this specification must publish
 ``prompt_values_supported`` (Initiating User Registration via OpenID Connect
 1.0 §4.2). The list must contain ``create`` and all the
 other prompt values that the provider supports. Add the discovery class to
-your metadata validation::
+your metadata validation. ``provider_metadata`` holds the other values of your
+metadata:
+
+.. code-block:: python
 
     from authlib.oidc import discovery
     from authlib.oidc import prompt_create
 
     metadata = discovery.OpenIDProviderMetadata({
-        ...,
+        **provider_metadata,
         "prompt_values_supported": [
             "none",
             "login",

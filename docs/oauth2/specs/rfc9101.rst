@@ -74,7 +74,9 @@ Retrieving request objects
 Implement ``validate_request_uri(request_uri, client)`` with an explicit policy
 for the request objects your server can safely retrieve. The default rejects all
 URIs, including URIs present in client metadata. Validation runs before
-``get_request_object()`` is called; rejected URIs return ``invalid_request_uri``::
+``get_request_object()`` is called; rejected URIs return ``invalid_request_uri``:
+
+.. code-block:: python
 
     class JWTAuthenticationRequest(rfc9101.JWTAuthenticationRequest):
         def validate_request_uri(self, request_uri, client):

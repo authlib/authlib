@@ -70,7 +70,9 @@ End Session Endpoint
 --------------------
 
 To add RP-Initiated Logout support, create a subclass of :class:`EndSessionEndpoint`
-and implement the required methods::
+and implement the required methods:
+
+.. code-block:: python
 
     from authlib.oidc.rpinitiated import EndSessionEndpoint
 
@@ -86,7 +88,9 @@ and implement the required methods::
 
 Then create a logout route. You have two options:
 
-**Non-interactive mode** (simple, no confirmation page)::
+**Non-interactive mode** (simple, no confirmation page):
+
+.. code-block:: python
 
     @app.route('/logout', methods=['GET', 'POST'])
     def logout():
@@ -95,7 +99,15 @@ Then create a logout route. You have two options:
             or render_template('logged_out.html')
         )
 
-**Interactive mode** (with confirmation page)::
+**Interactive mode** (with confirmation page):
+
+.. invisible-code-block: python
+
+    from flask import Flask
+
+    app = Flask("docs")
+
+.. code-block:: python
 
     @app.route('/logout', methods=['GET', 'POST'])
     def logout():
@@ -161,7 +173,11 @@ If all conditions are met, ``EndSessionRequest.redirect_uri`` contains the
 validated URI (with ``state`` appended if provided).
 
 If conditions are not met, ``create_endpoint_response`` returns ``None`` and
-you should provide a default logout page::
+you should provide a default logout page:
+
+.. skip: next "fragment of the logout view"
+
+.. code-block:: python
 
     server.create_endpoint_response("end_session", req) or render_template('logged_out.html')
 
@@ -173,7 +189,9 @@ When an ``id_token_hint`` is provided, the ``id_token_claims`` attribute of
 ``sid`` (session ID) if present.
 
 Per the specification, you SHOULD verify that the ``sid`` matches the current
-session to detect potentially suspect logout requests::
+session to detect potentially suspect logout requests:
+
+.. code-block:: python
 
     def end_session(self, end_session_request):
         if end_session_request.id_token_claims:
@@ -192,7 +210,9 @@ Relying Parties can register their ``post_logout_redirect_uris`` through
 To support RP-Initiated Logout client metadata, add the claims class to your
 registration and configuration endpoints.
 ``MyClientRegistrationEndpoint`` is your subclass of
-:class:`~authlib.oauth2.rfc7591.ClientRegistrationEndpoint`::
+:class:`~authlib.oauth2.rfc7591.ClientRegistrationEndpoint`:
+
+.. code-block:: python
 
     from authlib.oauth2 import rfc7591
     from authlib.oidc import registration

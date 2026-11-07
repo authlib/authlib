@@ -14,7 +14,9 @@ Authlib only supports ``max_age`` on the authorization server for now. The
 tokens, and the challenge of the resource server are not supported yet.
 
 Register :class:`~authlib.oauth2.rfc9470.StepUpAuthentication` on the
-authorization server::
+authorization server:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc9470 import StepUpAuthentication
 

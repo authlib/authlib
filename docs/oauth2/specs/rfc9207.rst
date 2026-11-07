@@ -10,7 +10,9 @@ authorization server sent a response, and detect mix-up attacks.
 
 Implement :meth:`~authlib.oauth2.rfc9207.IssuerParameter.get_issuer`, and
 register :class:`~authlib.oauth2.rfc9207.IssuerParameter` on the
-authorization server::
+authorization server:
+
+.. code-block:: python
 
     from authlib.oauth2 import rfc9207
 
@@ -25,7 +27,9 @@ the query, in the fragment, or in the form of a :ref:`form_post
 <specs/form_post>` response.
 
 Per :rfc:`9207#section-3`, advertise it in the authorization server
-metadata::
+metadata:
+
+.. code-block:: json
 
     {
         "issuer": "https://auth.example.org",

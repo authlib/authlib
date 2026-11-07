@@ -3,6 +3,8 @@
 RFC9068: JSON Web Token (JWT) Profile for OAuth 2.0 Access Tokens
 =================================================================
 
+.. module:: authlib.oauth2.rfc9068
+
 This section contains the generic implementation of :rfc:`9068`.
 JSON Web Token (JWT) Profile for OAuth 2.0 Access Tokens allows
 developers to generate JWT access tokens.
@@ -48,7 +50,9 @@ Per :rfc:`9068#section-2.2`, the ``aud`` claim holds the identifier of the
 resource that receives the token. Per :rfc:`9068#section-3`, the authorization
 server uses a default resource when the request has no ``resource`` parameter.
 Return it from
-:meth:`~authlib.oauth2.rfc9068.JWTBearerTokenGenerator.get_audiences`::
+:meth:`~authlib.oauth2.rfc9068.JWTBearerTokenGenerator.get_audiences`:
+
+.. code-block:: python
 
     class MyJWTBearerTokenGenerator(JWTBearerTokenGenerator):
         def get_audiences(self, client, user, scope):
@@ -68,7 +72,9 @@ you protect it with a :class:`~authlib.oauth2.rfc9068.JWTBearerTokenValidator`.
 
 Per :rfc:`9068#section-4`, the validator checks that the ``aud`` claim contains
 the identifier of the resource server. Use the URL of the userinfo endpoint as
-this identifier::
+this identifier:
+
+.. code-block:: python
 
     USERINFO_URL = "https://authorization-server.example.org/oauth/userinfo"
 
@@ -85,7 +91,9 @@ this identifier::
 
 The token generator must then add this URL to the audience of the tokens that
 are issued for a user with the ``openid`` scope. ``API_URL`` is the identifier
-of your other resource server::
+of your other resource server:
+
+.. code-block:: python
 
     class MyJWTBearerTokenGenerator(JWTBearerTokenGenerator):
         def get_audiences(self, client, user, scope):
@@ -102,7 +110,9 @@ clients choose their client ID.
 A JWT access token only carries identifiers. Override
 :meth:`~authlib.oidc.core.UserInfoEndpoint.get_token_client` and
 :meth:`~authlib.oidc.core.UserInfoEndpoint.get_token_user` to load the client
-and the user::
+and the user:
+
+.. code-block:: python
 
     class UserInfoEndpoint(oidc.core.UserInfoEndpoint):
         def get_token_client(self, token):
@@ -117,8 +127,6 @@ and the user::
 
 API Reference
 -------------
-
-.. module:: authlib.oauth2.rfc9068
 
 .. autoclass:: JWTBearerTokenGenerator
     :member-order: bysource

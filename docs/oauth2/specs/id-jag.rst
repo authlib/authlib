@@ -103,7 +103,9 @@ protection) than the RFC 7523 two-party model.
 
 Register it with
 :meth:`~authlib.oauth2.rfc6749.AuthorizationServer.register_grant`,
-after subclassing it to implement all required hooks::
+after subclassing it to implement all required hooks:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc6749 import InvalidGrantError
     from authlib.oauth2.drafts import IDJAGGrant as _IDJAGGrant
@@ -164,7 +166,9 @@ not record the assertion's ``jti`` as used.
 
 To support another client authentication method, override
 ``TOKEN_ENDPOINT_AUTH_METHODS`` and configure the client registration to use that
-method. For example, to also support ``client_secret_post``::
+method. For example, to also support ``client_secret_post``:
+
+.. code-block:: python
 
     from authlib.oauth2.drafts import IDJAGGrant as _IDJAGGrant
 
@@ -209,7 +213,9 @@ Creating ID-JAG Assertions
 ---------------------------
 
 Use :meth:`IDJAGGrant.sign` to create signed ID-JAG JWTs for testing or
-client implementations::
+client implementations:
+
+.. code-block:: python
 
     assertion = IDJAGGrant.sign(
         key=private_key,
@@ -230,7 +236,11 @@ Redeeming an ID-JAG
 
 Present the assertion along with the client's registered credentials. For a
 client using ``client_secret_basic``, an HTTP client can send the request as
-follows::
+follows:
+
+.. skip: next "calls a remote server"
+
+.. code-block:: python
 
     import requests
 

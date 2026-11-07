@@ -15,10 +15,12 @@ Resource Owner is the user who is using your service. A resource owner can
 log in your website with username/email and password, or other methods.
 
 A resource owner SHOULD implement ``get_user_id()`` method, lets take
-SQLAlchemy models for example::
+SQLAlchemy models for example:
 
-    class User(Model):
-        id = Column(Integer, primary_key=True)
+.. code-block:: python
+
+    class User(db.Model):
+        id = db.Column(db.Integer, primary_key=True)
         # other columns
 
         def get_user_id(self):
@@ -35,16 +37,18 @@ information:
 - Client Password, usually called **client_secret**
 - Client Token Endpoint Authentication Method
 
-Authlib has provided a mixin for SQLAlchemy, define the client with this mixin::
+Authlib has provided a mixin for SQLAlchemy, define the client with this mixin:
+
+.. code-block:: python
 
     from authlib.integrations.sqla_oauth2 import OAuth2ClientMixin
 
-    class Client(Model, OAuth2ClientMixin):
-        id = Column(Integer, primary_key=True)
-        user_id = Column(
-            Integer, ForeignKey('user.id', ondelete='CASCADE')
+    class Client(db.Model, OAuth2ClientMixin):
+        id = db.Column(db.Integer, primary_key=True)
+        user_id = db.Column(
+            db.Integer, db.ForeignKey('user.id', ondelete='CASCADE')
         )
-        user = relationship('User')
+        user = db.relationship('User')
 
 A client is registered by a user (developer) on your website. If you decide to
 implement all the missing methods by yourself, get a deep inside with
@@ -64,7 +68,9 @@ valid duration, limited scopes and etc. It contains at least:
 - **expires_at**: when will this token expired
 - **scope**: a limited scope of resources that this token can access
 
-With the SQLAlchemy mixin provided by Authlib::
+With the SQLAlchemy mixin provided by Authlib:
+
+.. code-block:: python
 
     from authlib.integrations.sqla_oauth2 import OAuth2TokenMixin
 
@@ -86,7 +92,9 @@ Server
 
 Authlib provides a ready to use
 :class:`~authlib.integrations.flask_oauth2.AuthorizationServer`
-which has built-in tools to handle requests and responses::
+which has built-in tools to handle requests and responses:
+
+.. code-block:: python
 
     from authlib.integrations.flask_oauth2 import AuthorizationServer
 
@@ -121,7 +129,9 @@ which has built-in tools to handle requests and responses::
         app, query_client=query_client, save_token=save_token
     )
 
-It can also be initialized lazily with init_app::
+It can also be initialized lazily with init_app:
+
+.. code-block:: python
 
     server = AuthorizationServer()
     server.init_app(app, query_client=query_client, save_token=save_token)
@@ -141,7 +151,9 @@ OAUTH2_ERROR_URIS                  A list of tuple for (``error``, ``error_uri``
 
 .. hint::
 
-    Here is an example of ``OAUTH2_TOKEN_EXPIRES_IN``::
+    Here is an example of ``OAUTH2_TOKEN_EXPIRES_IN``:
+
+    .. code-block:: python
 
         OAUTH2_TOKEN_EXPIRES_IN = {
             'authorization_code': 864000,
@@ -150,7 +162,9 @@ OAUTH2_ERROR_URIS                  A list of tuple for (``error``, ``error_uri``
             'client_credentials': 864000
         }
 
-    Here is an example of ``OAUTH2_ACCESS_TOKEN_GENERATOR``::
+    Here is an example of ``OAUTH2_ACCESS_TOKEN_GENERATOR``:
+
+    .. code-block:: python
 
         def gen_access_token(client, grant_type, user, scope):
             return create_some_random_string()
@@ -158,7 +172,12 @@ OAUTH2_ERROR_URIS                  A list of tuple for (``error``, ``error_uri``
     ``OAUTH2_REFRESH_TOKEN_GENERATOR`` accepts the same parameters.
 
 Now define an endpoint for authorization. This endpoint is used by
-``authorization_code`` and ``implicit`` grants::
+``authorization_code`` and ``implicit`` grants. ``current_user`` comes from
+the login system of your application:
+
+.. skip: next
+
+.. code-block:: python
 
     from authlib.oauth2 import OAuth2Error
     from flask import redirect, request, render_template, url_for
@@ -205,7 +224,9 @@ To let Authlib know if the user must give their consent, pass an
 adds ``"consent"`` to ``grant.interactions``. :ref:`flask_odic_max_age` shows a
 complete example.
 
-The token endpoint is much easier::
+The token endpoint is much easier:
+
+.. code-block:: python
 
     @app.route('/oauth/token', methods=['POST'])
     def issue_token():
@@ -223,12 +244,16 @@ you create some documentation for errors. Here is a list of built-in
 :ref:`specs/rfc6749-errors`.
 
 You can design a documentation page with a description of each error. For
-instance, there is a web page for ``invalid_client``::
+instance, there is a web page for ``invalid_client``:
+
+.. code-block:: text
 
    https://developer.your-company.com/errors#invalid-client
 
 In this case, you can register the error URI with ``OAUTH2_ERROR_URIS``
-configuration::
+configuration:
+
+.. code-block:: python
 
    OAUTH2_ERROR_URIS = [
       ('invalid_client', 'https://developer.your-company.com/errors#invalid-client'),
@@ -237,3 +262,22 @@ configuration::
 
 If there is no ``OAUTH2_ERROR_URIS``, the error response will not contain any
 ``error_uri`` data.
+
+.. invisible-code-block: python
+
+    from authlib.oauth2.rfc6749 import grants
+
+    server.register_grant(grants.ClientCredentialsGrant)
+    db.create_all()
+    client = Client(client_id="client-id", client_secret="client-secret")
+    client.set_client_metadata({"grant_types": ["client_credentials"], "scope": "profile"})
+    db.session.add(client)
+    db.session.commit()
+
+    response = app.test_client().post(
+        "/oauth/token",
+        data={"grant_type": "client_credentials", "scope": "profile"},
+        auth=("client-id", "client-secret"),
+    )
+    assert response.status_code == 200, response.json
+    assert Token.query.filter_by(access_token=response.json["access_token"]).first()

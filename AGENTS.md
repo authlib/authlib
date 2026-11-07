@@ -12,7 +12,7 @@ Maintainers may close contributions from autonomous agents without review or rep
 
 ## Development
 
-- Run the tests with `uv run --all-groups pytest tests`.
+- Run the tests with `uv run --all-groups pytest tests docs`.
 - Run `prek run --all-files` before you finish. It runs ruff, codespell and zizmor.
 - Add a changelog fragment with `uv run scriv create` for user-visible changes.
 - Commit messages follow Conventional Commits.

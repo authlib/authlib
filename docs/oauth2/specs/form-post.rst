@@ -47,7 +47,9 @@ Authorization Endpoint
 
 Pass :class:`FormPost` to the :ref:`Multiple Response Types
 <specs/multiple_response_types>` extension, and add ``form_post`` to its
-``response_modes_supported`` metadata::
+``response_modes_supported`` metadata:
+
+.. code-block:: python
 
     from authlib.oauth2.form_post import FormPost
     from authlib.oauth2.multiple_response_types import MultipleResponseTypes

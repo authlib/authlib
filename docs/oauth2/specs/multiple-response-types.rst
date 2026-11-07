@@ -20,7 +20,9 @@ Authorization Endpoint
 ----------------------
 
 Register the :class:`MultipleResponseTypes` extension on your authorization
-server::
+server:
+
+.. code-block:: python
 
     from authlib.oauth2.multiple_response_types import MultipleResponseTypes
 
@@ -43,7 +45,9 @@ Response modes
 
 The server accepts the modes of its ``response_modes_supported`` metadata.
 Return them from :meth:`MultipleResponseTypes.get_server_metadata`. The
-default is ``query`` and ``fragment``, per :rfc:`8414#section-2`::
+default is ``query`` and ``fragment``, per :rfc:`8414#section-2`:
+
+.. code-block:: python
 
     class MyMultipleResponseTypes(MultipleResponseTypes):
         def get_server_metadata(self):
@@ -51,7 +55,9 @@ default is ``query`` and ``fragment``, per :rfc:`8414#section-2`::
 
 Other specifications define more response modes, such as :ref:`form_post
 <specs/form_post>`. Pass them to the extension as :class:`ResponseMode`
-instances::
+instances:
+
+.. code-block:: python
 
     from authlib.oauth2.form_post import FormPost
 
@@ -63,7 +69,9 @@ The ``none`` response type
 With ``response_type=none``, the user grants or denies the request, and the
 client receives no code and no token. Per MRT §4, the response contains
 ``state``, and its default response mode is the query response mode.
-Register :class:`NoneResponseTypeGrant` to support it::
+Register :class:`NoneResponseTypeGrant` to support it:
+
+.. code-block:: python
 
     from authlib.oauth2.multiple_response_types import NoneResponseTypeGrant
 

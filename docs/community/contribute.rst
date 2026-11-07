@@ -45,6 +45,11 @@ documentation.
 We keep a soft limit of 79 characters wide in text files. Yet, if you have to
 exceed this limit, it's OK, but no more than 110 characters.
 
+The Python examples of some pages run as tests with
+`Sybil <https://sybil.readthedocs.io>`_. ``docs/conftest.py`` lists these
+pages. Run them with ``uv run --all-groups pytest docs``. With ``-n``, add
+``--dist loadgroup``, so that the examples of a page run in the same worker.
+
 Make a Pull Request
 -------------------
 
@@ -54,7 +59,7 @@ accepted:
 
 * Run ``prek run --all-files``. It runs ruff, codespell and zizmor.
 * Tests for the code changes are required. Run them with
-  ``uv run --all-groups pytest tests``.
+  ``uv run --all-groups pytest tests docs``.
 * Commit messages follow `Conventional Commits <https://www.conventionalcommits.org>`_.
   The scope is optional. Allowed scopes are ``jose``, ``oauth``, ``oidc`` and
   ``client``.

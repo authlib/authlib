@@ -58,6 +58,9 @@ jobs:
       if: ${{ matrix.skip_coverage }}
       run: uv run pytest tests -n auto
 
+    - name: Test the documentation examples
+      run: uv run pytest docs -n auto --dist loadgroup
+
     - name: Check diff coverage for modified files
       if: ${{ github.event_name == 'pull_request' && !matrix.skip_coverage }}
       env:
@@ -106,7 +109,7 @@ jobs:
       run: uv sync --python 3.11 --resolution lowest-direct --upgrade --group clients --group jose
 
     - name: Test
-      run: uv run --no-sync pytest tests -n auto
+      run: uv run --no-sync pytest tests docs -n auto --dist loadgroup
 
     - name: Minimize cache
       run: uv cache prune --ci

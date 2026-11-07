@@ -23,7 +23,9 @@ Token in the Request Body
 
 By default, resource protectors only read the access token from the
 ``Authorization`` header. :rfc:`6750#section-2.2` also allows clients to send
-it in a form-encoded request body::
+it in a form-encoded request body:
+
+.. code-block:: http
 
     POST /resource HTTP/1.1
     Host: server.example.com
@@ -31,7 +33,9 @@ it in a form-encoded request body::
 
     access_token=mF_9.B5f-4.1JqM
 
-Register the :class:`FormEncodedBodyToken` extension to accept this method::
+Register the :class:`FormEncodedBodyToken` extension to accept this method:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc6750 import FormEncodedBodyToken
 

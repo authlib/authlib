@@ -34,7 +34,9 @@ Errors follow :rfc:`7592#section-2.1` and :rfc:`6750#section-3`:
 - a client without permission, as decided by ``check_permission``, gets an
   HTTP 403 ``unauthorized_client`` error.
 
-Before register the endpoint, developers MUST implement the missing methods::
+Before register the endpoint, developers MUST implement the missing methods:
+
+.. code-block:: python
 
     from urllib.parse import urlparse
 

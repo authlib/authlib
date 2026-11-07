@@ -84,7 +84,9 @@ The new database SHOULD contain two more columns:
 
 And the ``AuthorizationCodeGrant`` should record the ``code_challenge`` and
 ``code_challenge_method`` into database in ``save_authorization_code``
-method::
+method:
+
+.. code-block:: python
 
 
     class MyAuthorizationCodeGrant(AuthorizationCodeGrant):
@@ -108,7 +110,9 @@ method::
             return auth_code
 
 
-Now you can register your ``AuthorizationCodeGrant`` with the extension::
+Now you can register your ``AuthorizationCodeGrant`` with the extension:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc7636 import CodeChallenge
     server.register_grant(MyAuthorizationCodeGrant, [CodeChallenge(required=True)])
@@ -129,7 +133,9 @@ In both modes:
 * Confidential clients may use PKCE, but are not required to.
 
 Per :rfc:`9700#section-2.1.1`, clients should use ``S256``. To refuse
-``plain``, limit the supported methods::
+``plain``, limit the supported methods:
+
+.. code-block:: python
 
     class MyCodeChallenge(CodeChallenge):
         SUPPORTED_CODE_CHALLENGE_METHOD = ["S256"]
@@ -143,7 +149,11 @@ Using ``code_challenge`` in Client
 Read the **Code Challenge** section in the :ref:`frameworks_clients`.
 
 It is also possible to add ``code_challenge`` in ``OAuth2Session``,
-consider that we already have a ``session``::
+consider that we already have a ``session``:
+
+.. skip: start "calls a remote server"
+
+.. code-block:: pycon
 
     >>> from authlib.common.security import generate_token
     >>> from authlib.oauth2.rfc7636 import create_s256_code_challenge
@@ -153,6 +163,8 @@ consider that we already have a ``session``::
     >>> # visit uri, get the response
     >>> authorization_response = 'https://example.com/auth?code=42..e9&state=d..t'
     >>> token = session.fetch_token(token_endpoint, authorization_response=authorization_response, code_verifier=code_verifier)
+
+.. skip: end
 
 
 API Reference

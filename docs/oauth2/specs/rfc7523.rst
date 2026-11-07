@@ -56,7 +56,9 @@ The client signs the JWT itself, and exchanges it for an access token:
 The ``/token`` and ``/api`` paths are examples.
 
 The base class is :class:`JWTBearerGrant`, you need to implement the missing
-methods in order to use it. Here is an example::
+methods in order to use it. Here is an example:
+
+.. code-block:: python
 
     from joserfc.jwk import KeySet
     from authlib.oauth2.rfc7523 import JWTBearerGrant as _JWTBearerGrant
@@ -173,7 +175,9 @@ The :class:`~authlib.oauth2.rfc6749.AuthorizationServer` has provided a method
 to add more client authentication methods.
 
 In Authlib, ``client_secret_jwt`` and ``private_key_jwt`` share the same API,
-using :class:`JWTBearerClientAssertion` to create a new client authentication::
+using :class:`JWTBearerClientAssertion` to create a new client authentication:
+
+.. code-block:: python
 
     from joserfc.jwk import KeySet
 
@@ -212,7 +216,9 @@ assertions are rejected with ``invalid_client`` if it is empty.
 Now we have added this client auth method to authorization server, but no
 grant types support this authentication method, you need to add it to the
 supported grant types too, e.g. we want to support this in authorization
-code grant::
+code grant:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc6749 import grants
 
@@ -231,7 +237,9 @@ The client authenticates only if its ``check_endpoint_auth_method`` accepts
 ``CLIENT_AUTH_METHOD``. Its default value is ``client_assertion_jwt``. The
 example sets it to ``private_key_jwt``, the value of the client metadata
 (:rfc:`7591#section-2`). For ``client_secret_jwt``, set ``CLIENT_AUTH_METHOD``
-to ``client_secret_jwt``, and return the client secret as an ``OctKey``::
+to ``client_secret_jwt``, and return the client secret as an ``OctKey``:
+
+.. code-block:: python
 
     from joserfc.jwk import OctKey
 
@@ -250,7 +258,11 @@ Authlib RFC7523 provides two more client authentication methods for :ref:`OAuth 
 1. ``client_secret_jwt``
 2. ``private_key_jwt``
 
-Here is an example of how to register ``client_secret_jwt`` for ``OAuth2Session``::
+Here is an example of how to register ``client_secret_jwt`` for ``OAuth2Session``:
+
+.. skip: next "calls a remote server"
+
+.. code-block:: python
 
     from authlib.oauth2.rfc7523 import ClientSecretJWT
     from authlib.integrations.requests_client import OAuth2Session
@@ -263,7 +275,11 @@ Here is an example of how to register ``client_secret_jwt`` for ``OAuth2Session`
     session.register_client_auth_method(ClientSecretJWT(token_endpoint))
     session.fetch_token(token_endpoint)
 
-How about ``private_key_jwt``? It is the same as ``client_secret_jwt``::
+How about ``private_key_jwt``? It is the same as ``client_secret_jwt``:
+
+.. skip: next "calls a remote server"
+
+.. code-block:: python
 
     from authlib.oauth2.rfc7523 import PrivateKeyJWT
 

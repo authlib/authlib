@@ -83,7 +83,9 @@ developers MUST implement the missing methods of the two classes:
 Device Authorization Endpoint
 -----------------------------
 
-There are two missing methods that developers MUST implement::
+There are two missing methods that developers MUST implement:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc8628 import DeviceAuthorizationEndpoint
 
@@ -105,7 +107,9 @@ There are two missing methods that developers MUST implement::
 ``get_verification_uri`` is the URL that end user will use their browser to
 log in and authenticate. See below "Verification Endpoint".
 
-After the registration, you can create a response with::
+After the registration, you can create a response with:
+
+.. code-block:: python
 
     @app.route('/device_authorization', methods=['POST'])
     def device_authorization():
@@ -115,7 +119,9 @@ Device Code Grant
 -----------------
 
 With Authlib ``.register_grant``, we can add ``DeviceCodeGrant`` easily.
-But first, we need to implement the missing methods::
+But first, we need to implement the missing methods:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc8628 import DeviceCodeGrant
 
@@ -145,7 +151,11 @@ Verification Endpoint
 ---------------------
 
 Developers MUST implement this part by themselves. Here is a hint on
-how to implement this endpoint::
+how to implement this endpoint:
+
+.. skip: next "depends on the application login, templates and storage"
+
+.. code-block:: python
 
     @app.route('/active', methods=['GET', 'POST'])
     @login_required
