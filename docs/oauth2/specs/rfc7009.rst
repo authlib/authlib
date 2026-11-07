@@ -1,10 +1,10 @@
 .. _specs/rfc7009:
 
-RFC7009: OAuth 2.0 Token Revocation
-===================================
+RFC 7009: OAuth 2.0 Token Revocation
+====================================
 
 .. meta::
-    :description: API references on RFC7009 OAuth 2.0 Token Revocation Authlib implementation.
+    :description: API references on RFC 7009 OAuth 2.0 Token Revocation Authlib implementation.
 
 This section contains the generic implementation of :rfc:`7009`.
 
@@ -58,7 +58,7 @@ After the registration, you can create a response with:
 
 ``token_type_hint`` is ``None`` when the request has no hint or an unknown
 one. If no token is found with the hint, the endpoint calls ``query_token``
-again with ``None``. Per :rfc:`7009#section-2.1`, the hint may be wrong, so
+again with ``None``. Per :rfc:`RFC 7009 §2.1 <7009#section-2.1>`, the hint may be wrong, so
 ``revoke_token`` must not trust it to know which token was presented.
 
 

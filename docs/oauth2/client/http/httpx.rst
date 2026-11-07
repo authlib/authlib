@@ -173,9 +173,8 @@ service account JSON configure file:
 Close Client Hint
 -----------------
 
-Developers SHOULD **close** a HTTPX2 Session when the jobs are done. You
-can call ``.close()`` manually, or use a ``with`` context to automatically
-close the session:
+Close an HTTPX2 Session when the jobs are done. Call ``.close()``, or use a
+``with`` context to close the session automatically:
 
 .. code-block:: python
 

@@ -1,10 +1,10 @@
 .. _specs/rfc6749:
 
-RFC6749: The OAuth 2.0 Authorization Framework
-==============================================
+RFC 6749: The OAuth 2.0 Authorization Framework
+===============================================
 
 .. meta::
-    :description: API references of RFC6749 in Python implementation.
+    :description: API references of RFC 6749 in Python implementation.
         Learn how to create an OAuth 2.0 provider in Python.
 
 This section contains the generic implementation of :rfc:`6749`. You should

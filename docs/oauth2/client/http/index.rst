@@ -152,7 +152,7 @@ After the redirection, fetch the token with the same ``code_verifier``:
     ... )
 
 The supported methods are ``S256`` and ``plain``. Prefer ``S256``, per
-:rfc:`9700#section-2.1.1`.
+:rfc:`RFC 9700 §2.1.1 <9700#section-2.1.1>`.
 
 
 OAuth2Session for Implicit
@@ -224,7 +224,7 @@ Client Authentication
 ---------------------
 
 When fetching access token, the authorization server will require a client
-authentication, Authlib provides **three default methods** defined by RFC7591:
+authentication, Authlib provides **three default methods** defined by RFC 7591:
 
 - client_secret_basic
 - client_secret_post
@@ -256,7 +256,7 @@ methods, there are more provided by Authlib. e.g.
 - client_secret_jwt
 - private_key_jwt
 
-These two methods are defined by RFC7523 and OpenID Connect. Find more in
+These two methods are defined by RFC 7523 and OpenID Connect. Find more in
 :ref:`jwt_oauth2session`.
 
 There are still cases that developers need to define a custom client
@@ -472,7 +472,7 @@ hooks are provided to solve those problems:
 * ``revoke_token_request``: invoked before revoking a token.
 * ``introspect_token_request``: invoked before introspecting a token.
 
-For instance, Stackoverflow MUST add a `site` parameter in query
+For instance, Stackoverflow requires a ``site`` parameter in the query
 string to protect users' resources. And stackoverflow's response is
 not in JSON. Let's fix it:
 
@@ -549,7 +549,7 @@ a ``id_token``:
 This ``id_token`` is a JWT text, it can not be used unless it is parsed.
 Authlib has provided tools for parsing and validating OpenID Connect id_token.
 Pass the issuer, the client ID and the saved nonce, so that ``validate`` checks
-the ``iss``, ``aud`` and ``nonce`` claims (OpenID Connect Core §3.1.3.7):
+the ``iss``, ``aud`` and ``nonce`` claims (OpenID Connect Core 1.0 §3.1.3.7):
 
 .. code-block:: pycon
 

@@ -95,7 +95,7 @@ cache system. When initializing ``OAuth``, you can pass an ``cache`` instance:
     oauth = OAuth()
     oauth.init_app(app, cache=cache)
 
-A ``cache`` instance MUST have methods:
+A ``cache`` instance needs these methods:
 
 - ``.delete(key)``
 - ``.get(key)``

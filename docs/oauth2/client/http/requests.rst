@@ -36,7 +36,7 @@ Using ``client_secret_jwt`` in Requests
 
 There are **three default client authentication methods** defined for
 ``OAuth2Session``. But what if you want to use ``client_secret_jwt`` instead?
-``client_secret_jwt`` is defined in RFC7523, use it for Requests:
+``client_secret_jwt`` is defined in RFC 7523, use it for Requests:
 
 .. code-block:: python
 
@@ -115,9 +115,8 @@ Checking out an example of Google Service Account with :ref:`assertion_session`.
 Close Session Hint
 ------------------
 
-Developers SHOULD **close** a Requests Session when the jobs are done. You
-can call ``.close()`` manually, or use a ``with`` context to automatically
-close the session:
+Close a Requests Session when the jobs are done. Call ``.close()``, or use a
+``with`` context to close the session automatically:
 
 .. code-block:: python
 
@@ -132,7 +131,7 @@ close the session:
 Mutual TLS Client Authentication
 --------------------------------
 
-With mutual TLS client authentication (:rfc:`8705#section-2`), the client
+With mutual TLS client authentication (:rfc:`RFC 8705 §2 <8705#section-2>`), the client
 proves its identity with a TLS certificate. Authlib does not implement
 :rfc:`8705`. Give the certificate to Requests with the ``cert`` attribute, and
 use the ``none`` method, so that the client sends its ``client_id`` without a

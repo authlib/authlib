@@ -1,10 +1,10 @@
 .. _specs/rfc7591:
 
-RFC7591: OAuth 2.0 Dynamic Client Registration Protocol
-=======================================================
+RFC 7591: OAuth 2.0 Dynamic Client Registration Protocol
+========================================================
 
 .. meta::
-    :description: Python API references on RFC7591 OAuth 2.0 Dynamic Client
+    :description: Python API references on RFC 7591 OAuth 2.0 Dynamic Client
         Registration Protocol in Python with Authlib implementation.
 
 .. module:: authlib.oauth2.rfc7591
@@ -14,7 +14,7 @@ Client Registration Protocol allows developers creating OAuth client via API
 through Authorization Server.
 
 To integrate with Authlib :ref:`flask_oauth2_server` or :ref:`django_oauth2_server`,
-developers MUST implement the missing methods of :class:`ClientRegistrationEndpoint`.
+implement the missing methods of :class:`ClientRegistrationEndpoint`.
 
 Client Registration Endpoint
 ----------------------------
@@ -26,7 +26,7 @@ by default.
 
 .. _JWT: https://jose.authlib.org/en/guide/jwt/
 
-Before register the endpoint, developers MUST implement the missing methods:
+Before registering the endpoint, implement the missing methods:
 
 .. code-block:: python
 

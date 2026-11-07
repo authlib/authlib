@@ -1,10 +1,10 @@
 .. _specs/rfc7662:
 
-RFC7662: OAuth 2.0 Token Introspection
-======================================
+RFC 7662: OAuth 2.0 Token Introspection
+=======================================
 
 .. meta::
-    :description: API references on RFC7662, OAuth 2.0 Token Introspection,
+    :description: API references on RFC 7662, OAuth 2.0 Token Introspection,
         in Python via Authlib implementation.
 
 This section contains the generic implementation of :rfc:`7662`. OAuth 2.0 Token
@@ -113,7 +113,7 @@ we need to implement the missing methods:
 
 ``token_type_hint`` is ``None`` when the request has no hint or an unknown
 one. If no token is found with the hint, the endpoint calls ``query_token``
-again with ``None``, per :rfc:`7662#section-2.1`.
+again with ``None``, per :rfc:`RFC 7662 §2.1 <7662#section-2.1>`.
 
 After the registration, we can create a response with:
 

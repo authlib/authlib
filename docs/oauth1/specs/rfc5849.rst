@@ -1,8 +1,8 @@
-RFC5849: The OAuth 1.0 Protocol
-===============================
+RFC 5849: The OAuth 1.0 Protocol
+================================
 
 .. meta::
-    :description: API references of RFC5849 in Python implementation.
+    :description: API references of RFC 5849 in Python implementation.
         Learn how to create an OAuth 1.0 provider in Python.
 
 This section contains the generic implementation of :rfc:`5849`. Learn how to

@@ -137,7 +137,6 @@ time in ``request.auth_time``, from the authorization session (see
 
     class AuthorizationCodeGrant(_AuthorizationCodeGrant):
         def save_authorization_code(self, code, request):
-            # openid request MAY have "nonce" parameter
             nonce = request.payload.data.get('nonce')
             auth_code = AuthorizationCode(
                 code=code,
@@ -191,7 +190,7 @@ The Implicit Flow is mainly used by Clients implemented in a browser using
 a scripting language. You need to implement the missing methods of
 :class:`OpenIDImplicitGrant` before registering it.
 
-Per OpenID Connect Core §2, the authorization server should not process the
+Per OpenID Connect Core 1.0 §2, the authorization server should not process the
 nonce, other than putting it in the ID token. The client checks it. This
 example accepts every nonce:
 

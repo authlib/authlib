@@ -4,7 +4,7 @@ Register Grants
 .. module:: authlib.oauth2.rfc6749.grants
     :noindex:
 
-There are four grant types defined by RFC6749, you can also create your own
+There are four grant types defined by RFC 6749, you can also create your own
 extended grant. Register the supported grant types to the authorization server.
 
 .. _flask_oauth2_code_grant:

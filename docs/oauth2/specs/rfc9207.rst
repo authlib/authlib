@@ -1,9 +1,9 @@
 .. _specs/rfc9207:
 
-RFC9207: OAuth 2.0 Authorization Server Issuer Identification
-=============================================================
+RFC 9207: OAuth 2.0 Authorization Server Issuer Identification
+==============================================================
 
-This section contains the generic implementation of :rfc:`RFC9207 <9207>`.
+This section contains the generic implementation of :rfc:`9207`.
 The authorization server adds an ``iss`` parameter to its authorization
 responses, including error responses. The client can check which
 authorization server sent a response, and detect mix-up attacks.
@@ -26,7 +26,7 @@ The ``iss`` parameter follows the response mode of the response: it is in
 the query, in the fragment, or in the form of a :ref:`form_post
 <specs/form_post>` response.
 
-Per :rfc:`9207#section-3`, advertise it in the authorization server
+Per :rfc:`RFC 9207 §3 <9207#section-3>`, advertise it in the authorization server
 metadata:
 
 .. code-block:: json

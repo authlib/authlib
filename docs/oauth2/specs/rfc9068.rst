@@ -1,7 +1,7 @@
 .. _specs/rfc9068:
 
-RFC9068: JSON Web Token (JWT) Profile for OAuth 2.0 Access Tokens
-=================================================================
+RFC 9068: JSON Web Token (JWT) Profile for OAuth 2.0 Access Tokens
+==================================================================
 
 .. module:: authlib.oauth2.rfc9068
 
@@ -46,8 +46,8 @@ This module brings tools to:
 Audience
 --------
 
-Per :rfc:`9068#section-2.2`, the ``aud`` claim holds the identifier of the
-resource that receives the token. Per :rfc:`9068#section-3`, the authorization
+Per :rfc:`RFC 9068 §2.2 <9068#section-2.2>`, the ``aud`` claim holds the identifier of the
+resource that receives the token. Per :rfc:`RFC 9068 §3 <9068#section-3>`, the authorization
 server uses a default resource when the request has no ``resource`` parameter.
 Return it from
 :meth:`~authlib.oauth2.rfc9068.JWTBearerTokenGenerator.get_audiences`:
@@ -67,10 +67,10 @@ UserInfo endpoint
 -----------------
 
 The :ref:`specs/oidc` :class:`~authlib.oidc.core.UserInfoEndpoint` is a
-protected resource (OpenID Connect Core §5.3). It accepts JWT access tokens if
+protected resource (OpenID Connect Core 1.0 §5.3). It accepts JWT access tokens if
 you protect it with a :class:`~authlib.oauth2.rfc9068.JWTBearerTokenValidator`.
 
-Per :rfc:`9068#section-4`, the validator checks that the ``aud`` claim contains
+Per :rfc:`RFC 9068 §4 <9068#section-4>`, the validator checks that the ``aud`` claim contains
 the identifier of the resource server. Use the URL of the userinfo endpoint as
 this identifier:
 
@@ -104,7 +104,7 @@ of your other resource server:
 
 Tokens without a user, such as client credentials tokens, have the client ID
 in their ``sub`` claim. They must not reach the userinfo endpoint. Per
-:rfc:`9068#section-5`, if a client ID can be equal to a user ID, do not let
+:rfc:`RFC 9068 §5 <9068#section-5>`, if a client ID can be equal to a user ID, do not let
 clients choose their client ID.
 
 A JWT access token only carries identifiers. Override

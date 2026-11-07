@@ -9,7 +9,7 @@ Register Grants
 .. module:: authlib.oauth2.rfc6749.grants
     :noindex:
 
-There are four grant types defined by RFC6749, you can also create your own
+There are four grant types defined by RFC 6749, you can also create your own
 extended grant. Register the supported grant types to the authorization server.
 
 .. _django_oauth2_code_grant:
@@ -50,8 +50,8 @@ kept in a database or a cache like redis. Here is an example of database
         def get_scope(self):
             return self.scope or ''
 
-Note here, you **MUST** implement the missing methods of
-:class:`~authlib.oauth2.rfc6749.AuthorizationCodeMixin` API interface.
+Implement the missing methods of
+:class:`~authlib.oauth2.rfc6749.AuthorizationCodeMixin`.
 
 Later, you can use this ``AuthorizationCode`` database model to handle ``authorization_code``
 grant type. Here is how:

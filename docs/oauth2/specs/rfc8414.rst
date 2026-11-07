@@ -1,7 +1,7 @@
 .. _specs/rfc8414:
 
-RFC8414: OAuth 2.0 Authorization Server Metadata
-================================================
+RFC 8414: OAuth 2.0 Authorization Server Metadata
+=================================================
 
 .. module:: authlib.oauth2.rfc8414
 

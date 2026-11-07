@@ -1,10 +1,10 @@
 .. _specs/rfc9728:
 
-RFC9728: OAuth 2.0 Protected Resource Metadata
-================================================
+RFC 9728: OAuth 2.0 Protected Resource Metadata
+===============================================
 
 .. meta::
-    :description: Python API references on RFC9728 OAuth 2.0 Protected Resource
+    :description: Python API references on RFC 9728 OAuth 2.0 Protected Resource
         Metadata with Authlib implementation, including well-known discovery,
         metadata validation, signed metadata, and WWW-Authenticate integration.
 
@@ -165,7 +165,7 @@ For a different resource, use another protector.
 
 .. note::
 
-    Per :rfc:`9728#section-3.3`, the client must check that ``resource`` is
+    Per :rfc:`RFC 9728 §3.3 <9728#section-3.3>`, the client must check that ``resource`` is
     identical to the URL of its request. Many clients, such as the MCP SDKs,
     only check that ``resource`` is a prefix of this URL. With a strict
     client, the discovery only works for a request to the ``resource`` URL

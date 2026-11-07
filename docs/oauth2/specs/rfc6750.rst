@@ -1,10 +1,10 @@
 .. _specs/rfc6750:
 
-RFC6750: The OAuth 2.0 Authorization Framework: Bearer Token Usage
-==================================================================
+RFC 6750: The OAuth 2.0 Authorization Framework: Bearer Token Usage
+===================================================================
 
 .. meta::
-    :description: API references of RFC6750 in Python implementation.
+    :description: API references of RFC 6750 in Python implementation.
         Guide on how to use Bearer Token and its validator.
 
 This section contains the generic implementation of :rfc:`6750`.
@@ -22,7 +22,7 @@ Token in the Request Body
 -------------------------
 
 By default, resource protectors only read the access token from the
-``Authorization`` header. :rfc:`6750#section-2.2` also allows clients to send
+``Authorization`` header. :rfc:`RFC 6750 §2.2 <6750#section-2.2>` also allows clients to send
 it in a form-encoded request body:
 
 .. code-block:: http

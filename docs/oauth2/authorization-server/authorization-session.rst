@@ -48,7 +48,7 @@ session. It becomes the ``auth_time`` claim of the ID token.
 Errors
 ------
 
-Per :rfc:`9700#section-4.11.2`, the server authenticates the user before it
+Per :rfc:`RFC 9700 §4.11.2 <9700#section-4.11.2>`, the server authenticates the user before it
 redirects them to the client with an error. When the request of an anonymous
 user has an error, ``get_consent_grant`` does not raise it. It returns the
 grant with the ``"login"`` interaction only. After the login,

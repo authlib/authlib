@@ -16,7 +16,7 @@ Resource Owner
 Resource Owner is the user who is using your service. A resource owner can
 log in your website with username/email and password, or other methods.
 
-A resource owner MUST implement ``get_user_id()`` method:
+Implement the ``get_user_id()`` method on the resource owner model:
 
 .. code-block:: python
 
@@ -37,8 +37,8 @@ information:
 - Client Password, usually called **client_secret**
 - Client RSA Public Key (if RSA-SHA1 signature method supported)
 
-Developers MUST implement the missing methods of ``authlib.oauth1.ClientMixin``, take an
-example of Flask-SQAlchemy:
+Implement the missing methods of ``authlib.oauth1.ClientMixin``. Here is an
+example with Flask-SQLAlchemy:
 
 .. code-block:: python
 
@@ -120,8 +120,8 @@ A token credential is used to access resource owners' resources. Unlike
 OAuth 2, the token credential will not expire in OAuth 1. This token credentials
 are supposed to be saved into a persist database rather than a cache.
 
-Developers MUST implement :class:`~authlib.oauth1.rfc5849.TokenCredentialMixin`
-missing methods. Here is an example of SQLAlchemy integration:
+Implement the missing methods of :class:`~authlib.oauth1.rfc5849.TokenCredentialMixin`.
+Here is an example with SQLAlchemy:
 
 .. code-block:: python
 
@@ -147,8 +147,8 @@ missing methods. Here is an example of SQLAlchemy integration:
 Timestamp and Nonce
 -------------------
 
-The nonce value MUST be unique across all requests with the same timestamp,
-client credentials, and token combinations. Authlib Flask integration has a
+Per RFC 5849 §3.3, the nonce value MUST be unique across all requests with
+the same timestamp, client credentials, and token combinations. Authlib Flask integration has a
 built-in validation with cache.
 
 If cache is not available, developers can use a database, here is an example of
@@ -247,8 +247,7 @@ can take the advantage with:
     register_nonce_hooks(server, cache)
     register_temporary_credential_hooks(server, cache)
 
-If cache is not available, developers MUST register the hooks with the database we
-defined above:
+Without a cache, register the hooks with the database models:
 
 .. code-block:: python
 
@@ -310,7 +309,7 @@ defined above:
     server.register_hook('delete_temporary_credential', delete_temporary_credential)
     server.register_hook('create_authorization_verifier', create_authorization_verifier)
 
-For both cache and database temporary credential, Developers MUST register a
+With both cache and database temporary credentials, register a
 ``create_token_credential`` hook:
 
 .. code-block:: python

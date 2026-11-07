@@ -5,8 +5,8 @@ Django OAuth 2.0 authorization server has a method to register other token
 endpoints: ``authorization_server.register_endpoint``. Available endpoints
 for now:
 
-1. Revocation Endpoint from RFC7009
-2. Introspection Endpoint from RFC7662
+1. Revocation Endpoint from RFC 7009
+2. Introspection Endpoint from RFC 7662
 
 Revocation Endpoint
 -------------------

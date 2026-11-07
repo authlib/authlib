@@ -143,7 +143,7 @@ The endpoint accepts the following parameters (via GET or POST):
 Confirmation Flow
 ~~~~~~~~~~~~~~~~~
 
-Per the specification, logout requests without a valid ``id_token_hint`` are a
+Per RP-Initiated Logout §6, logout requests without a valid ``id_token_hint`` are a
 potential means of denial of service. The :attr:`EndSessionRequest.needs_confirmation`
 property indicates when user confirmation is recommended.
 
@@ -182,8 +182,8 @@ When an ``id_token_hint`` is provided, the ``id_token_claims`` attribute of
 :class:`EndSessionRequest` contains all claims from the ID Token, including
 ``sid`` (session ID) if present.
 
-Per the specification, you SHOULD verify that the ``sid`` matches the current
-session to detect potentially suspect logout requests:
+Per RP-Initiated Logout §2, if the ``sid`` claim does not match the current
+session, the OP SHOULD treat the logout request as suspect:
 
 .. code-block:: python
 
@@ -199,7 +199,7 @@ Client Registration
 -------------------
 
 Relying Parties can register their ``post_logout_redirect_uris`` through
-:ref:`RFC7591: OAuth 2.0 Dynamic Client Registration Protocol <specs/rfc7591>`.
+:ref:`RFC 7591: OAuth 2.0 Dynamic Client Registration Protocol <specs/rfc7591>`.
 
 To support RP-Initiated Logout client metadata, add the claims class to your
 registration and configuration endpoints.
@@ -223,8 +223,8 @@ registration and configuration endpoints.
     )
 
 The ``post_logout_redirect_uris`` parameter is an array of URLs to which the
-End-User's User Agent may be redirected after logout. These URLs SHOULD use
-the ``https`` scheme.
+End-User's User Agent may be redirected after logout. Per RP-Initiated Logout §3.1,
+these URLs SHOULD use the ``https`` scheme.
 
 API Reference
 -------------

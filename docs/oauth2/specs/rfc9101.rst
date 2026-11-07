@@ -1,9 +1,9 @@
 .. _specs/rfc9101:
 
-RFC9101: The OAuth 2.0 Authorization Framework: JWT-Secured Authorization Request (JAR)
-=======================================================================================
+RFC 9101: The OAuth 2.0 Authorization Framework: JWT-Secured Authorization Request (JAR)
+========================================================================================
 
-This section contains the generic implementation of :rfc:`RFC9101 <9101>`.
+This section contains the generic implementation of :rfc:`9101`.
 
 This specification describe how to pass the authorization request payload
 in a JWT (called *request object*) instead of directly instead of GET or POST params.

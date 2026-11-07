@@ -32,7 +32,7 @@ information:
 - Client Password, usually called **client_secret**
 - Client Token Endpoint Authentication Method
 
-A client is registered by a user (developer) on your website; you MUST implement
+A user (developer) registers a client on the website. Implement
 the missing methods of :class:`~authlib.oauth2.rfc6749.ClientMixin`:
 
 .. code-block:: python
@@ -54,8 +54,7 @@ the missing methods of :class:`~authlib.oauth2.rfc6749.ClientMixin`:
         grant_type = TextField(default='')
         token_endpoint_auth_method = CharField(max_length=120, default='')
 
-        # you can add more fields according to your own need
-        # check https://tools.ietf.org/html/rfc7591#section-2
+        # RFC 7591 §2 defines more client metadata fields.
 
         def get_client_id(self):
             return self.client_id
@@ -105,7 +104,7 @@ valid duration, limited scopes and etc. It contains at least:
 - **expires_at**: when will this token expired
 - **scope**: a limited scope of resources that this token can access
 
-A token is associated with a resource owner; you MUST implement
+A token belongs to a resource owner. Implement
 the missing methods of :class:`~authlib.oauth2.rfc6749.TokenMixin`:
 
 .. code-block:: python

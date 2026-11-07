@@ -76,7 +76,7 @@ Funding Goal: $9000/month
 In Authlib v3.0, we will add built-in support for SAML.
 
 * :bdg-warning:`todo` SAML 2.0 implementation
-* :bdg-warning:`todo` RFC7522 (SAML) 2.0 Profile for OAuth 2.0 Client Authentication and Authorization Grants
+* :bdg-warning:`todo` RFC 7522 (SAML) 2.0 Profile for OAuth 2.0 Client Authentication and Authorization Grants
 * :bdg-warning:`todo` CBOR Object Signing and Encryption
 * :bdg-warning:`todo` A complex running demo of OIDC provider
 

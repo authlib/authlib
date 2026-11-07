@@ -14,8 +14,8 @@ Resource Owner
 Resource Owner is the user who is using your service. A resource owner can
 log in your website with username/email and password, or other methods.
 
-A resource owner SHOULD implement ``get_user_id()`` method, lets take
-SQLAlchemy models for example:
+Implement the ``get_user_id()`` method on the resource owner model. Here is
+an example with SQLAlchemy:
 
 .. code-block:: python
 

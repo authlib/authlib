@@ -315,7 +315,7 @@ Client Registration
 -------------------
 
 Relying Parties register their back-channel logout endpoint via
-:ref:`RFC7591: OAuth 2.0 Dynamic Client Registration Protocol <specs/rfc7591>`.
+:ref:`RFC 7591: OAuth 2.0 Dynamic Client Registration Protocol <specs/rfc7591>`.
 
 To support back-channel logout client metadata, add the claims class to your
 registration and configuration endpoints.

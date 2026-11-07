@@ -10,7 +10,7 @@ OAuth 2.0 Multiple Response Type Encoding Practices
 .. module:: authlib.oauth2.multiple_response_types
 
 This section contains the generic implementation of `OAuth 2.0 Multiple
-Response Type Encoding Practices`_. With the ``response_mode`` parameter, a
+Response Type Encoding Practices`_ (MRT). With the ``response_mode`` parameter, a
 client chooses how it receives the authorization response: in the query or
 in the fragment of its redirect URI.
 
@@ -45,7 +45,7 @@ Response modes
 
 The server accepts the modes of its ``response_modes_supported`` metadata.
 Return them from :meth:`MultipleResponseTypes.get_server_metadata`. The
-default is ``query`` and ``fragment``, per :rfc:`8414#section-2`:
+default is ``query`` and ``fragment``, per :rfc:`RFC 8414 §2 <8414#section-2>`:
 
 .. code-block:: python
 

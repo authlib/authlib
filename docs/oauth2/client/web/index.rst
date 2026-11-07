@@ -225,7 +225,7 @@ Client Authentication Methods
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When fetching access token, the authorization server will require a client
-authentication, Authlib provides **three default methods** defined by RFC7591:
+authentication, Authlib provides **three default methods** defined by RFC 7591:
 
 - ``client_secret_basic``
 - ``client_secret_post``
@@ -424,7 +424,7 @@ OAuth 2.0 specially.
 Auto Update Token
 ~~~~~~~~~~~~~~~~~
 
-In OAuth 1.0, access token never expires. But in OAuth 2.0, token MAY expire. If
+In OAuth 1.0, access token never expires. But in OAuth 2.0, a token can expire. If
 there is a ``refresh_token`` value, Authlib will auto update the access token if
 it is expired.
 
@@ -471,7 +471,7 @@ register your remote app with a ``code_challenge_method`` in ``client_kwargs``:
     )
 
 The supported methods are ``S256`` and ``plain``. Prefer ``S256``, per
-:rfc:`9700#section-2.1.1`. Use ``plain`` only for a provider that does not
+:rfc:`RFC 9700 §2.1.1 <9700#section-2.1.1>`. Use ``plain`` only for a provider that does not
 support ``S256``.
 
 
@@ -571,15 +571,15 @@ have to add ``authorize_url`` and ``access_token_url``.
 
 Check out our client example: https://github.com/authlib/demo-oauth-client
 
-But if there is no discovery endpoint, developers MUST add all the missing information
-themselves:
+Without a discovery endpoint, pass the missing values to ``register``:
 
 * authorize_url
 * access_token_url
+* issuer, to check the ``iss`` claim of the ID token
 * jwks_uri
 
-This ``jwks_uri`` is the URL to get provider's public JWKs. Developers MAY also
-provide the value of ``jwks`` instead of ``jwks_uri``:
+``jwks_uri`` is the URL of the provider's public JWKs. ``jwks`` can replace
+``jwks_uri`` and hold the keys directly:
 
 .. code-block:: python
 
@@ -589,6 +589,7 @@ provide the value of ``jwks`` instead of ``jwks_uri``:
         client_secret='...',
         access_token_url='https://example.com/oauth/access_token',
         authorize_url='https://example.com/oauth/authorize',
+        issuer='https://example.com',
         jwks={"keys": [...]}
     )
 

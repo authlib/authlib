@@ -1,10 +1,10 @@
 .. _specs/rfc7636:
 
-RFC7636: Proof Key for Code Exchange by OAuth Public Clients
-============================================================
+RFC 7636: Proof Key for Code Exchange by OAuth Public Clients
+=============================================================
 
 .. meta::
-    :description: API references on RFC7636 Proof Key for Code Exchange
+    :description: API references on RFC 7636 Proof Key for Code Exchange
         by OAuth Public Clients implementation, guide on how to add it to
         OAuth 2.0 authorization server.
 
@@ -67,8 +67,8 @@ The ``/authorize``, ``/token`` and ``/api`` paths are examples.
 .. module:: authlib.oauth2.rfc7636
 
 
-Using RFC7636 in Authorization Code Grant
------------------------------------------
+Using RFC 7636 in Authorization Code Grant
+------------------------------------------
 
 In order to apply proof key for code exchange, you need to register the
 :class:`CodeChallenge` extension to ``AuthorizationCodeGrant``. But before
@@ -77,20 +77,19 @@ that, we need to re-design our AuthorizationCode database.
 * For Flask Developers, check the section :ref:`flask_oauth2_code_grant`.
 * For Django Developers, check the section :ref:`django_oauth2_code_grant`.
 
-The new database SHOULD contain two more columns:
+The ``AuthorizationCode`` table needs two more columns:
 
 1. code_challenge: A VARCHAR
 2. code_challenge_method: A VARCHAR
 
 And the ``AuthorizationCodeGrant`` should record the ``code_challenge`` and
 ``code_challenge_method`` into database in ``save_authorization_code``
-method:
+method. Add ``none`` to ``TOKEN_ENDPOINT_AUTH_METHODS`` to accept public
+clients, which have no client secret:
 
 .. code-block:: python
 
-
     class MyAuthorizationCodeGrant(AuthorizationCodeGrant):
-        # YOU MAY NEED TO ADD "none" METHOD FOR AUTHORIZATION WITHOUT CLIENT SECRET
         TOKEN_ENDPOINT_AUTH_METHODS = ['client_secret_basic', 'client_secret_post', 'none']
 
         def save_authorization_code(self, code, request):
@@ -118,7 +117,7 @@ Now you can register your ``AuthorizationCodeGrant`` with the extension:
     server.register_grant(MyAuthorizationCodeGrant, [CodeChallenge(required=True)])
 
 With ``required=True``, public clients must use PKCE. Per
-:rfc:`7636#section-4.4.1`, the authorization endpoint rejects a public client
+:rfc:`RFC 7636 §4.4.1 <7636#section-4.4.1>`, the authorization endpoint rejects a public client
 that sends no ``code_challenge`` with an ``invalid_request`` error. The token
 endpoint rejects a public client that sends no ``code_verifier``.
 
@@ -132,7 +131,7 @@ In both modes:
   request with a ``code_verifier`` is rejected.
 * Confidential clients may use PKCE, but are not required to.
 
-Per :rfc:`9700#section-2.1.1`, clients should use ``S256``. To refuse
+Per :rfc:`RFC 9700 §2.1.1 <9700#section-2.1.1>`, clients should use ``S256``. To refuse
 ``plain``, limit the supported methods:
 
 .. code-block:: python
@@ -141,7 +140,7 @@ Per :rfc:`9700#section-2.1.1`, clients should use ``S256``. To refuse
         SUPPORTED_CODE_CHALLENGE_METHOD = ["S256"]
 
 A request without ``code_challenge_method`` is then rejected, because the
-method defaults to ``plain`` (:rfc:`7636#section-4.3`).
+method defaults to ``plain`` (:rfc:`RFC 7636 §4.3 <7636#section-4.3>`).
 
 Using ``code_challenge`` in Client
 ----------------------------------

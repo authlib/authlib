@@ -1,9 +1,9 @@
 .. _specs/rfc9470:
 
-RFC9470: OAuth 2.0 Step Up Authentication Challenge Protocol
-============================================================
+RFC 9470: OAuth 2.0 Step Up Authentication Challenge Protocol
+=============================================================
 
-This section contains the generic implementation of :rfc:`RFC9470 <9470>`.
+This section contains the generic implementation of :rfc:`9470`.
 A client can ask for a recent authentication of the user with the
 ``max_age`` parameter of the authorization request. It is a number of
 seconds. When the last authentication of the user is older, the user must

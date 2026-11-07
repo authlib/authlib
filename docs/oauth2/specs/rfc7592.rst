@@ -1,7 +1,7 @@
 .. _specs/rfc7592:
 
-RFC7592: OAuth 2.0 Dynamic Client Registration Management Protocol
-==================================================================
+RFC 7592: OAuth 2.0 Dynamic Client Registration Management Protocol
+===================================================================
 
 This section contains the generic implementation of :rfc:`7592`. OAuth 2.0 Dynamic
 Client Registration Management Protocol allows developers edit and delete OAuth
@@ -10,7 +10,7 @@ of :ref:`specs/rfc7591`.
 
 
 .. meta::
-    :description: Python API references on RFC7592 OAuth 2.0 Dynamic Client
+    :description: Python API references on RFC 7592 OAuth 2.0 Dynamic Client
         Registration Management Protocol in Python with Authlib implementation.
 
 .. module:: authlib.oauth2.rfc7592
@@ -25,7 +25,7 @@ endpoint calls ``check_client`` on the token, as in
 :meth:`~authlib.oauth2.rfc6749.TokenMixin.check_client`. This is the only
 method the token needs.
 
-Errors follow :rfc:`7592#section-2.1` and :rfc:`6750#section-3`:
+Errors follow :rfc:`RFC 7592 §2.1 <7592#section-2.1>` and :rfc:`RFC 6750 §3 <6750#section-3>`:
 
 - a request without ``Authorization`` header gets an HTTP 401 response with a
   ``WWW-Authenticate: Bearer`` header and no error code;
@@ -34,7 +34,7 @@ Errors follow :rfc:`7592#section-2.1` and :rfc:`6750#section-3`:
 - a client without permission, as decided by ``check_permission``, gets an
   HTTP 403 ``unauthorized_client`` error.
 
-Before register the endpoint, developers MUST implement the missing methods:
+Before registering the endpoint, implement the missing methods:
 
 .. code-block:: python
 
@@ -46,7 +46,7 @@ Before register the endpoint, developers MUST implement the missing methods:
     class MyClientConfigurationEndpoint(ClientConfigurationEndpoint):
         def authenticate_token(self, request):
             # this method is used to authenticate the registration access
-            # token returned by the RFC7591 registration endpoint
+            # token returned by the RFC 7591 registration endpoint
             auth_header = request.headers.get('Authorization')
             bearer_token = auth_header.split()[1]
             token = Token.get(bearer_token)

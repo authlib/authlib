@@ -128,7 +128,7 @@ OpenID Claims
 Dynamic client registration
 ---------------------------
 
-The `OpenID Connect Dynamic Client Registration <https://openid.net/specs/openid-connect-registration-1_0.html>`__ implementation is based on :ref:`RFC7591: OAuth 2.0 Dynamic Client Registration Protocol <specs/rfc7591>`. To handle OIDC client registration, you can extend your RFC7591 registration endpoint with OIDC claims:
+The `OpenID Connect Dynamic Client Registration <https://openid.net/specs/openid-connect-registration-1_0.html>`__ implementation is based on :ref:`RFC 7591: OAuth 2.0 Dynamic Client Registration Protocol <specs/rfc7591>`. To handle OIDC client registration, you can extend your RFC 7591 registration endpoint with OIDC claims:
 
 .. code-block:: python
 
