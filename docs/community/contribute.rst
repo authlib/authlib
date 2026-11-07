@@ -48,7 +48,7 @@ exceed this limit, it's OK, but no more than 110 characters.
 The Python examples of some pages run as tests with
 `Sybil <https://sybil.readthedocs.io>`_. ``docs/conftest.py`` lists these
 pages. Run them with ``uv run --all-groups pytest docs``. With ``-n``, add
-``--dist loadgroup``, so that the examples of a page run in the same worker.
+``--dist loadfile``, so that the examples of a page run in the same worker.
 
 Make a Pull Request
 -------------------

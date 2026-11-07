@@ -14,9 +14,7 @@ import pkgutil
 import re
 import tempfile
 import time
-from pathlib import Path
 
-import pytest
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from joserfc.jwk import KeySet
@@ -40,7 +38,6 @@ from authlib.oauth2.rfc6749 import grants
 from authlib.oauth2.rfc6750 import BearerTokenValidator
 from authlib.oauth2.rfc7591 import ClientRegistrationEndpoint
 
-_DOCS = Path(__file__).parent
 _FLASK_SERVER = "oauth2/authorization-server/flask/"
 _FLASK_SERVER_MODULES = [
     "flask",
@@ -301,14 +298,6 @@ def _sybil(pattern, setup):
         setup=setup,
         teardown=_teardown_flask,
     )
-
-
-@pytest.hookimpl(tryfirst=True)
-def pytest_collection_modifyitems(items):
-    """Run the examples of a page in one xdist worker, as they share a namespace."""
-    for item in items:
-        if item.path.is_relative_to(_DOCS):
-            item.add_marker(pytest.mark.xdist_group(name=str(item.path)))
 
 
 _sybils = _sybil(_FLASK_SERVER + "authorization-server.rst", _setup_flask_app) + _sybil(
