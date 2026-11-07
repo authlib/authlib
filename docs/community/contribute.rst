@@ -74,7 +74,9 @@ Authlib uses `scriv <https://scriv.readthedocs.io>`_ to build the changelog.
 Each pull request adds a fragment file in the ``changelog.d`` directory. The
 fragments are collected into :doc:`../upgrades/changelog` at release time.
 
-1. Create a fragment::
+1. Create a fragment:
+
+   .. code-block:: console
 
        uv run scriv create
 
@@ -82,7 +84,9 @@ fragments are collected into :doc:`../upgrades/changelog` at release time.
    change: ``Breaking changes``, ``Added``, ``Changed``, ``Deprecated``,
    ``Fixed`` or ``Security``.
 3. Replace the example bullet with a short description of what users get.
-   Add the issue and pull request references::
+   Add the issue and pull request references:
+
+   .. code-block:: rst
 
        Fixed
        ~~~~~

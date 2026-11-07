@@ -49,13 +49,17 @@ Starting with v1.7, ``authlib.oauth2.rfc9101.JWTAuthenticationRequest`` uses
 only the recommended JWT algorithms by default. If you need to support additional
 algorithms, you can explicitly include them in ``get_server_metadata``:
 
+.. invisible-code-block: python
+
+    from authlib.oauth2.rfc9101 import JWTAuthenticationRequest
+
 .. code-block:: python
 
     class MyJWTAuthenticationRequest(JWTAuthenticationRequest):
         def get_server_metadata(self):
             return {
-                ...,
-                "request_object_signing_alg_values_supported": ["RS256", ...],
+                # and the other values of your server metadata
+                "request_object_signing_alg_values_supported": ["RS256", "PS256"],
             }
 
 
@@ -92,6 +96,10 @@ or ``KeySet`` instances directly.
 ``get_client_algorithm`` is optional. By default, it returns the
 ``id_token_signed_response_alg`` of the client, or ``RS256``. Override it only
 to force an algorithm for every client.
+
+.. invisible-code-block: python
+
+    from authlib.oidc.core import grants
 
 .. code-block:: python
 

@@ -1,7 +1,9 @@
 Logging
 =======
 
-You can always enable debug logging when you run into issues in your code::
+You can always enable debug logging when you run into issues in your code:
+
+.. code-block:: python
 
   import logging
   import sys

@@ -507,7 +507,9 @@ This release contains breaking changes and security fixes.
 - Raise ``InvalidGrantError`` for invalid code, redirect_uri and no user errors in OAuth
   2.0 server.
 - The default ``authlib.jose.jwt`` would only work with JSON Web Signature algorithms, if
-  you would like to use JWT with JWE algorithms, please pass the algorithms parameter::
+  you would like to use JWT with JWE algorithms, please pass the algorithms parameter:
+
+  .. code-block:: python
 
       jwt = JsonWebToken(['A128KW', 'A128GCM', 'DEF'])
 

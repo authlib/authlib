@@ -831,6 +831,13 @@ for _page in [_OAUTH1_CLIENT + "web/index.rst", _OAUTH1_CLIENT + "web/django.rst
         )
     )
 
+for _page, _setup in [
+    ("basic/*.rst", _setup_flask_specs),
+    ("community/*.rst", _setup_flask_specs),
+    ("upgrades/jose.rst", _setup_flask_specs),
+]:
+    _sybils.append(_sybil(_page, _setup))
+
 _DJANGO_SERVER = "oauth2/authorization-server/django/"
 for _page, _setup in [
     (_DJANGO_SERVER + "index.rst", _setup_django),
