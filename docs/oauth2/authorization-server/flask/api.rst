@@ -28,8 +28,8 @@ Server.
 
         from authlib.integrations.flask_oauth2 import current_token
 
-        @require_oauth
         @app.route('/user_id')
+        @require_oauth
         def user_id():
             # current token instance of the OAuth Token model
             return current_token.user_id
@@ -49,8 +49,6 @@ Server.
 
 SQLAlchemy Helper Functions
 ---------------------------
-
-.. warning:: We will drop ``sqla_oauth2`` module in version 1.0.
 
 .. module:: authlib.integrations.sqla_oauth2
 

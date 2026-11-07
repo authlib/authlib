@@ -4,7 +4,7 @@ RFC7662: OAuth 2.0 Token Introspection
 ======================================
 
 .. meta::
-    :description: API references on RFC7009, OAuth 2.0 Token Introspection,
+    :description: API references on RFC7662, OAuth 2.0 Token Introspection,
         in Python via Authlib implementation.
 
 This section contains the generic implementation of :rfc:`7662`. OAuth 2.0 Token

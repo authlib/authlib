@@ -35,11 +35,16 @@ information:
 A client is registered by a user (developer) on your website; you MUST implement
 the missing methods of :class:`~authlib.oauth2.rfc6749.ClientMixin`::
 
+    import secrets
+
+    from authlib.common.encoding import to_bytes
+
     class OAuth2Client(Model, ClientMixin):
         user = ForeignKey(User, on_delete=CASCADE)
         client_id = CharField(max_length=48, unique=True, db_index=True)
         client_secret = CharField(max_length=48, blank=True)
         client_name = CharField(max_length=120)
+        # space separated list of redirect URIs
         redirect_uris = TextField(default='')
         default_redirect_uri = TextField(blank=False, default='')
         scope = TextField(default='')
@@ -65,10 +70,12 @@ the missing methods of :class:`~authlib.oauth2.rfc6749.ClientMixin`::
         def check_redirect_uri(self, redirect_uri):
             if redirect_uri == self.default_redirect_uri:
                 return True
-            return redirect_uri in self.redirect_uris
+            return redirect_uri in self.redirect_uris.split()
 
         def check_client_secret(self, client_secret):
-            return self.client_secret == client_secret
+            return secrets.compare_digest(
+                to_bytes(self.client_secret), to_bytes(client_secret)
+            )
 
         def check_endpoint_auth_method(self, method, endpoint):
             if endpoint == 'token':
@@ -126,6 +133,24 @@ the missing methods of :class:`~authlib.oauth2.rfc6749.TokenMixin`::
 
         def get_expires_at(self):
             return self.issued_at + self.expires_in
+
+        def check_client(self, client):
+            return self.client_id == client.get_client_id()
+
+        def is_expired(self):
+            if not self.expires_in:
+                return False
+
+            return self.get_expires_at() < now_timestamp()
+
+        def is_revoked(self):
+            return self.revoked
+
+        def get_user(self):
+            return self.user
+
+        def get_client(self):
+            return OAuth2Client.objects.get(client_id=self.client_id)
 
 Server
 ------

@@ -47,14 +47,13 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
             cls.RESPONSE_MODE = cls.DEFAULT_RESPONSE_MODE
 
     def exists_nonce(self, nonce, request):
-        """Check if the given nonce is existing in your database. Developers
-        should implement this method in subclass, e.g.::
+        """Check if the given nonce was already used. Developers should
+        implement this method in subclass. Per OpenID Connect Core §2, the
+        authorization server should not process the nonce, so it can accept
+        every nonce::
 
             def exists_nonce(self, nonce, request):
-                exists = AuthorizationCode.query.filter_by(
-                    client_id=request.payload.client_id, nonce=nonce
-                ).first()
-                return bool(exists)
+                return False
 
         :param nonce: A string of "nonce" parameter in request
         :param request: OAuth2Request instance

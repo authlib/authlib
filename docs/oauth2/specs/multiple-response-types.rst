@@ -53,6 +53,8 @@ Other specifications define more response modes, such as :ref:`form_post
 <specs/form_post>`. Pass them to the extension as :class:`ResponseMode`
 instances::
 
+    from authlib.oauth2.form_post import FormPost
+
     authorization_server.register_extension(MyMultipleResponseTypes([FormPost()]))
 
 The ``none`` response type

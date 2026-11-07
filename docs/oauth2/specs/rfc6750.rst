@@ -59,7 +59,7 @@ API Reference
 .. autoclass:: BearerTokenValidator
     :members:
 
-.. autoclass:: BearerToken
+.. autoclass:: BearerTokenGenerator
     :members:
 
 .. autoclass:: FormEncodedBodyToken

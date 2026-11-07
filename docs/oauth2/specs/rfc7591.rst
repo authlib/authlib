@@ -20,9 +20,11 @@ Client Registration Endpoint
 ----------------------------
 
 The client registration endpoint accepts client metadata as JSON payload via
-POST request. The metadata may contain a :ref:`JWT <jwt_guide>` ``software_statement``
+POST request. The metadata may contain a JWT_ ``software_statement``
 value. Endpoint can choose if it support ``software_statement``, it is not enabled
 by default.
+
+.. _JWT: https://jose.authlib.org/en/guide/jwt/
 
 Before register the endpoint, developers MUST implement the missing methods::
 
@@ -54,6 +56,15 @@ Before register the endpoint, developers MUST implement the missing methods::
             return {
                 'registration_client_uri': url_for("client_management_endpoint", client_id=client.client_id),
                 'registration_access_token': create_management_access_token_for_client(client),
+            }
+
+        def get_server_metadata(self):
+            return {
+                'issuer': ...,
+                'scopes_supported': ...,
+                'response_types_supported': ...,
+                'grant_types_supported': ...,
+                'token_endpoint_auth_methods_supported': ...,
             }
 
 If developers want to support ``software_statement``, additional methods

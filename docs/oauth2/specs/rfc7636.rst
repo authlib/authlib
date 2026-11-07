@@ -4,7 +4,7 @@ RFC7636: Proof Key for Code Exchange by OAuth Public Clients
 ============================================================
 
 .. meta::
-    :description: API references on RFC76736 Proof Key for Code Exchange
+    :description: API references on RFC7636 Proof Key for Code Exchange
         by OAuth Public Clients implementation, guide on how to add it to
         OAuth 2.0 authorization server.
 
@@ -145,6 +145,7 @@ Read the **Code Challenge** section in the :ref:`frameworks_clients`.
 It is also possible to add ``code_challenge`` in ``OAuth2Session``,
 consider that we already have a ``session``::
 
+    >>> from authlib.common.security import generate_token
     >>> from authlib.oauth2.rfc7636 import create_s256_code_challenge
     >>> code_verifier = generate_token(48)
     >>> code_challenge = create_s256_code_challenge(code_verifier)

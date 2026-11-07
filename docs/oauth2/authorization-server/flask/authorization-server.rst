@@ -53,10 +53,7 @@ implement all the missing methods by yourself, get a deep inside with
 Token
 -----
 
-.. note::
-
-    Only Bearer Token is supported for now. MAC Token is still under draft,
-    it will be available when it goes into RFC.
+Authlib issues Bearer Tokens (:rfc:`6750`).
 
 Tokens are used to access the users' resources. A token is issued with a
 valid duration, limited scopes and etc. It contains at least:
@@ -223,7 +220,7 @@ Register Error URIs
 
 To create a better developer experience for debugging, it is suggested that
 you create some documentation for errors. Here is a list of built-in
-:ref:`specs/rfc6949-errors`.
+:ref:`specs/rfc6749-errors`.
 
 You can design a documentation page with a description of each error. For
 instance, there is a web page for ``invalid_client``::
@@ -240,9 +237,3 @@ configuration::
 
 If there is no ``OAUTH2_ERROR_URIS``, the error response will not contain any
 ``error_uri`` data.
-
-I18N on Errors
-~~~~~~~~~~~~~~
-
-It is also possible to add i18n support to the ``error_description``. The
-feature has been implemented in version 0.8, but there is still work to do.

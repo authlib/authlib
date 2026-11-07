@@ -36,7 +36,7 @@ Here is the way to protect your users' resources::
     def user_profile():
         # if Token model has `.user` foreign key
         user = current_token.user
-        return jsonify(user)
+        return jsonify(id=user.id, username=user.username)
 
 If the resource is not protected by a scope, omit the argument::
 
@@ -44,7 +44,7 @@ If the resource is not protected by a scope, omit the argument::
     @require_oauth
     def user_profile():
         user = current_token.user
-        return jsonify(user)
+        return jsonify(id=user.id, username=user.username)
 
 The ``current_token`` is a proxy to the Token model you have defined above.
 Since there is a ``user`` relationship on the Token model, we can access this
@@ -56,7 +56,7 @@ If the decorator is not your favorite, there is a ``with`` statement for you::
     def user_profile():
         with require_oauth.acquire('profile') as token:
             user = token.user
-            return jsonify(user)
+            return jsonify(id=user.id, username=user.username)
 
 .. _flask_oauth2_jwt_access_tokens:
 
@@ -160,17 +160,17 @@ Here are some examples:
     @require_oauth(['profile email'])
     def user_profile():
         user = current_token.user
-        return jsonify(user)
+        return jsonify(id=user.id, username=user.username)
 
 It requires the token containing both ``profile`` and ``email`` scope.
 
 .. code-block:: python
 
     @app.route('/profile')
-    @require_oauth(['profile', 'email']')
+    @require_oauth(['profile', 'email'])
     def user_profile():
         user = current_token.user
-        return jsonify(user)
+        return jsonify(id=user.id, username=user.username)
 
 It requires the token containing either ``profile`` or ``email`` scope.
 
@@ -180,7 +180,7 @@ It is also possible to mix **AND** and **OR** logic. e.g.::
     @require_oauth(['profile email', 'user'])
     def user_profile():
         user = current_token.user
-        return jsonify(user)
+        return jsonify(id=user.id, username=user.username)
 
 This means if the token will be valid if:
 

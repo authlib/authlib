@@ -95,14 +95,14 @@ Default allowed :ref:`client_auth_methods` are:
 
 1. client_secret_basic
 2. client_secret_post
-3. none
 
-You can change it in the subclass, e.g. remove the ``none`` authentication method::
+Public clients, such as mobile or browser applications, use ``none``. To
+accept them, add ``none`` in the subclass, and register the ``CodeChallenge``
+extension of :ref:`specs/rfc7636`. This extension requires PKCE for public
+clients::
 
     class AuthorizationCodeGrant(grants.AuthorizationCodeGrant):
-        TOKEN_ENDPOINT_AUTH_METHODS = ['client_secret_basic', 'client_secret_post']
-
-.. note:: This is important when you want to support OpenID Connect.
+        TOKEN_ENDPOINT_AUTH_METHODS = ['client_secret_basic', 'client_secret_post', 'none']
 
 Implicit Grant
 --------------
@@ -182,10 +182,12 @@ provides it as a grant type, implement it with a subclass of
         def authenticate_refresh_token(self, refresh_token):
             try:
                 item = OAuth2Token.objects.get(refresh_token=refresh_token)
-                if item.is_refresh_token_active():
-                    return item
             except OAuth2Token.DoesNotExist:
                 return None
+
+            # if refresh tokens expire, also check the expiration here
+            if not item.is_revoked():
+                return item
 
         def authenticate_user(self, credential):
             return credential.user
@@ -231,17 +233,21 @@ Creating a custom grant type with **BaseGrant**::
 
         def validate_authorization_request(self):
             # only needed if using AuthorizationEndpointMixin
+            ...
 
         def create_authorization_response(self, redirect_uri, grant_user):
             # only needed if using AuthorizationEndpointMixin
             # return an AuthorizationResponse(redirect_uri, params)
+            ...
 
         def validate_token_request(self):
             # only needed if using TokenEndpointMixin
+            ...
 
         def create_token_response(self):
             # only needed if using TokenEndpointMixin
             # return a JsonResponse(token)
+            ...
 
 For a better understanding, you can read the source code of the built-in
 grant types. And there are extended grant types defined by other specs:
@@ -259,7 +265,7 @@ grant::
 
 For instance, there is ``CodeChallenge`` extension in Authlib::
 
-    server.register_grant(AuthorizationCodeGrant, [CodeChallenge(required=False)])
+    server.register_grant(AuthorizationCodeGrant, [CodeChallenge()])
 
 Learn more about ``CodeChallenge`` at :ref:`specs/rfc7636`.
 

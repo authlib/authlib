@@ -175,7 +175,11 @@ to add more client authentication methods.
 In Authlib, ``client_secret_jwt`` and ``private_key_jwt`` share the same API,
 using :class:`JWTBearerClientAssertion` to create a new client authentication::
 
+    from joserfc.jwk import KeySet
+
     class JWTClientAuth(JWTBearerClientAssertion):
+        CLIENT_AUTH_METHOD = 'private_key_jwt'
+
         def get_audiences(self):
             # Per RFC 7523 Section 3, both the token endpoint URL and the
             # authorization server's issuer identifier are valid audience values.
@@ -191,12 +195,8 @@ using :class:`JWTBearerClientAssertion` to create a new client authentication::
             cache.set(key, 1, timeout=3600)
             return True
 
-        def resolve_client_public_key(self, client, headers):
-            if headers['alg'] == 'HS256':
-                return client.client_secret
-            if headers['alg'] == 'RS256':
-                return client.public_key
-            # you may support other ``alg`` value
+        def resolve_client_public_key(self, client):
+            return KeySet.import_key_set(client.jwks)
 
     authorization_server.register_client_auth_method(
         JWTClientAuth.CLIENT_AUTH_METHOD,
@@ -223,20 +223,20 @@ code grant::
         ]
         # ...
 
-You may noticed that the value of ``CLIENT_AUTH_METHOD`` is
-``client_assertion_jwt``. It is not ``client_secret_jwt`` or
-``private_key_jwt``, because they have the same logic. In the above
-implementation::
+The key returned by ``resolve_client_public_key`` checks the signature of the
+client assertion. This example returns the public keys of the client, for
+``private_key_jwt``.
 
-    def resolve_client_public_key(self, client, headers):
-        alg = headers['alg']
+The client authenticates only if its ``check_endpoint_auth_method`` accepts
+``CLIENT_AUTH_METHOD``. Its default value is ``client_assertion_jwt``. The
+example sets it to ``private_key_jwt``, the value of the client metadata
+(:rfc:`7591#section-2`). For ``client_secret_jwt``, set ``CLIENT_AUTH_METHOD``
+to ``client_secret_jwt``, and return the client secret as an ``OctKey``::
 
-If this ``alg`` is a MAC SHA like ``HS256``, it is called ``client_secret_jwt``,
-because the key used to sign a JWT is the client's ``client_secret`` value. If
-this ``alg`` is ``RS256`` or something else, it is called ``private_key_jwt``,
-because client will use its private key to sign the JWT. You can set a limitation
-in the implementation of ``resolve_client_public_key`` to accept only ``HS256``
-alg, in this case, you can also alter ``CLIENT_AUTH_METHOD = 'client_secret_jwt'``.
+    from joserfc.jwk import OctKey
+
+    def resolve_client_public_key(self, client):
+        return OctKey.import_key(client.client_secret)
 
 .. _ClientAuthentication: http://openid.net/specs/openid-connect-core-1_0.html#ClientAuthentication
 

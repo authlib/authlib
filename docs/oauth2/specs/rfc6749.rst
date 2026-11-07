@@ -51,8 +51,6 @@ Client Model
 .. autoclass:: ClientMixin
     :members:
 
-.. _specs/rfc6949-errors:
-
 Token Model
 ~~~~~~~~~~~
 
@@ -68,6 +66,8 @@ Authorization Session
 .. autoclass:: AuthorizationSessionMixin
     :member-order: bysource
     :members:
+
+.. _specs/rfc6749-errors:
 
 Errors
 ~~~~~~

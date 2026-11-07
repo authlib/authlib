@@ -179,7 +179,11 @@ Implicit Flow
 
 The Implicit Flow is mainly used by Clients implemented in a browser using
 a scripting language. You need to implement the missing methods of
-:class:`OpenIDImplicitGrant` before registering it::
+:class:`OpenIDImplicitGrant` before registering it.
+
+Per OpenID Connect Core §2, the authorization server should not process the
+nonce, other than putting it in the ID token. The client checks it. This
+example accepts every nonce::
 
     from joserfc.jwk import KeySet
     from authlib.oidc.core import grants
@@ -196,10 +200,7 @@ a scripting language. You need to implement the missing methods of
             }
 
         def exists_nonce(self, nonce, request):
-            exists = AuthorizationCode.query.filter_by(
-                client_id=request.payload.client_id, nonce=nonce
-            ).first()
-            return bool(exists)
+            return False
 
         def generate_user_info(self, user, scope):
             return UserInfo(
@@ -272,9 +273,10 @@ is ``save_authorization_code``. You can implement it like this::
     # register it to grant endpoint
     server.register_grant(OpenIDHybridGrant)
 
-Since all OpenID Connect Flow require ``exists_nonce``, ``resolve_client_private_key``,
-``get_client_claims``, ``get_client_algorithm`` and ``generate_user_info``
-methods, you can create shared functions for them.
+All OpenID Connect flows require ``exists_nonce``, ``resolve_client_private_key``,
+``get_client_claims`` and ``generate_user_info`` methods. You can create shared
+functions for ``resolve_client_private_key``, ``get_client_claims`` and
+``generate_user_info``.
 
 .. _flask_odic_max_age:
 
@@ -326,7 +328,7 @@ interaction, such as a login, it is in ``grant.interactions``, and
         except OAuth2Error as error:
             return server.handle_error_response(request, error)
 
-        if request.method == "GET" and grant.prompt == "login":
+        if request.method == "GET" and "login" in grant.interactions:
             return redirect(url_for("login", next=request.url))
         ...
 

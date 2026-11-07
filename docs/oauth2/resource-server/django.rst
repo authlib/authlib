@@ -62,7 +62,6 @@ It requires the token containing either ``profile`` or ``email`` scope.
 
 It is also possible to mix **AND** and **OR** logic. e.g.::
 
-    @app.route('/profile')
     @require_oauth(['profile email', 'user'])
     def user_profile(request):
         user = request.oauth_token.user

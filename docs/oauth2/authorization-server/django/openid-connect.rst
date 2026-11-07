@@ -83,7 +83,10 @@ Code Flow
 OpenID Connect authorization code flow relies on the OAuth2 authorization code
 flow and extends it. In OpenID Connect, there will be a ``nonce`` parameter in
 request, we need to save it into database for later use. In this case, we have
-to rewrite our ``AuthorizationCode`` db model::
+to rewrite our ``AuthorizationCode`` db model with the OpenID Connect
+:class:`~authlib.oidc.core.AuthorizationCodeMixin`::
+
+    from authlib.oidc.core import AuthorizationCodeMixin
 
     class AuthorizationCode(Model, AuthorizationCodeMixin):
         user = ForeignKey(User, on_delete=CASCADE)
@@ -97,6 +100,9 @@ to rewrite our ``AuthorizationCode`` db model::
         # add nonce and auth_time
         nonce = CharField(max_length=120, default='', null=True)
         auth_time = IntegerField(null=True)
+
+        def get_nonce(self):
+            return self.nonce
 
         def get_auth_time(self):
             return self.auth_time
@@ -135,7 +141,7 @@ First, we need to implement the missing methods for ``OpenIDCode``::
         def generate_user_info(self, user, scope):
             return UserInfo(
                 sub=str(user.pk),
-                name=user.name,
+                name=user.get_full_name(),
                 email=user.email,
             ).filter(scope)
 
@@ -194,7 +200,11 @@ Implicit Flow
 
 The Implicit Flow is mainly used by Clients implemented in a browser using
 a scripting language. You need to implement the missing methods of
-:class:`OpenIDImplicitGrant` before register it::
+:class:`OpenIDImplicitGrant` before register it.
+
+Per OpenID Connect Core §2, the authorization server should not process the
+nonce, other than putting it in the ID token. The client checks it. This
+example accepts every nonce::
 
     from joserfc.jwk import KeySet
     from authlib.oidc.core import grants
@@ -211,18 +221,12 @@ a scripting language. You need to implement the missing methods of
             }
 
         def exists_nonce(self, nonce, request):
-            try:
-                AuthorizationCode.objects.get(
-                    client_id=request.payload.client_id, nonce=nonce)
-                )
-                return True
-            except AuthorizationCode.DoesNotExist:
-                return False
+            return False
 
         def generate_user_info(self, user, scope):
             return UserInfo(
                 sub=str(user.pk),
-                name=user.name,
+                name=user.get_full_name(),
                 email=user.email,
             ).filter(scope)
 
@@ -272,7 +276,7 @@ is ``save_authorization_code``. You can implement it like this::
         def exists_nonce(self, nonce, request):
             try:
                 AuthorizationCode.objects.get(
-                    client_id=request.payload.client_id, nonce=nonce)
+                    client_id=request.payload.client_id, nonce=nonce
                 )
                 return True
             except AuthorizationCode.DoesNotExist:
@@ -281,16 +285,17 @@ is ``save_authorization_code``. You can implement it like this::
         def generate_user_info(self, user, scope):
             return UserInfo(
                 sub=str(user.pk),
-                name=user.name,
+                name=user.get_full_name(),
                 email=user.email,
             ).filter(scope)
 
     # register it to grant endpoint
     server.register_grant(OpenIDHybridGrant)
 
-Since all OpenID Connect Flow require ``exists_nonce``, ``resolve_client_private_key``,
-``get_client_claims``, ``get_client_algorithm`` and ``generate_user_info``
-methods, you can create shared functions for them.
+All OpenID Connect flows require ``exists_nonce``, ``resolve_client_private_key``,
+``get_client_claims`` and ``generate_user_info`` methods. You can create shared
+functions for ``resolve_client_private_key``, ``get_client_claims`` and
+``generate_user_info``.
 
 .. _django_oidc_max_age:
 
@@ -343,6 +348,6 @@ interaction, such as a login, it is in ``grant.interactions``, and
         except OAuth2Error as error:
             return server.handle_error_response(request, error)
 
-        if request.method == "GET" and grant.prompt == "login":
+        if request.method == "GET" and "login" in grant.interactions:
             return redirect_to_login(request.get_full_path())
         ...

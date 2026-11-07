@@ -17,7 +17,9 @@ Register Revocation Endpoint
 
 The revocation endpoint can be easily registered to :ref:`flask_oauth2_server`
 or :ref:`django_oauth2_server`. But there are missing methods to be
-implemented::
+implemented. This example uses the Flask-SQLAlchemy token model::
+
+    import time
 
     from authlib.oauth2.rfc7009 import RevocationEndpoint
 
@@ -34,7 +36,10 @@ implemented::
             return Token.query.filter_by(refresh_token=token_string).first()
 
         def revoke_token(self, token, request):
-            token.revoked = True
+            now = int(time.time())
+            token.access_token_revoked_at = now
+            if request.form['token'] != token.access_token:
+                token.refresh_token_revoked_at = now
             db.session.add(token)
             db.session.commit()
 
@@ -45,7 +50,7 @@ After the registration, you can create a response with::
 
     @app.route('/oauth/revoke', methods=['POST'])
     def revoke_token():
-        return server.create_endpoint_response(MyRevocationEndpoint.ENDPOINT_NAME)
+        return authorization_server.create_endpoint_response(MyRevocationEndpoint.ENDPOINT_NAME)
 
 ``token_type_hint`` is ``None`` when the request has no hint or an unknown
 one. If no token is found with the hint, the endpoint calls ``query_token``

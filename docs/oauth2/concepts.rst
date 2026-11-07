@@ -79,7 +79,7 @@ There are lots of built-in grant types in Authlib, including:
 - :class:`ResourceOwnerPasswordCredentialsGrant`
 - :class:`ClientCredentialsGrant`
 - :class:`RefreshTokenGrant`
-- :class:`JWTBearerGrant`
+- :class:`~authlib.oauth2.rfc7523.JWTBearerGrant`
 
 Take ``authorization_code`` as an example, in step 2, when the resource owner granted
 the access, **Authorization Server** will return a ``code`` to the client. The client
