@@ -32,8 +32,13 @@ When we receive a security report, we try to reproduce it. If we need more
 information, we ask you in the advisory. Once the issue is confirmed, we fix
 it, publish a release, and then publish the advisory.
 
-Previous CVEs
--------------
+Supported Versions
+------------------
 
-- CVE-2022-39174
-- CVE-2022-39175
+Only Authlib 1.9 receives security fixes.
+
+Published Advisories
+--------------------
+
+The published advisories and their CVE identifiers are listed on the
+`GitHub security page <https://github.com/authlib/authlib/security/advisories>`_.

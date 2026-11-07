@@ -29,7 +29,7 @@ It's welcome for everyone to submit a bug report. However, before you submit a
 report on GitHub issues, please check the old issues both open and closed, to
 ensure that you are not submitting a duplicate issue.
 
-Please don't ask for help on GitHub issues. Ask them on :ref:`stackoverflow`.
+Please don't ask for help on GitHub issues. Ask them on :ref:`discussions`.
 
 Documentation Contributions
 ---------------------------
@@ -52,10 +52,15 @@ Thank you. Now that you have a fix for Authlib, please describe it clearly in
 your pull request. There are some requirements for a pull request to be
 accepted:
 
-* You can use ruff to check your code style.
-* Tests for the code changes are required.
+* Run ``prek run --all-files``. It runs ruff, codespell and zizmor.
+* Tests for the code changes are required. Run them with
+  ``uv run --all-groups pytest tests``.
+* Commit messages follow `Conventional Commits <https://www.conventionalcommits.org>`_.
+  The scope is optional. Allowed scopes are ``jose``, ``oauth``, ``oidc`` and
+  ``client``.
 * Please add documentation for it, if it requires.
-* Add a changelog fragment if the change is visible to users.
+* Add a changelog fragment if the change is visible to users. The CI fails
+  without a fragment, unless a maintainer adds the ``skip changelog`` label.
 
 Add a Changelog Fragment
 ------------------------

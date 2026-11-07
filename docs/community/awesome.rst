@@ -74,4 +74,3 @@ Articles
 - `Multipart Upload to Google Cloud Storage <https://blog.authlib.org/2018/multipart-upload-to-google-cloud-storage>`_.
 - `Create Twitter login for FastAPI <https://blog.authlib.org/2020/fastapi-twitter-login>`_.
 - `Google login for FastAPI <https://blog.authlib.org/2020/fastapi-google-login>`_.
-- `FastAPI with Google OAuth <https://slatebit.com/fastapi/google/oauth/2020/08/16/fastapi_google_oauth_part1.html>`_.
