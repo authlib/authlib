@@ -538,6 +538,57 @@ def test_auto_refresh_token_after_explicit_client_credentials(token):
     assert sess.token["access_token"] == token["access_token"]
 
 
+def _recording_send(bodies, token):
+    def fake_send(r, **kwargs):
+        bodies.append(r.body)
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        resp.json = lambda: token
+        return resp
+
+    return fake_send
+
+
+def test_auto_refresh_token_sends_access_token_params(token):
+    bodies = []
+    sess = OAuth2Session(
+        "foo",
+        token=dict(access_token="a", token_type="bearer", expires_at=100),
+        token_endpoint="https://provider.test/token",
+        grant_type="client_credentials",
+        access_token_params={"audience": "api"},
+    )
+    sess.send = _recording_send(bodies, token)
+    sess.get("https://resource.test/user")
+    assert "audience=api" in bodies[0]
+
+
+def test_initial_token_fetch_sends_access_token_params(token):
+    bodies = []
+    sess = OAuth2Session(
+        "foo",
+        token_endpoint="https://provider.test/token",
+        grant_type="client_credentials",
+        access_token_params={"audience": "api"},
+    )
+    sess.send = _recording_send(bodies, token)
+    sess.get("https://resource.test/user")
+    assert "audience=api" in bodies[0]
+
+
+def test_fetch_token_arguments_override_access_token_params(token):
+    bodies = []
+    sess = OAuth2Session("foo", access_token_params={"audience": "api"})
+    sess.send = _recording_send(bodies, token)
+    sess.fetch_token(
+        "https://provider.test/token",
+        grant_type="client_credentials",
+        audience="other",
+    )
+    assert "audience=other" in bodies[0]
+    assert "audience=api" not in bodies[0]
+
+
 def test_explicit_authorization_code_grant_is_not_remembered(token):
     sess = OAuth2Session("foo", token_endpoint="https://provider.test/token")
     sess.send = mock_json_response(token)

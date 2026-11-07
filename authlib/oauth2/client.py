@@ -274,6 +274,7 @@ class OAuth2Client:
         :return: A :class:`OAuth2Token` object (a dict too).
         """
         state = state or self.state
+        kwargs = {**(self.metadata.get("access_token_params") or {}), **kwargs}
         # implicit  grant_type
         authorization_response = to_unicode(kwargs.pop("authorization_response", None))
         if "redirect_uri" in kwargs:
