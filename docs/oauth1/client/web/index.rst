@@ -175,8 +175,8 @@ Here are some hints on how to design the OAuth 1.0 token database::
 
         def to_token(self):
             return dict(
-                oauth_token=self.access_token,
-                oauth_token_secret=self.alt_token,
+                oauth_token=self.oauth_token,
+                oauth_token_secret=self.oauth_token_secret,
             )
 
 

@@ -154,7 +154,7 @@ The ``logout_redirect`` method accepts:
 - ``request``: The Django request object (required)
 - ``post_logout_redirect_uri``: Where to redirect after logout (must be registered with the provider)
 - ``id_token_hint``: The ID token previously issued (recommended)
-- ``state``: Opaque value for CSRF protection (auto-generated if not provided)
+- ``state``: Opaque value for CSRF protection (generated when ``post_logout_redirect_uri`` is given and ``state`` is not)
 - ``client_id``: OAuth 2.0 Client Identifier (optional)
 - ``logout_hint``: Hint about the user logging out (optional)
 - ``ui_locales``: Preferred languages for the logout UI (optional)

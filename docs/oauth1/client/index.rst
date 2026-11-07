@@ -27,7 +27,7 @@ for Flask, Django, Starlette and FastAPI::
     from authlib.integrations.flask_client import OAuth
 
     oauth = OAuth(app)
-    twitter = oauth.register('twitter', {...})
+    twitter = oauth.register('twitter', client_id='...', client_secret='...', ...)
 
     @app.route('/login')
     def login():

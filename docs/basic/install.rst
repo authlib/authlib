@@ -14,13 +14,14 @@ $ pip install Authlib
 ---------------------
 
 
-Installing Authlib is simple with `pip <http://www.pip-installer.org/>`_::
+Installing Authlib is simple with `pip <https://pip.pypa.io/>`_::
 
     $ pip install Authlib
 
 It will also install the dependencies:
 
 - cryptography
+- joserfc
 
 .. note::
     You may enter problems when installing cryptography, check its official
@@ -55,7 +56,7 @@ Authlib is actively developed on GitHub, where the code is
 
 You can either clone the public repository::
 
-    $ git clone git://github.com/authlib/authlib.git
+    $ git clone https://github.com/authlib/authlib.git
 
 Download the `tarball <https://github.com/authlib/authlib/tarball/main>`_::
 

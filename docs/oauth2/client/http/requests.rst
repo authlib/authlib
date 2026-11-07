@@ -119,17 +119,17 @@ close the session::
         session.get(url)
 
 
-Self-Signed Certificate
------------------------
+Mutual TLS Client Authentication
+--------------------------------
 
-Self-signed certificate mutual-TLS method internet standard is defined in
-:rfc:`8705#section-2.2`.
+With mutual TLS client authentication (:rfc:`8705#section-2`), the client
+proves its identity with a TLS certificate. Authlib does not implement
+:rfc:`8705`. Give the certificate to Requests with the ``cert`` attribute, and
+use the ``none`` method, so that the client sends its ``client_id`` without a
+secret::
 
-You can use the environment variables CURL_CA_BUNDLE and REQUESTS_CA_BUNDLE
-to specify a CA certificate file for validating your self-signed certificate.
+    session = OAuth2Session(client_id, token_endpoint_auth_method='none')
+    session.cert = ('/path/to/client-cert.pem', '/path/to/client-key.pem')
 
-.. code-block:: bash
-
-    REQUESTS_CA_BUNDLE=/path/to/ca-cert.pem
-
-Please remember to set the env variable only in you development environment.
+If the server certificate is signed by a private CA, set ``session.verify`` to
+the path of the CA bundle.

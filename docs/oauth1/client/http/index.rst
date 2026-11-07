@@ -11,12 +11,13 @@ HTTP Clients
     :noindex:
 
 This documentation covers the common design of a Python OAuth 1.0 client.
-Authlib provides three implementations of OAuth 1.0 client:
+Authlib provides OAuth 1.0 clients for two HTTP libraries:
 
 1. :class:`requests_client.OAuth1Session` implementation of :ref:`requests_client`,
    which is a replacement for **requests-oauthlib**.
-2. :class:`httpx_client.AsyncOAuth1Client` implementation of :ref:`httpx_client`,
-   which is an **async** OAuth 1.0 client.
+2. :class:`httpx_client.OAuth1Client` and :class:`httpx_client.AsyncOAuth1Client`
+   implementations of :ref:`httpx_client`, which are sync and **async** OAuth 1.0
+   clients.
 
 :class:`requests_client.OAuth1Session` and :class:`httpx_client.AsyncOAuth1Client`
 shares the same API.
@@ -98,7 +99,7 @@ registered callback URI. For instance::
 
     https://example.com/twitter?oauth_token=gA..H&oauth_verifier=fcg..1Dq
 
-If you assigned ``redirect_uri`` in :ref:`fetch_oauth1_access_token`, the
+If you assigned ``redirect_uri`` in :ref:`fetch_request_token`, the
 authorize response would be something like::
 
     https://your-domain.org/auth?oauth_token=gA..H&oauth_verifier=fcg..1Dq
@@ -136,8 +137,8 @@ session::
     ...     client_id, client_secret,
     ...     token=oauth_token,
     ...     token_secret=oauth_token_secret)
-    >>> # there is no need for `parse_authorization_response` if you can get `verifier`
-    >>> verifier = request.args.get('verifier')
+    >>> # there is no need for `parse_authorization_response` if you can get `oauth_verifier`
+    >>> verifier = request.args.get('oauth_verifier')
     >>> access_token_url = 'https://api.twitter.com/oauth/access_token'
     >>> token = client.fetch_access_token(access_token_url, verifier)
 
@@ -202,5 +203,5 @@ If using ``httpx2``, pass this ``auth`` to access protected resources::
     import httpx2
 
     url = 'https://api.twitter.com/1.1/account/verify_credentials.json'
-    resp = await httpx2.get(url, auth=auth)
+    resp = httpx2.get(url, auth=auth)
 

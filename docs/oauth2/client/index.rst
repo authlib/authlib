@@ -26,7 +26,7 @@ FastAPI::
     from authlib.integrations.flask_client import OAuth
 
     oauth = OAuth(app)
-    github = oauth.register('github', {...})
+    github = oauth.register('github', client_id='...', client_secret='...', ...)
 
     @app.route('/login')
     def login():

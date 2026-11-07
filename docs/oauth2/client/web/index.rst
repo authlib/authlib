@@ -470,9 +470,8 @@ For OpenID Connect provider, when ``.authorize_access_token``, the provider
 will include a ``id_token`` in the response. This ``id_token`` contains the
 ``UserInfo`` we need so that we don't have to fetch userinfo endpoint again.
 
-The ``id_token`` is a JWT, with Authlib :ref:`jwt_guide`, we can decode it
-easily. Frameworks integrations will handle it automatically if configurations
-are correct.
+The ``id_token`` is a JWT. Frameworks integrations decode and validate it
+automatically if configurations are correct.
 
 A simple solution is to provide the OpenID Connect Discovery Endpoint::
 
@@ -565,7 +564,7 @@ The ``logout_redirect`` method accepts:
 
 - ``post_logout_redirect_uri``: Where to redirect after logout (must be registered with the provider)
 - ``id_token_hint``: The ID token previously issued (recommended)
-- ``state``: Opaque value for CSRF protection (auto-generated if not provided)
+- ``state``: Opaque value for CSRF protection (generated when ``post_logout_redirect_uri`` is given and ``state`` is not)
 - ``client_id``: OAuth 2.0 Client Identifier (optional)
 - ``logout_hint``: Hint about the user logging out (optional)
 - ``ui_locales``: Preferred languages for the logout UI (optional)

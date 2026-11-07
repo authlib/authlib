@@ -52,8 +52,9 @@ example, instead of a pre-configured server, Authlib takes advantage of
     authorization_server.register_grant(AuthorizationCodeGrant)
     authorization_server.register_endpoint(RevocationEndpoint)
 
-If you find anything not that extendable, you can ask help on StackOverflow or
-open an issue on GitHub.
+If you find anything not that extendable, you can ask help on
+`GitHub Discussions <https://github.com/authlib/authlib/discussions>`_ or open
+an issue on GitHub.
 
 Credits
 -------

@@ -11,7 +11,7 @@ FastAPI Integration
     :noindex:
 
 FastAPI_ is a modern, fast (high-performance), web framework for building
-APIs with Python 3.6+ based on standard Python type hints. It is built on
+APIs with Python based on standard Python type hints. It is built on
 top of **Starlette**, that means most of the code looks similar with
 Starlette code. You should first read documentation of:
 

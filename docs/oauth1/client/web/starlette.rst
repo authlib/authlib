@@ -59,20 +59,23 @@ Routes for Authorization
 Just like the examples in :ref:`frameworks_oauth1_clients`, but Starlette is
 **async**, the routes for authorization should look like::
 
-    @app.route('/login/twitter')
+    from starlette.responses import RedirectResponse
+
     async def login_via_twitter(request):
         twitter = oauth.create_client('twitter')
         redirect_uri = request.url_for('authorize_twitter')
         return await twitter.authorize_redirect(request, redirect_uri)
 
-    @app.route('/auth/twitter')
     async def authorize_twitter(request):
         twitter = oauth.create_client('twitter')
         token = await twitter.authorize_access_token(request)
         resp = await twitter.get('account/verify_credentials.json')
         profile = resp.json()
         # do something with the token and profile
-        return '...'
+        return RedirectResponse('/')
+
+    app.add_route('/login/twitter', login_via_twitter)
+    app.add_route('/auth/twitter', authorize_twitter)
 
 Examples
 --------

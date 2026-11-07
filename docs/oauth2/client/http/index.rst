@@ -12,12 +12,13 @@ HTTP Clients
 
 
 This documentation covers the common design of a Python OAuth 2.0 client.
-Authlib provides three implementations of OAuth 2.0 client:
+Authlib provides OAuth 2.0 clients for two HTTP libraries:
 
 1. :class:`requests_client.OAuth2Session` implementation of :ref:`requests_client`,
    which is a replacement for **requests-oauthlib**.
-2. :class:`httpx_client.AsyncOAuth2Client` implementation of :ref:`httpx_client`,
-   which is **async** OAuth 2.0 client powered by **HTTPX2**.
+2. :class:`httpx_client.OAuth2Client` and :class:`httpx_client.AsyncOAuth2Client`
+   implementations of :ref:`httpx_client`, which are sync and **async** OAuth 2.0
+   clients powered by **HTTPX2**.
 
 :class:`requests_client.OAuth2Session` and :class:`httpx_client.AsyncOAuth2Client`
 shares the same API.
@@ -64,8 +65,8 @@ the remote authorization server::
     >>> print(uri)
     https://github.com/login/oauth/authorize?response_type=code&client_id=c..id&scope=user%3Aemail&state=d..t
 
-The ``create_authorization_url`` returns a tuple of ``(uri, state)``,
-in real project, you should save the state for later use.
+The ``create_authorization_url`` returns a tuple of ``(uri, state)``. Save the
+state, for instance in the user session. The client does not keep it.
 
 Now head over to the generated authorization url, and grant the authorization.
 
@@ -79,12 +80,16 @@ state arguments::
 
     https://example.com/github?code=42..e9&state=d..t
 
-Use ``.fetch_token`` to obtain access token. This method will also verify
-the state in case of CSRF attack::
+Use ``.fetch_token`` to obtain access token. Pass the saved ``state``. The
+client then raises ``MismatchingStateException`` when the ``state`` of the
+response is different. This check protects against CSRF attacks. Without
+``state``, the client does not check it::
 
     >>> authorization_response = 'https://example.com/github?code=42..e9&state=d..t'
     >>> token_endpoint = 'https://github.com/login/oauth/access_token'
-    >>> token = client.fetch_token(token_endpoint, authorization_response=authorization_response)
+    >>> token = client.fetch_token(
+    ...     token_endpoint, authorization_response=authorization_response, state=state
+    ... )
     >>> print(token)
     {
         'access_token': 'e..ad',
@@ -95,7 +100,8 @@ the state in case of CSRF attack::
 Save this token to access users' protected resources.
 
 In real project, this session can not be reused since you are redirected to
-another website. You need to create another session yourself::
+another website. You need to create another session yourself. The ``state``
+passed to the constructor is checked by ``fetch_token``::
 
     >>> state = restore_previous_state()
     >>>
@@ -310,25 +316,27 @@ we are going to exchange a new "access_token" with "refresh_token"::
     >>> token = restore_previous_token_from_database()
     >>> new_token = client.refresh_token(token_endpoint, refresh_token=token.refresh_token)
 
-Authlib can also refresh a new token automatically when requesting resources.
-This is done by passing a ``update_token`` function when constructing the client
-instance::
+When the client refreshes the token automatically, it calls the ``update_token``
+function given to the constructor. Use it to save the new token::
 
     def update_token(token, refresh_token=None, access_token=None):
         if refresh_token:
-            item = OAuth2Token.find(name=name, refresh_token=refresh_token)
+            item = OAuth2Token.find(refresh_token=refresh_token)
         elif access_token:
-            item = OAuth2Token.find(name=name, access_token=access_token)
+            item = OAuth2Token.find(access_token=access_token)
         else:
             return
 
-        # update old token
         item.access_token = token['access_token']
         item.refresh_token = token.get('refresh_token')
         item.expires_at = token['expires_at']
         item.save()
 
-    client = OAuth2Session(client_id, client_secret, update_token=update_token)
+    client = OAuth2Session(
+        client_id, client_secret,
+        token_endpoint=token_endpoint,
+        update_token=update_token,
+    )
 
 When sending a request to resources endpoint, if our previously saved token
 is expired, this ``client`` will invoke ``.refresh_token`` method itself and
@@ -346,11 +354,15 @@ Revoke and Introspect Token
 If the provider support token revocation and introspection, you can revoke
 and introspect the token with::
 
-    token_endpoint = 'https://example.com/oauth/token'
+    revocation_endpoint = 'https://example.com/oauth/revoke'
+    introspection_endpoint = 'https://example.com/oauth/introspect'
 
     token = get_your_previous_saved_token()
-    client.revoke_token(token_endpoint, token=token)
-    client.introspect_token(token_endpoint, token=token)
+    client.introspect_token(introspection_endpoint, token=token['access_token'])
+    client.revoke_token(revocation_endpoint, token=token['refresh_token'])
+
+Without ``token``, the client uses the refresh token of ``client.token``, or
+its access token when it has no refresh token.
 
 You can find the available parameters in API docs:
 
@@ -369,8 +381,11 @@ differences. Some services even return with the wrong Content Type. Compliance
 hooks are provided to solve those problems:
 
 * ``access_token_response``: invoked before token parsing.
+* ``refresh_token_request``: invoked before refreshing token.
 * ``refresh_token_response``: invoked before refresh token parsing.
 * ``protected_request``: invoked before making a request.
+* ``revoke_token_request``: invoked before revoking a token.
+* ``introspect_token_request``: invoked before introspecting a token.
 
 For instance, Stackoverflow MUST add a `site` parameter in query
 string to protect users' resources. And stackoverflow's response is
@@ -378,7 +393,7 @@ not in JSON. Let's fix it::
 
     from authlib.common.urls import add_params_to_uri, url_decode
 
-    def _non_compliant_param_name(url, headers, data):
+    def _non_compliant_param_name(url, headers, body):
         params = {'site': 'stackoverflow'}
         url = add_params_to_uri(url, params)
         return url, headers, body
@@ -430,13 +445,24 @@ a ``id_token``::
     >>> print(resp['id_token'])
 
 This ``id_token`` is a JWT text, it can not be used unless it is parsed.
-Authlib has provided tools for parsing and validating OpenID Connect id_token::
+Authlib has provided tools for parsing and validating OpenID Connect id_token.
+Pass the issuer, the client ID and the saved nonce, so that ``validate`` checks
+the ``iss``, ``aud`` and ``nonce`` claims (OpenID Connect Core §3.1.3.7)::
 
     >>> from authlib.oidc.core import CodeIDToken
     >>> from joserfc import jwt
     >>> # GET keys from https://www.googleapis.com/oauth2/v3/certs
     >>> token = jwt.decode(resp['id_token'], keys)
-    >>> claims = CodeIDToken(token.claims, token.header)
+    >>> claims = CodeIDToken(
+    ...     token.claims,
+    ...     token.header,
+    ...     options={'iss': {'value': 'https://accounts.google.com'}},
+    ...     params={
+    ...         'client_id': client_id,
+    ...         'nonce': nonce,
+    ...         'access_token': resp['access_token'],
+    ...     },
+    ... )
     >>> claims.validate()
 
 .. versionchanged:: 1.7

@@ -44,35 +44,30 @@ Configuration
 Authlib Flask OAuth registry can load the configuration from Flask ``app.config``
 automatically. Every key-value pair in ``.register`` can be omitted. They can be
 configured in your Flask App configuration. Config keys are formatted as
-``{name}_{key}`` in uppercase, e.g.
-
-========================== ================================
-TWITTER_CLIENT_ID          Twitter Consumer Key
-TWITTER_CLIENT_SECRET      Twitter Consumer Secret
-TWITTER_REQUEST_TOKEN_URL  URL to fetch OAuth request token
-========================== ================================
-
-If you register your remote app as ``oauth.register('example', ...)``, the
-config keys would look like:
+``{name}_{key}`` in uppercase. If you register your remote app as
+``oauth.register('example', ...)``, the config keys would look like:
 
 ========================== ===============================
-EXAMPLE_CLIENT_ID          OAuth Consumer Key
-EXAMPLE_CLIENT_SECRET      OAuth Consumer Secret
+EXAMPLE_CLIENT_ID          OAuth Client ID
+EXAMPLE_CLIENT_SECRET      OAuth Client Secret
 EXAMPLE_ACCESS_TOKEN_URL   URL to fetch OAuth access token
 ========================== ===============================
 
 Here is a full list of the configuration keys:
 
 - ``{name}_CLIENT_ID``: Client key of OAuth 1, or Client ID of OAuth 2
-- ``{name}_CLIENT_SECRET``: Client secret of OAuth 2, or Client Secret of OAuth 2
+- ``{name}_CLIENT_SECRET``: Client secret of OAuth 1, or Client Secret of OAuth 2
 - ``{name}_REQUEST_TOKEN_URL``: Request Token endpoint for OAuth 1
 - ``{name}_REQUEST_TOKEN_PARAMS``: Extra parameters for Request Token endpoint
 - ``{name}_ACCESS_TOKEN_URL``: Access Token endpoint for OAuth 1 and OAuth 2
 - ``{name}_ACCESS_TOKEN_PARAMS``: Extra parameters for Access Token endpoint
+- ``{name}_REFRESH_TOKEN_URL``: Refresh Token endpoint for OAuth 2
+- ``{name}_REFRESH_TOKEN_PARAMS``: Extra parameters for Refresh Token endpoint
 - ``{name}_AUTHORIZE_URL``: Endpoint for user authorization of OAuth 1 or OAuth 2
 - ``{name}_AUTHORIZE_PARAMS``: Extra parameters for Authorization Endpoint.
 - ``{name}_API_BASE_URL``: A base URL endpoint to make requests simple
 - ``{name}_CLIENT_KWARGS``: Extra keyword arguments for OAuth1Session or OAuth2Session
+- ``{name}_SERVER_METADATA_URL``: URL of the OpenID Connect discovery or OAuth 2.0 server metadata document
 
 
 We suggest that you keep ONLY ``{name}_CLIENT_ID`` and ``{name}_CLIENT_SECRET`` in
@@ -140,9 +135,7 @@ Auto Update Token via Signal
 Instead of defining an ``update_token`` method and passing it into the OAuth registry,
 it is also possible to use a signal to listen for token updating.
 
-Before using the signal, make sure you have installed the **blinker** library::
-
-    $ pip install blinker
+The signal requires the **blinker** library. Flask installs it since version 2.3.
 
 Connect the ``token_update`` signal::
 
@@ -228,7 +221,7 @@ The ``logout_redirect`` method accepts:
 
 - ``post_logout_redirect_uri``: Where to redirect after logout (must be registered with the provider)
 - ``id_token_hint``: The ID token previously issued (recommended)
-- ``state``: Opaque value for CSRF protection (auto-generated if not provided)
+- ``state``: Opaque value for CSRF protection (generated when ``post_logout_redirect_uri`` is given and ``state`` is not)
 - ``client_id``: OAuth 2.0 Client Identifier (optional)
 - ``logout_hint``: Hint about the user logging out (optional)
 - ``ui_locales``: Preferred languages for the logout UI (optional)

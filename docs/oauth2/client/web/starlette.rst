@@ -55,18 +55,21 @@ Routes for Authorization
 Just like the examples in :ref:`frameworks_clients`, but Starlette is **async**,
 the routes for authorization should look like::
 
-    @app.route('/login/google')
+    from starlette.responses import RedirectResponse
+
     async def login_via_google(request):
         google = oauth.create_client('google')
         redirect_uri = request.url_for('authorize_google')
         return await google.authorize_redirect(request, redirect_uri)
 
-    @app.route('/auth/google')
     async def authorize_google(request):
         google = oauth.create_client('google')
         token = await google.authorize_access_token(request)
         # do something with the token and userinfo
-        return '...'
+        return RedirectResponse('/')
+
+    app.add_route('/login/google', login_via_google)
+    app.add_route('/auth/google', authorize_google)
 
 Starlette OpenID Connect
 ------------------------
@@ -84,7 +87,7 @@ everything automatically::
 
 When we get the returned token::
 
-    token = await oauth.google.authorize_access_token()
+    token = await oauth.google.authorize_access_token(request)
 
 There should be a ``id_token`` in the response. Authlib has called `.parse_id_token`
 automatically, we can get ``userinfo`` in the ``token``::
@@ -112,7 +115,6 @@ RP-Initiated Logout
 To implement `OpenID Connect RP-Initiated Logout`_, use the ``logout_redirect`` method
 to redirect users to the provider's end session endpoint::
 
-    @app.route('/logout')
     async def logout(request):
         # Retrieve the ID token you stored during login
         id_token = request.session.pop('id_token', None)
@@ -123,10 +125,12 @@ to redirect users to the provider's end session endpoint::
             id_token_hint=id_token,
         )
 
-    @app.route('/logged-out')
     async def logged_out(request):
         state_data = await oauth.google.validate_logout_response(request)
         return PlainTextResponse('You have been logged out.')
+
+    app.add_route('/logout', logout)
+    app.add_route('/logged-out', logged_out)
 
 .. _OpenID Connect RP-Initiated Logout: https://openid.net/specs/openid-connect-rpinitiated-1_0.html
 
@@ -135,7 +139,7 @@ The ``logout_redirect`` method accepts:
 - ``request``: The Starlette request object (required)
 - ``post_logout_redirect_uri``: Where to redirect after logout (must be registered with the provider)
 - ``id_token_hint``: The ID token previously issued (recommended)
-- ``state``: Opaque value for CSRF protection (auto-generated if not provided)
+- ``state``: Opaque value for CSRF protection (generated when ``post_logout_redirect_uri`` is given and ``state`` is not)
 - ``client_id``: OAuth 2.0 Client Identifier (optional)
 - ``logout_hint``: Hint about the user logging out (optional)
 - ``ui_locales``: Preferred languages for the logout UI (optional)

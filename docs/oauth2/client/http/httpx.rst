@@ -13,12 +13,10 @@ OAuth 2.0 for HTTPX2
     :noindex:
 
 HTTPX2 is a next-generation HTTP client for Python. Authlib enables OAuth 2.0
-for HTTPX2 with its async versions:
+for HTTPX2 with sync and async clients:
 
-* :class:`OAuth2Client`
-* :class:`AssertionClient`
-* :class:`AsyncOAuth2Client`
-* :class:`AsyncAssertionClient`
+* :class:`OAuth2Client` and :class:`AssertionClient` are sync.
+* :class:`AsyncOAuth2Client` and :class:`AsyncAssertionClient` are async.
 
 HTTPX2 OAuth 2.0
 ----------------
@@ -50,7 +48,7 @@ authentication method for HTTPX2::
     )
     token_endpoint = 'https://example.com/oauth/token'
     client.register_client_auth_method(ClientSecretJWT(token_endpoint))
-    client.fetch_token(token_endpoint)
+    await client.fetch_token(token_endpoint)
 
 The ``ClientSecretJWT`` is provided by :ref:`specs/rfc7523`.
 
@@ -73,7 +71,7 @@ authentication method for HTTPX2::
     )
     token_endpoint = 'https://example.com/oauth/token'
     client.register_client_auth_method(PrivateKeyJWT(token_endpoint))
-    client.fetch_token(token_endpoint)
+    await client.fetch_token(token_endpoint)
 
 The ``PrivateKeyJWT`` is provided by :ref:`specs/rfc7523`.
 
