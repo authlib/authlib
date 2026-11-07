@@ -8,7 +8,7 @@ first-class type hints. We strongly recommend using ``joserfc`` instead of
 the ``authlib.jose`` module.
 
 Starting with **Authlib 1.7.0**, the ``authlib.jose`` module is deprecated and
-will emit deprecation warnings. A comprehensive
+will emit deprecation warnings. Authlib 2.0 removes it. A comprehensive
 `Migrating from Authlib <https://jose.authlib.org/en/migrations/authlib/>`_
 guide is available in the joserfc_ documentation to help you transition.
 
@@ -88,6 +88,10 @@ or ``KeySet`` instances directly.
 1. ``resolve_client_private_key``
 2. ``get_client_claims``
 3. ``get_client_algorithm``
+
+``get_client_algorithm`` is optional. By default, it returns the
+``id_token_signed_response_alg`` of the client, or ``RS256``. Override it only
+to force an algorithm for every client.
 
 .. code-block:: python
 

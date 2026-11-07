@@ -1,6 +1,12 @@
 RFC8037: CFRG Elliptic Curve Diffie-Hellman (ECDH) and Signatures in JSON Object Signing and Encryption (JOSE)
 ==============================================================================================================
 
+.. deprecated:: 1.7
+    ``authlib.jose`` will be removed in Authlib 2.0. Use joserfc_ instead.
+    :ref:`joserfc_upgrade` explains how to migrate.
+
+.. _joserfc: https://jose.authlib.org/en/
+
 .. meta::
     :description: API references on "X25519", "X448", "Ed25519", and "Ed448" algorithms for JWK. And "EdDSA"
                   signing data using "JSON Web Signature (JWS)".

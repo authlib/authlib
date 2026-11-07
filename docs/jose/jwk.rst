@@ -3,12 +3,11 @@
 JSON Web Key (JWK)
 ==================
 
-.. important::
+.. deprecated:: 1.7
+    ``authlib.jose`` will be removed in Authlib 2.0. Use joserfc_ instead.
+    :ref:`joserfc_upgrade` explains how to migrate.
 
-    We are splitting the ``jose`` module into a separated package. You may be
-    interested in joserfc_.
-
-.. _joserfc: https://jose.authlib.org/en/dev/guide/jwk/
+.. _joserfc: https://jose.authlib.org/en/
 
 .. module:: authlib.jose
     :noindex:

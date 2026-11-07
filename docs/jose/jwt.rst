@@ -3,12 +3,11 @@
 JSON Web Token (JWT)
 ====================
 
-.. important::
+.. deprecated:: 1.7
+    ``authlib.jose`` will be removed in Authlib 2.0. Use joserfc_ instead.
+    :ref:`joserfc_upgrade` explains how to migrate.
 
-    We are splitting the ``jose`` module into a separated package. You may be
-    interested in joserfc_.
-
-.. _joserfc: https://jose.authlib.org/en/dev/guide/jwt/
+.. _joserfc: https://jose.authlib.org/en/
 
 .. module:: authlib.jose
     :noindex:
@@ -101,6 +100,8 @@ of supported ``alg`` into :class:`JsonWebToken`::
 
 Load a different ``key`` for symmetric and asymmetric signatures::
 
+    from authlib.jose.errors import UnsupportedAlgorithmError
+
     def load_key(header, payload):
         if header['alg'] == 'RS256':
             return rsa_pub_key
@@ -117,17 +118,17 @@ JWT Payload Claims Validation
 -----------------------------
 
 :meth:`JsonWebToken.decode` accepts 3 claims-related parameters: ``claims_cls``,
-``claims_option`` and ``claims_params``. The default ``claims_cls`` is
+``claims_options`` and ``claims_params``. The default ``claims_cls`` is
 :class:`JWTClaims`. The ``decode`` method returns::
 
     >>> JWTClaims(payload, header, options=claims_options, params=claims_params)
 
 Claims validation is actually handled by :meth:`JWTClaims.validate`, which
-validates payload claims with ``claims_option`` and ``claims_params``. For
+validates payload claims with ``claims_options`` and ``claims_params``. For
 standard JWTClaims, ``claims_params`` value is not used, but it is used in
 :class:`~authlib.oidc.core.IDToken`.
 
-Here is an example of ``claims_option``::
+Here is an example of ``claims_options``::
 
     {
         "iss": {
@@ -135,7 +136,7 @@ Here is an example of ``claims_option``::
             "values": ["https://example.com", "https://example.org"]
         },
         "sub": {
-            "essential": True
+            "essential": True,
             "value": "248289761001"
         },
         "jti": {
