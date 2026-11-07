@@ -8,6 +8,7 @@ imports or not.
 import doctest
 import functools
 import importlib
+import inspect
 import json
 import os
 import pkgutil
@@ -17,6 +18,7 @@ import time
 import unittest
 from pathlib import Path
 
+from cachelib import SimpleCache
 from django.apps import apps
 from django.conf import settings
 from django.db import connection
@@ -40,6 +42,7 @@ from authlib.integrations.flask_oauth2 import ResourceProtector
 from authlib.integrations.sqla_oauth2 import OAuth2AuthorizationCodeMixin
 from authlib.integrations.sqla_oauth2 import OAuth2ClientMixin
 from authlib.integrations.sqla_oauth2 import OAuth2TokenMixin
+from authlib.oauth1.rfc5849.base_server import BaseServer
 from authlib.oauth2 import AuthorizationSession
 from authlib.oauth2.rfc6749 import grants
 from authlib.oauth2.rfc6750 import BearerTokenValidator
@@ -82,27 +85,35 @@ def _import_module(namespace, module_name):
     module = importlib.import_module(module_name)
     names = getattr(module, "__all__", None)
     if names is None:
-        names = [name for name in vars(module) if not name.startswith("_")]
+        names = [
+            name
+            for name, value in vars(module).items()
+            if not name.startswith("_") and not inspect.ismodule(value)
+        ]
 
     namespace.update({name: getattr(module, name) for name in names})
 
 
 def _import_names(namespace, modules):
-    """Add the exported names of the modules, the last module wins.
+    """Add the exported names of the modules, the last module wins."""
+    namespace.update(json=json, time=time, rsa_key=_rsa_key)
+    for module_name in modules:
+        _import_module(namespace, module_name)
+
+
+def _import_oauth2_names(namespace, modules):
+    """Add the names of an OAuth 2 guide.
 
     The specifications are also available by their module name, such as
     rfc9101, and the OpenID Connect package as oidc.
     """
-    namespace.update(
-        json=json, time=time, grants=grants, oidc=authlib.oidc, rsa_key=_rsa_key
-    )
+    namespace.update(grants=grants, oidc=authlib.oidc)
     for module in pkgutil.iter_modules(authlib.oauth2.__path__):
         namespace[module.name] = importlib.import_module(
             f"authlib.oauth2.{module.name}"
         )
 
-    for module_name in modules:
-        _import_module(namespace, module_name)
+    _import_names(namespace, modules)
 
 
 def _evaluate_module_directive(example):
@@ -166,8 +177,13 @@ def _run_page(namespace, page):
 
 
 def _setup_flask_app(namespace):
-    """Create the Flask application and the database of the guide."""
-    _import_names(namespace, _FLASK_SERVER_MODULES)
+    """Give the names of the OAuth 2 Flask guide, and create its application."""
+    _import_oauth2_names(namespace, _FLASK_SERVER_MODULES)
+    _create_flask_app(namespace)
+
+
+def _create_flask_app(namespace):
+    """Create the Flask application and the database."""
     app = _DocsFlask(__name__)
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite://"
     app.config["OAUTH2_REFRESH_TOKEN_GENERATOR"] = True
@@ -370,12 +386,18 @@ def _create_django_tables():
 
 
 def _setup_django(namespace):
-    """Give the Django pages their names, and attach their models to an app."""
-    from django.contrib.auth.models import User
-
-    _import_names(namespace, _DJANGO_MODULES)
+    """Give the names of the OAuth 2 Django guide, and its settings and keys."""
+    _import_oauth2_names(namespace, _DJANGO_MODULES)
     namespace["_provider_settings"] = getattr(settings, "AUTHLIB_OAUTH2_PROVIDER", None)
     settings.AUTHLIB_OAUTH2_PROVIDER = {"refresh_token_generator": True}
+    _write_jwks(namespace)
+    _create_django_app(namespace)
+
+
+def _create_django_app(namespace):
+    """Attach the models of the page to an app, and allow HTTP requests."""
+    from django.contrib.auth.models import User
+
     namespace.update(
         __name__=f"tests.django.{_DJANGO_APP}.models",
         User=User,
@@ -384,7 +406,6 @@ def _setup_django(namespace):
         _insecure_transport=os.environ.get("AUTHLIB_INSECURE_TRANSPORT"),
     )
     os.environ["AUTHLIB_INSECURE_TRANSPORT"] = "true"
-    _write_jwks(namespace)
 
 
 def _setup_django_server(namespace):
@@ -396,12 +417,19 @@ def _setup_django_server(namespace):
 
 def _teardown_django(namespace):
     """Drop the tables, forget the models and restore the settings."""
-    if namespace["_provider_settings"] is None:
-        del settings.AUTHLIB_OAUTH2_PROVIDER
-    else:
-        settings.AUTHLIB_OAUTH2_PROVIDER = namespace["_provider_settings"]
+    if "_provider_settings" in namespace:
+        if namespace["_provider_settings"] is None:
+            del settings.AUTHLIB_OAUTH2_PROVIDER
+        else:
+            settings.AUTHLIB_OAUTH2_PROVIDER = namespace["_provider_settings"]
 
-    os.remove(namespace["jwks_file_path"])
+    if "jwks_file_path" in namespace:
+        os.remove(namespace["jwks_file_path"])
+
+    if "_signature_methods" in namespace:
+        BaseServer.SIGNATURE_METHODS.clear()
+        BaseServer.SIGNATURE_METHODS.update(namespace["_signature_methods"])
+
     if namespace["_insecure_transport"] is None:
         os.environ.pop("AUTHLIB_INSECURE_TRANSPORT", None)
     else:
@@ -447,6 +475,83 @@ for _page in [
     "oauth2/resource-server/flask.rst",
 ]:
     _sybils.append(_sybil(_page, _setup_flask_specs))
+
+_OAUTH1_FLASK_MODULES = [
+    "flask",
+    "authlib.oauth1",
+    "authlib.oauth1.rfc5849",
+    "authlib.integrations.flask_oauth1",
+]
+_OAUTH1_DJANGO_MODULES = [
+    "django.db.models",
+    "django.http",
+    "django.views.decorators.http",
+    "authlib.oauth1",
+    "authlib.oauth1.rfc5849",
+    "authlib.integrations.django_oauth1",
+]
+
+
+def _setup_oauth1_flask(namespace):
+    """Give the names of the OAuth 1 Flask guide, and create its application."""
+    _import_names(namespace, _OAUTH1_FLASK_MODULES)
+    _create_flask_app(namespace)
+    namespace.update(
+        cache=SimpleCache(), _signature_methods=dict(BaseServer.SIGNATURE_METHODS)
+    )
+
+
+def _teardown_oauth1_flask(namespace):
+    """Restore the signature methods that the pages register."""
+    _teardown_flask(namespace)
+    BaseServer.SIGNATURE_METHODS.clear()
+    BaseServer.SIGNATURE_METHODS.update(namespace["_signature_methods"])
+
+
+def _setup_oauth1_django(namespace):
+    """Give the names of the OAuth 1 Django guide, and attach its models."""
+    _import_names(namespace, _OAUTH1_DJANGO_MODULES)
+    namespace["_signature_methods"] = dict(BaseServer.SIGNATURE_METHODS)
+    _create_django_app(namespace)
+
+
+def _setup_oauth1_flask_server(namespace):
+    """Define what the OAuth 1 Flask authorization server page defines."""
+    _setup_oauth1_flask(namespace)
+    _run_page(namespace, "oauth1/provider/flask/authorization-server.rst")
+
+
+def _setup_oauth1_django_server(namespace):
+    """Define what the OAuth 1 Django authorization server page defines."""
+    _setup_oauth1_django(namespace)
+    _run_page(namespace, "oauth1/provider/django/authorization-server.rst")
+
+
+for _page, _setup in [
+    ("oauth1/concepts.rst", _setup_oauth1_flask),
+    ("oauth1/specs/rfc5849.rst", _setup_oauth1_flask),
+    ("oauth1/provider/flask/index.rst", _setup_oauth1_flask),
+    ("oauth1/provider/flask/api.rst", _setup_oauth1_flask),
+    ("oauth1/provider/flask/authorization-server.rst", _setup_oauth1_flask),
+    ("oauth1/provider/flask/resource-server.rst", _setup_oauth1_flask_server),
+    ("oauth1/provider/flask/customize.rst", _setup_oauth1_flask_server),
+]:
+    _sybils.append(_sybil(_page, _setup, _teardown_oauth1_flask))
+
+for _page, _setup in [
+    ("oauth1/provider/django/index.rst", _setup_oauth1_django),
+    ("oauth1/provider/django/api.rst", _setup_oauth1_django),
+    ("oauth1/provider/django/authorization-server.rst", _setup_oauth1_django),
+    ("oauth1/provider/django/resource-server.rst", _setup_oauth1_django_server),
+]:
+    _sybils.append(
+        _sybil(
+            _page,
+            _setup,
+            _teardown_django,
+            ["transactional_db", "django_db_blocker"],
+        )
+    )
 
 _DJANGO_SERVER = "oauth2/authorization-server/django/"
 for _page, _setup in [

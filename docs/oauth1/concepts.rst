@@ -96,12 +96,16 @@ And Twitter will response with a temporary credential like:
     &oauth_token_secret=Kd75W4OQfb2oJTV0vzGzeXftVAwgMnEK9MumzYcM
     &oauth_callback_confirmed=true
 
-Our Twitter client will then redirect user to the authorization page::
+Our Twitter client will then redirect user to the authorization page:
+
+.. code-block:: text
 
     https://api.twitter.com/oauth/authenticate?oauth_token=Z6eEdO8MOmk394WozF5oKyuAv855l4Mlqo7hhlSLik
 
 On this authorization page, if user granted access to your Twitter client, it will
-redirect back to your application page, e.g.::
+redirect back to your application page, e.g.:
+
+.. code-block:: text
 
     https://example.com/auth?oauth_token=Z6eEdO8MOmk394WozF5oKyuAv855l4Mlqo7hhlSLik&oauth_verifier=hfdp7dh39dks9884
 

@@ -19,7 +19,9 @@ At the very beginning, we need to have some basic understanding of
 .. important::
 
     If you are developing on your localhost, remember to set the environment
-    variable::
+    variable:
+
+    .. code-block:: console
 
         export AUTHLIB_INSECURE_TRANSPORT=true
 
