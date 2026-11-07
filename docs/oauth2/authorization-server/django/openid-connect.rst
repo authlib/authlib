@@ -62,7 +62,9 @@ key
 
 A private key is required to generate JWT. The key that you are going to use
 dependents on the ``alg`` you are using. For instance, the alg is ``RS256``,
-you need to use an RSA private key. It can be set with::
+you need to use an RSA private key. It can be set with:
+
+.. code-block:: python
 
     key = '''-----BEGIN RSA PRIVATE KEY-----\nMIIEog...'''
 
@@ -73,7 +75,9 @@ iss
 ~~~
 
 The ``iss`` value in JWT payload. The value can be your website name or URL.
-For example, Google is using::
+For example, Google is using:
+
+.. code-block:: json
 
     {"iss": "https://accounts.google.com"}
 
@@ -84,7 +88,9 @@ OpenID Connect authorization code flow relies on the OAuth2 authorization code
 flow and extends it. In OpenID Connect, there will be a ``nonce`` parameter in
 request, we need to save it into database for later use. In this case, we have
 to rewrite our ``AuthorizationCode`` db model with the OpenID Connect
-:class:`~authlib.oidc.core.AuthorizationCodeMixin`::
+:class:`~authlib.oidc.core.AuthorizationCodeMixin`:
+
+.. code-block:: python
 
     from authlib.oidc.core import AuthorizationCodeMixin
 
@@ -113,7 +119,9 @@ OpenID Connect Code flow is the same as Authorization Code flow, but with
 extended features. We can apply the :class:`OpenIDCode` extension to
 ``AuthorizationCodeGrant``.
 
-First, we need to implement the missing methods for ``OpenIDCode``::
+First, we need to implement the missing methods for ``OpenIDCode``:
+
+.. code-block:: python
 
     from joserfc.jwk import KeySet
     from authlib.oidc.core import grants, UserInfo
@@ -150,7 +158,9 @@ parameter, and the time of the user authentication. ``OpenIDCode`` sets this
 time in ``request.auth_time``, from the authorization session (see
 :ref:`django_oidc_max_age`). It becomes the
 ``auth_time`` claim of the ID token. Save these values in the
-``AuthorizationCodeGrant.save_authorization_code`` method::
+``AuthorizationCodeGrant.save_authorization_code`` method:
+
+.. code-block:: python
 
     class AuthorizationCodeGrant(_AuthorizationCodeGrant):
         def save_authorization_code(self, code, request):
@@ -170,7 +180,9 @@ time in ``request.auth_time``, from the authorization session (see
             return auth_code
 
 Finally, you can register ``AuthorizationCodeGrant`` with ``OpenIDCode``
-extension::
+extension:
+
+.. code-block:: python
 
     # register it to grant endpoint
     server.register_grant(AuthorizationCodeGrant, [OpenIDCode(require_nonce=True)])
@@ -204,7 +216,9 @@ a scripting language. You need to implement the missing methods of
 
 Per OpenID Connect Core §2, the authorization server should not process the
 nonce, other than putting it in the ID token. The client checks it. This
-example accepts every nonce::
+example accepts every nonce:
+
+.. code-block:: python
 
     from joserfc.jwk import KeySet
     from authlib.oidc.core import grants
@@ -241,7 +255,9 @@ by Authorization Code Flow.
 
 OpenIDHybridGrant is a subclass of OpenIDImplicitGrant, so the missing methods
 are the same, except that OpenIDHybridGrant has one more missing method, that
-is ``save_authorization_code``. You can implement it like this::
+is ``save_authorization_code``. You can implement it like this:
+
+.. code-block:: python
 
     from joserfc.jwk import KeySet
     from authlib.oidc.core import grants
@@ -307,7 +323,9 @@ for a new consent with ``prompt=consent``. Authlib applies these rules with an
 :class:`~authlib.oauth2.AuthorizationSession`.
 :ref:`authorization_session` explains the rules and the pitfalls.
 
-Store the time of the login in the session::
+Store the time of the login in the session:
+
+.. code-block:: python
 
     import time
     from django.contrib.auth import login
@@ -319,7 +337,9 @@ Store the time of the login in the session::
 
 Subclass the authorization session. It keeps the start time of the requests
 in the Django session. Give the time of the interactions, and tell if the
-user must give their consent::
+user must give their consent:
+
+.. code-block:: python
 
     from authlib.oauth2 import AuthorizationSession
 
@@ -338,7 +358,9 @@ user must give their consent::
 
 Pass it to ``get_consent_grant``. When the user must go through an
 interaction, such as a login, it is in ``grant.interactions``, and
-``grant.prompt`` is the first of them::
+``grant.prompt`` is the first of them:
+
+.. code-block:: python
 
     def authorize(request):
         user = request.user if request.user.is_authenticated else None

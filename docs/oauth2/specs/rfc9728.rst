@@ -98,12 +98,6 @@ is the signer. It is the ``resource`` by default, or the ``issuer`` parameter.
 Consumers verify the signature with a key of this issuer. When the resource
 signs its own metadata, it can publish its keys at ``jwks_uri``:
 
-.. invisible-code-block: python
-
-    from flask import Flask
-
-    app = Flask("docs")
-
 .. code-block:: python
 
     from joserfc.jwk import KeySet, RSAKey

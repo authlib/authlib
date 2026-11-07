@@ -7,7 +7,9 @@ Protects users resources, so that only the authorized clients with the
 authorized access token can access the given scope resources.
 
 A resource server can be a different server other than the authorization
-server. Authlib offers a **decorator** to protect your API endpoints::
+server. Authlib offers a **decorator** to protect your API endpoints:
+
+.. code-block:: python
 
     from flask import jsonify
     from authlib.integrations.flask_oauth2 import ResourceProtector, current_token
@@ -29,7 +31,9 @@ When the resource server has no access to the ``Token`` model (database), and
 there is an introspection token endpoint in authorization server, you can
 :ref:`require_oauth_introspection`.
 
-Here is the way to protect your users' resources::
+Here is the way to protect your users' resources:
+
+.. code-block:: python
 
     @app.route('/user')
     @require_oauth('profile')
@@ -38,7 +42,9 @@ Here is the way to protect your users' resources::
         user = current_token.user
         return jsonify(id=user.id, username=user.username)
 
-If the resource is not protected by a scope, omit the argument::
+If the resource is not protected by a scope, omit the argument:
+
+.. code-block:: python
 
     @app.route('/user')
     @require_oauth
@@ -50,7 +56,9 @@ The ``current_token`` is a proxy to the Token model you have defined above.
 Since there is a ``user`` relationship on the Token model, we can access this
 ``user`` with ``current_token.user``.
 
-If the decorator is not your favorite, there is a ``with`` statement for you::
+If the decorator is not your favorite, there is a ``with`` statement for you:
+
+.. code-block:: python
 
     @app.route('/user')
     def user_profile():
@@ -66,7 +74,9 @@ JWT access tokens
 When the authorization server issues JWT access tokens (:rfc:`9068`), the
 resource server can validate them locally, without a database or an
 introspection call. Subclass :class:`~authlib.oauth2.rfc9068.JWTBearerTokenValidator`
-and tell it where to find the issuer's public keys::
+and tell it where to find the issuer's public keys:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc9068 import JWTBearerTokenValidator
 
@@ -94,7 +104,18 @@ authorization servers, keep one validator per issuer and pick the right one
 from the ``iss`` claim. The ``iss`` value is read **before** the signature is
 checked and is only used to select a validator: the token is still verified
 with that issuer's keys, so a token that claims a trusted issuer but is signed
-with another key is rejected::
+with another key is rejected:
+
+.. invisible-code-block: python
+
+    from joserfc.jwk import KeySet
+
+    key_a = rsa_key("a")
+    key_b = rsa_key("b")
+    jwks_a = KeySet.import_key_set({"keys": [key_a.as_dict(private=False)]})
+    jwks_b = KeySet.import_key_set({"keys": [key_b.as_dict(private=False)]})
+
+.. code-block:: python
 
     import json
 
@@ -140,6 +161,30 @@ with another key is rejected::
         )
     )
 
+.. invisible-code-block: python
+
+    import pytest
+    from joserfc import jwt
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://auth-a.example.org",
+        "aud": "https://api.example.org",
+        "sub": "alice",
+        "client_id": "client-id",
+        "iat": now,
+        "exp": now + 60,
+        "jti": "token-id",
+    }
+    header = {"alg": "RS256", "typ": "at+jwt"}
+    validator = MultiIssuerValidator(
+        "https://api.example.org",
+        {"https://auth-a.example.org": jwks_a, "https://auth-b.example.org": jwks_b},
+    )
+    assert validator.authenticate_token(jwt.encode(header, claims, key_a))["sub"] == "alice"
+    with pytest.raises(InvalidTokenError):
+        validator.authenticate_token(jwt.encode(header, claims, key_b))
+
 Because each issuer has its own validator instance, nothing is shared between
 requests. Fetch and cache each issuer's JWKS as described in
 :class:`~authlib.oauth2.rfc9068.JWTBearerTokenValidator`.
@@ -174,7 +219,9 @@ It requires the token containing both ``profile`` and ``email`` scope.
 
 It requires the token containing either ``profile`` or ``email`` scope.
 
-It is also possible to mix **AND** and **OR** logic. e.g.::
+It is also possible to mix **AND** and **OR** logic. e.g.:
+
+.. code-block:: python
 
     @app.route('/profile')
     @require_oauth(['profile email', 'user'])
@@ -191,7 +238,9 @@ Optional ``require_oauth``
 --------------------------
 
 There is one more parameter for ``require_oauth`` which is used to serve
-public endpoints::
+public endpoints:
+
+.. code-block:: python
 
     @app.route('/timeline')
     @require_oauth(optional=True)
@@ -204,7 +253,11 @@ MethodView & Flask-Restful
 --------------------------
 
 You can also use the ``require_oauth`` decorator in ``flask.views.MethodView``
-and ``flask_restful.Resource``::
+and ``flask_restful.Resource``:
+
+.. skip: next "requires Flask-RESTful"
+
+.. code-block:: python
 
     from flask.views import MethodView
 

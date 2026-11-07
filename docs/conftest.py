@@ -14,11 +14,18 @@ import pkgutil
 import re
 import tempfile
 import time
+import unittest
+from pathlib import Path
 
+from django.apps import apps
+from django.conf import settings
+from django.db import connection
+from django.test import RequestFactory
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from joserfc.jwk import KeySet
 from joserfc.jwk import RSAKey
+from sybil import Document
 from sybil import Region
 from sybil import Sybil
 from sybil.parsers.rest import DocTestParser
@@ -38,6 +45,7 @@ from authlib.oauth2.rfc6749 import grants
 from authlib.oauth2.rfc6750 import BearerTokenValidator
 from authlib.oauth2.rfc7591 import ClientRegistrationEndpoint
 
+_DOCS = Path(__file__).parent
 _FLASK_SERVER = "oauth2/authorization-server/flask/"
 _FLASK_SERVER_MODULES = [
     "flask",
@@ -85,7 +93,9 @@ def _import_names(namespace, modules):
     The specifications are also available by their module name, such as
     rfc9101, and the OpenID Connect package as oidc.
     """
-    namespace.update(json=json, time=time, grants=grants, oidc=authlib.oidc)
+    namespace.update(
+        json=json, time=time, grants=grants, oidc=authlib.oidc, rsa_key=_rsa_key
+    )
     for module in pkgutil.iter_modules(authlib.oauth2.__path__):
         namespace[module.name] = importlib.import_module(
             f"authlib.oauth2.{module.name}"
@@ -108,10 +118,57 @@ def _parse_module_directives(document):
         )
 
 
+_PARSERS = [
+    _parse_module_directives,
+    PythonCodeBlockParser(),
+    DocTestParser(optionflags=doctest.ELLIPSIS),
+    SkipParser(),
+]
+
+
+class _DocsFlask(Flask):
+    """A Flask application where a view replaces the previous view of the same name.
+
+    The pages show several versions of the same view.
+    """
+
+    def add_url_rule(self, rule, endpoint=None, view_func=None, **options):
+        endpoint = endpoint or (view_func and view_func.__name__)
+        previous = self.view_functions.get(endpoint)
+        if previous is not None and previous is not view_func:
+            del self.view_functions[endpoint]
+            old = self.url_map
+            rules = [r.empty() for r in old.iter_rules() if r.endpoint != endpoint]
+            self.url_map = self.url_map_class(
+                rules,
+                default_subdomain=old.default_subdomain,
+                strict_slashes=old.strict_slashes,
+                merge_slashes=old.merge_slashes,
+                redirect_defaults=old.redirect_defaults,
+                converters=old.converters,
+                sort_parameters=old.sort_parameters,
+                sort_key=old.sort_key,
+                host_matching=old.host_matching,
+            )
+
+        super().add_url_rule(rule, endpoint, view_func, **options)
+
+
+def _run_page(namespace, page):
+    """Run the examples of a page in the namespace, as the setup of another page."""
+    document = Document.parse(str(_DOCS / page), *_PARSERS)
+    document.namespace = namespace
+    for example in document.examples():
+        try:
+            example.evaluate()
+        except unittest.SkipTest:
+            continue
+
+
 def _setup_flask_app(namespace):
     """Create the Flask application and the database of the guide."""
     _import_names(namespace, _FLASK_SERVER_MODULES)
-    app = Flask(__name__)
+    app = _DocsFlask(__name__)
     app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite://"
     app.config["OAUTH2_REFRESH_TOKEN_GENERATOR"] = True
     app.config["PROPAGATE_EXCEPTIONS"] = True
@@ -231,14 +288,21 @@ def _setup_flask_oidc(namespace):
         def authenticate_user(self, authorization_code):
             return db.session.get(user_model, authorization_code.user_id)
 
+    namespace.update(
+        AuthorizationCode=AuthorizationCode,
+        _AuthorizationCodeGrant=AuthorizationCodeGrant,
+    )
+    _write_jwks(namespace)
+
+
+def _write_jwks(namespace):
+    """Write the private keys of the server to a file, as the pages read them."""
     jwks = KeySet([_rsa_key("example")])
     fd, path = tempfile.mkstemp(suffix=".json")
     with os.fdopen(fd, "w") as f:
         json.dump(jwks.as_dict(private=True), f)
 
     namespace.update(
-        AuthorizationCode=AuthorizationCode,
-        _AuthorizationCodeGrant=AuthorizationCodeGrant,
         jwks_file_path=path,
         public_jwks=KeySet.import_key_set(jwks.as_dict(private=False)),
     )
@@ -285,18 +349,86 @@ def _setup_flask_specs(namespace):
     )
 
 
-def _sybil(pattern, setup):
+_DJANGO_APP = "docs"
+_DJANGO_MODULES = [
+    "django.db.models",
+    "django.http",
+    "django.views.decorators.http",
+    "authlib.oauth2",
+    "authlib.oauth2.rfc6749",
+    "authlib.oauth2.rfc7636",
+    "authlib.oidc.core",
+    "authlib.integrations.django_oauth2",
+]
+
+
+def _create_django_tables():
+    """Create the tables of the models that the page defines."""
+    with connection.schema_editor() as editor:
+        for model in apps.get_app_config(_DJANGO_APP).get_models():
+            editor.create_model(model)
+
+
+def _setup_django(namespace):
+    """Give the Django pages their names, and attach their models to an app."""
+    from django.contrib.auth.models import User
+
+    _import_names(namespace, _DJANGO_MODULES)
+    namespace["_provider_settings"] = getattr(settings, "AUTHLIB_OAUTH2_PROVIDER", None)
+    settings.AUTHLIB_OAUTH2_PROVIDER = {"refresh_token_generator": True}
+    namespace.update(
+        __name__=f"tests.django.{_DJANGO_APP}.models",
+        User=User,
+        request_factory=RequestFactory(),
+        create_tables=_create_django_tables,
+        _insecure_transport=os.environ.get("AUTHLIB_INSECURE_TRANSPORT"),
+    )
+    os.environ["AUTHLIB_INSECURE_TRANSPORT"] = "true"
+    _write_jwks(namespace)
+
+
+def _setup_django_server(namespace):
+    """Define what the Django authorization server page defines."""
+    _setup_django(namespace)
+    _run_page(namespace, "oauth2/authorization-server/django/authorization-server.rst")
+    namespace["_AuthorizationCodeGrant"] = grants.AuthorizationCodeGrant
+
+
+def _teardown_django(namespace):
+    """Drop the tables, forget the models and restore the settings."""
+    if namespace["_provider_settings"] is None:
+        del settings.AUTHLIB_OAUTH2_PROVIDER
+    else:
+        settings.AUTHLIB_OAUTH2_PROVIDER = namespace["_provider_settings"]
+
+    os.remove(namespace["jwks_file_path"])
+    if namespace["_insecure_transport"] is None:
+        os.environ.pop("AUTHLIB_INSECURE_TRANSPORT", None)
+    else:
+        os.environ["AUTHLIB_INSECURE_TRANSPORT"] = namespace["_insecure_transport"]
+
+    models = list(apps.get_app_config(_DJANGO_APP).get_models())
+    blocker = namespace.get("django_db_blocker")
+    if models and blocker:
+        with blocker.unblock():
+            tables = connection.introspection.table_names()
+            with connection.schema_editor() as editor:
+                for model in models:
+                    if model._meta.db_table in tables:
+                        editor.delete_model(model)
+
+    apps.all_models[_DJANGO_APP].clear()
+    apps.clear_cache()
+
+
+def _sybil(pattern, setup, teardown=_teardown_flask, fixtures=()):
     """Run the examples of the pages that match the pattern."""
     return Sybil(
-        parsers=[
-            _parse_module_directives,
-            PythonCodeBlockParser(),
-            DocTestParser(optionflags=doctest.ELLIPSIS),
-            SkipParser(),
-        ],
+        parsers=_PARSERS,
         patterns=[pattern],
         setup=setup,
-        teardown=_teardown_flask,
+        teardown=teardown,
+        fixtures=list(fixtures),
     )
 
 
@@ -305,4 +437,34 @@ _sybils = _sybil(_FLASK_SERVER + "authorization-server.rst", _setup_flask_app) +
 )
 _sybils.append(_sybil(_FLASK_SERVER + "openid-connect.rst", _setup_flask_oidc))
 _sybils.append(_sybil("oauth2/specs/*.rst", _setup_flask_specs))
+for _page in [
+    "oauth2/concepts.rst",
+    "oauth2/authorization-server/index.rst",
+    "oauth2/authorization-server/authorization-session.rst",
+    _FLASK_SERVER + "index.rst",
+    _FLASK_SERVER + "api.rst",
+    _FLASK_SERVER + "endpoints.rst",
+    "oauth2/resource-server/flask.rst",
+]:
+    _sybils.append(_sybil(_page, _setup_flask_specs))
+
+_DJANGO_SERVER = "oauth2/authorization-server/django/"
+for _page, _setup in [
+    (_DJANGO_SERVER + "index.rst", _setup_django),
+    (_DJANGO_SERVER + "authorization-server.rst", _setup_django),
+    (_DJANGO_SERVER + "api.rst", _setup_django),
+    (_DJANGO_SERVER + "grants.rst", _setup_django_server),
+    (_DJANGO_SERVER + "endpoints.rst", _setup_django_server),
+    (_DJANGO_SERVER + "openid-connect.rst", _setup_django_server),
+    ("oauth2/resource-server/django.rst", _setup_django_server),
+]:
+    _sybils.append(
+        _sybil(
+            _page,
+            _setup,
+            _teardown_django,
+            ["transactional_db", "django_db_blocker"],
+        )
+    )
+
 pytest_collect_file = _sybils.pytest()

@@ -33,7 +33,9 @@ information:
 - Client Token Endpoint Authentication Method
 
 A client is registered by a user (developer) on your website; you MUST implement
-the missing methods of :class:`~authlib.oauth2.rfc6749.ClientMixin`::
+the missing methods of :class:`~authlib.oauth2.rfc6749.ClientMixin`:
+
+.. code-block:: python
 
     import secrets
 
@@ -104,7 +106,9 @@ valid duration, limited scopes and etc. It contains at least:
 - **scope**: a limited scope of resources that this token can access
 
 A token is associated with a resource owner; you MUST implement
-the missing methods of :class:`~authlib.oauth2.rfc6749.TokenMixin`::
+the missing methods of :class:`~authlib.oauth2.rfc6749.TokenMixin`:
+
+.. code-block:: python
 
     import time
 
@@ -156,7 +160,9 @@ Server
 ------
 
 Authlib provides a ready to use :class:`~authlib.integrations.django_oauth2.AuthorizationServer`
-which has built-in tools to handle requests and responses::
+which has built-in tools to handle requests and responses:
+
+.. code-block:: python
 
     from authlib.integrations.django_oauth2 import AuthorizationServer
 
@@ -168,7 +174,9 @@ The Authorization Server has to provide endpoints:
    grant types
 2. token endpoint to issue tokens
 
-The ``AuthorizationServer`` has provided built-in methods to handle these endpoints::
+The ``AuthorizationServer`` has provided built-in methods to handle these endpoints:
+
+.. code-block:: python
 
     from django.contrib.auth.views import redirect_to_login
     from django.shortcuts import render

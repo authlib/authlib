@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     "django.contrib.auth",
     "tests.django.test_oauth1",
     "tests.django.test_oauth2",
+    "tests.django.docs",
 ]
 
 AUTHLIB_OAUTH_CLIENTS = {

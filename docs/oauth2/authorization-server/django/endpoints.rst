@@ -31,7 +31,9 @@ with the following request:
 
     token=45ghiukldjahdnhzdauz&token_type_hint=refresh_token
 
-In Authlib Django OAuth 2.0 provider, we can simply add this feature::
+In Authlib Django OAuth 2.0 provider, we can simply add this feature:
+
+.. code-block:: python
 
     from authlib.integrations.django_oauth2 import RevocationEndpoint
     from django.views.decorators.http import require_http_methods

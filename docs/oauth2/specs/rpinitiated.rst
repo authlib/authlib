@@ -101,12 +101,6 @@ Then create a logout route. You have two options:
 
 **Interactive mode** (with confirmation page):
 
-.. invisible-code-block: python
-
-    from flask import Flask
-
-    app = Flask("docs")
-
 .. code-block:: python
 
     @app.route('/logout', methods=['GET', 'POST'])

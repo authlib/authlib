@@ -24,7 +24,9 @@ Server.
 .. data:: current_token
 
     Routes protected by :class:`ResourceProtector` can access current token
-    with this variable::
+    with this variable:
+
+    .. code-block:: python
 
         from authlib.integrations.flask_oauth2 import current_token
 

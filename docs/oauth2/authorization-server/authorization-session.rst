@@ -59,7 +59,9 @@ issues a code. ``unsupported_response_type`` is returned without redirection
 to an anonymous user, because there is no grant.
 
 The user is anonymous when ``get_user`` returns ``None``. The anonymous users
-of Django and Flask-Login are objects, so return ``None`` for them::
+of Django and Flask-Login are objects, so return ``None`` for them:
+
+.. code-block:: python
 
     class MyAuthorizationSession(AuthorizationSession):
         def get_user(self):
