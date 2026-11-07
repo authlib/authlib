@@ -17,7 +17,9 @@ Authlib shares a common API design among these web frameworks. Instead
 of introducing them one by one, this documentation contains the common
 usage for them all.
 
-We start with creating a registry with the ``OAuth`` class::
+We start with creating a registry with the ``OAuth`` class:
+
+.. code-block:: python
 
     # for Flask framework
     from authlib.integrations.flask_client import OAuth
@@ -27,6 +29,12 @@ We start with creating a registry with the ``OAuth`` class::
 
     # for Starlette framework
     from authlib.integrations.starlette_client import OAuth
+
+    oauth = OAuth()
+
+.. invisible-code-block: python
+
+    from authlib.integrations.django_client import OAuth
 
     oauth = OAuth()
 
@@ -47,7 +55,9 @@ For instance, Twitter is an OAuth 1.0 service, you want your users to log in
 your website with Twitter.
 
 The first step is register a remote application on the ``OAuth`` registry via
-``oauth.register`` method::
+``oauth.register`` method:
+
+.. code-block:: python
 
     oauth.register(
         name='twitter',
@@ -64,7 +74,9 @@ The first step is register a remote application on the ``OAuth`` registry via
     )
 
 The first parameter in ``register`` method is the **name** of the remote
-application. You can access the remote application with::
+application. You can access the remote application with:
+
+.. code-block:: python
 
     twitter = oauth.create_client('twitter')
     # or simply with
@@ -75,7 +87,9 @@ configuration. Each framework has its own config system, read the framework
 specified documentation later.
 
 For instance, if ``client_id`` and ``client_secret`` can be loaded via
-configuration, we can simply register the remote app with::
+configuration, we can simply register the remote app with:
+
+.. code-block:: python
 
     oauth.register(
         name='twitter',
@@ -86,7 +100,9 @@ configuration, we can simply register the remote app with::
     )
 
 The ``client_kwargs`` is a dict configuration to pass extra parameters to
-:ref:`OAuth 1 Session <oauth_1_session>`. If you are using ``RSA-SHA1`` signature method::
+:ref:`OAuth 1 Session <oauth_1_session>`. If you are using ``RSA-SHA1`` signature method:
+
+.. code-block:: python
 
     client_kwargs = {
         'signature_method': 'RSA-SHA1',
@@ -111,7 +127,9 @@ rest steps are much simpler. The only required parts are routes:
 1. redirect to 3rd party provider (Twitter) for authentication
 2. redirect back to your website to fetch access token and profile
 
-Here is the example for Twitter login::
+Here is the example for Twitter login:
+
+.. code-block:: python
 
     def login(request):
         twitter = oauth.create_client('twitter')
@@ -121,11 +139,36 @@ Here is the example for Twitter login::
     def authorize(request):
         twitter = oauth.create_client('twitter')
         token = twitter.authorize_access_token(request)
-        resp = twitter.get('account/verify_credentials.json')
+        resp = twitter.get('account/verify_credentials.json', token=token)
         resp.raise_for_status()
         profile = resp.json()
         # do something with the token and profile
         return '...'
+
+.. invisible-code-block: python
+
+    from urllib.parse import urlsplit
+
+    from django.contrib.sessions.backends.cache import SessionStore
+    from django.test import RequestFactory
+
+    oauth.register(
+        name="twitter",
+        client_id="{{ your-twitter-consumer-key }}",
+        client_secret="{{ your-twitter-consumer-secret }}",
+        request_token_url="https://api.twitter.com/oauth/request_token",
+        access_token_url="https://api.twitter.com/oauth/access_token",
+        authorize_url="https://api.twitter.com/oauth/authenticate",
+        api_base_url="https://api.twitter.com/1.1/",
+    )
+    factory = RequestFactory()
+    session = SessionStore()
+    request = factory.get("/login")
+    request.session = session
+    callback = urlsplit(consent(login(request)["Location"]))
+    request = factory.get(f"{callback.path}?{callback.query}")
+    request.session = session
+    assert authorize(request) == "..."
 
 After user confirmed on Twitter authorization page, it will redirect
 back to your website ``authorize`` page. In this route, you can get your
@@ -144,7 +187,9 @@ Accessing OAuth Resources
 There are also chances that you need to access your user's 3rd party
 OAuth provider resources. For instance, you want to display the logged
 in user's twitter time line. You will use **access token** to fetch
-the resources::
+the resources:
+
+.. code-block:: python
 
     def get_twitter_tweets(request):
         token = OAuth1Token.find(
@@ -165,7 +210,11 @@ database.
 Design Database
 ~~~~~~~~~~~~~~~
 
-Here are some hints on how to design the OAuth 1.0 token database::
+Here are some hints on how to design the OAuth 1.0 token database:
+
+.. skip: next "uses your database models"
+
+.. code-block:: python
 
     class OAuth1Token(Model):
         name = String(length=40)
@@ -188,7 +237,11 @@ Fetch User OAuth Token
 ~~~~~~~~~~~~~~~~~~~~~~
 
 You can always pass a ``token`` parameter to the remote application request
-methods, like::
+methods, like:
+
+.. skip: next "uses your database models"
+
+.. code-block:: python
 
     token = OAuth1Token.find(name='twitter', user=request.user)
     oauth.twitter.get(url, token=token)
@@ -198,7 +251,9 @@ methods, like::
 
 However, it is not a good practice to query the token database in every request
 function. Authlib provides a way to fetch current user's token automatically for
-you, just ``register`` with ``fetch_token`` function::
+you, just ``register`` with ``fetch_token`` function:
+
+.. code-block:: python
 
     def fetch_twitter_token(request):
         token = OAuth1Token.find(
@@ -214,7 +269,9 @@ you, just ``register`` with ``fetch_token`` function::
         fetch_token=fetch_twitter_token,
     )
 
-There is also a shared way to fetch token::
+There is also a shared way to fetch token:
+
+.. code-block:: python
 
     def fetch_token(name, request):
         token = OAuth1Token.find(
@@ -227,7 +284,9 @@ There is also a shared way to fetch token::
     oauth = OAuth(fetch_token=fetch_token)
 
 Now, developers don't have to pass a ``token`` in the HTTP requests,
-instead, they can pass the ``request``::
+instead, they can pass the ``request``:
+
+.. code-block:: python
 
     def get_twitter_tweets(request):
         resp = oauth.twitter.get('statuses/user_timeline.json', request=request)

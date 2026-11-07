@@ -1,11 +1,10 @@
-"""An OAuth 2 provider that answers the requests of the client examples.
+"""OAuth providers that answer the requests of the client examples.
 
-The client examples call real services, such as GitHub or Google. The tests
-send these requests to this provider instead. The provider accepts every
-client, secret and redirect URI, so that the examples work with their
-placeholder values, and checks the secrets of the clients that the examples
-use. It chooses the endpoint from the last part of the path, whatever the
-host. Google issues its tokens on another host than its issuer.
+The client examples call real services, such as GitHub, Google or Twitter.
+The tests send these requests to these providers instead. The providers know
+the clients that the examples use, with their secrets, and accept every
+redirect URI. They choose the endpoint from the last part of the path, whatever
+the host. Google issues its tokens on another host than its issuer.
 """
 
 import time
@@ -14,6 +13,7 @@ from urllib.parse import urlsplit
 
 import httpx2
 import requests
+from cachelib import SimpleCache
 from flask import Flask
 from flask import jsonify
 from flask import request as flask_request
@@ -24,6 +24,15 @@ from joserfc.jwk import RSAKey
 from requests.adapters import HTTPAdapter
 from requests.structures import CaseInsensitiveDict
 
+from authlib.integrations.flask_oauth1 import (
+    AuthorizationServer as OAuth1AuthorizationServer,
+)
+from authlib.integrations.flask_oauth1 import (
+    ResourceProtector as OAuth1ResourceProtector,
+)
+from authlib.integrations.flask_oauth1 import create_exists_nonce_func
+from authlib.integrations.flask_oauth1 import register_nonce_hooks
+from authlib.integrations.flask_oauth1 import register_temporary_credential_hooks
 from authlib.integrations.flask_oauth2 import AuthorizationServer
 from authlib.integrations.flask_oauth2 import ResourceProtector
 from authlib.integrations.flask_oauth2 import current_token
@@ -32,6 +41,9 @@ from authlib.integrations.sqla_oauth2 import OAuth2ClientMixin
 from authlib.integrations.sqla_oauth2 import OAuth2TokenMixin
 from authlib.integrations.sqla_oauth2 import create_bearer_token_validator
 from authlib.integrations.sqla_oauth2 import create_revocation_endpoint
+from authlib.oauth1 import ClientMixin as OAuth1ClientMixin
+from authlib.oauth1 import TokenCredentialMixin
+from authlib.oauth1.rfc5849.models import TemporaryCredential
 from authlib.oauth2 import AuthorizationSession
 from authlib.oauth2.rfc6749 import grants
 from authlib.oauth2.rfc7523 import JWTBearerClientAssertion
@@ -71,26 +83,11 @@ class LoggedInSession(AuthorizationSession):
         return None
 
 
-class OAuthProvider:
-    """A permissive OAuth 2 and OpenID Connect provider."""
+class _Provider:
+    """Send the HTTP requests of requests and httpx to a Flask application."""
 
-    def __init__(self, key=None):
-        self.key = key or RSAKey.generate_key(
-            2048, parameters={"kid": "provider"}, private=True
-        )
-        self.app = Flask("provider")
-        self.app.config.update(
-            SQLALCHEMY_DATABASE_URI="sqlite://",
-            OAUTH2_REFRESH_TOKEN_GENERATOR=True,
-            PROPAGATE_EXCEPTIONS=True,
-        )
-        self.db = SQLAlchemy(self.app)
-        self._define_models()
-        self._define_server()
-        self._define_routes()
-        with self.app.app_context():
-            self.db.create_all()
-
+    def __init__(self, app):
+        self.app = app
         self._patches = [
             mock.patch.object(HTTPAdapter, "send", _requests_send(self)),
             mock.patch.object(
@@ -109,12 +106,9 @@ class OAuthProvider:
             patch.start()
 
     def stop(self):
-        """Send the HTTP requests to the network again, and close the database."""
+        """Send the HTTP requests to the network again."""
         for patch in self._patches:
             patch.stop()
-
-        with self.app.app_context():
-            self.db.engine.dispose()
 
     def handle(self, method, url, headers, body):
         """Answer a request with the status, the headers and the body."""
@@ -137,6 +131,33 @@ class OAuthProvider:
         status, headers, body = self.handle("GET", url, {}, b"")
         assert status in (302, 303), body
         return headers["Location"]
+
+
+class OAuthProvider(_Provider):
+    """An OAuth 2 and OpenID Connect provider."""
+
+    def __init__(self, key=None):
+        self.key = key or RSAKey.generate_key(
+            2048, parameters={"kid": "provider"}, private=True
+        )
+        super().__init__(Flask("provider"))
+        self.app.config.update(
+            SQLALCHEMY_DATABASE_URI="sqlite://",
+            OAUTH2_REFRESH_TOKEN_GENERATOR=True,
+            PROPAGATE_EXCEPTIONS=True,
+        )
+        self.db = SQLAlchemy(self.app)
+        self._define_models()
+        self._define_server()
+        self._define_routes()
+        with self.app.app_context():
+            self.db.create_all()
+
+    def stop(self):
+        """Send the HTTP requests to the network again, and close the database."""
+        super().stop()
+        with self.app.app_context():
+            self.db.engine.dispose()
 
     def _define_models(self):
         """Define the models of the provider."""
@@ -404,6 +425,125 @@ class OAuthProvider:
             return jsonify(client_id=current_token.client_id)
 
         return jsonify(sub=str(user.id), name=user.username.title())
+
+
+_OAUTH1_CLIENTS = {
+    "YOUR-CLIENT-ID": "YOUR-CLIENT-SECRET",
+    "Your Twitter client key": "Your Twitter client secret",
+    "{{ your-twitter-consumer-key }}": "{{ your-twitter-consumer-secret }}",
+}
+
+
+class _OAuth1User:
+    """The user who gives the consent."""
+
+    id = 1
+    username = USERNAME
+
+    def get_user_id(self):
+        return self.id
+
+
+class _OAuth1Client(OAuth1ClientMixin):
+    """A client of the examples."""
+
+    def __init__(self, client_id):
+        self.client_id = client_id
+        self.client_secret = _OAUTH1_CLIENTS[client_id]
+
+    def get_default_redirect_uri(self):
+        return "https://example.com/twitter"
+
+    def get_client_secret(self):
+        return self.client_secret
+
+    def get_rsa_public_key(self):
+        return None
+
+
+class _OAuth1Token(TokenCredentialMixin):
+    """A token credential, kept in memory."""
+
+    def __init__(self, client_id, oauth_token, oauth_token_secret):
+        self.client_id = client_id
+        self.oauth_token = oauth_token
+        self.oauth_token_secret = oauth_token_secret
+        self.user = _OAuth1User()
+
+    def get_oauth_token(self):
+        return self.oauth_token
+
+    def get_oauth_token_secret(self):
+        return self.oauth_token_secret
+
+
+class OAuth1Provider(_Provider):
+    """An OAuth 1 provider."""
+
+    def __init__(self):
+        super().__init__(Flask("oauth1-provider"))
+        self.app.config["PROPAGATE_EXCEPTIONS"] = True
+        self.tokens = {}
+        cache = SimpleCache()
+        server = OAuth1AuthorizationServer(self.app, query_client=self._query_client)
+        register_nonce_hooks(server, cache)
+        register_temporary_credential_hooks(server, cache)
+        server.register_hook("create_token_credential", self._create_token_credential)
+        self.server = server
+        self.require_oauth = OAuth1ResourceProtector(
+            self.app,
+            query_client=self._query_client,
+            query_token=self._query_token,
+            exists_nonce=create_exists_nonce_func(cache),
+        )
+        self.app.add_url_rule(
+            "/<path:path>", view_func=self._dispatch, methods=["GET", "POST"]
+        )
+
+    def issue_token(self, client_id):
+        """Issue a token credential to the client, as after an authorization."""
+        token = self.server.token_generator()
+        self._create_token_credential(token, TemporaryCredential(client_id=client_id))
+        return token
+
+    def _query_client(self, client_id):
+        """Return a client of the examples."""
+        if client_id in _OAUTH1_CLIENTS:
+            return _OAuth1Client(client_id)
+
+    def _query_token(self, client_id, oauth_token):
+        """Return a token credential of the client."""
+        token = self.tokens.get(oauth_token)
+        if token and token.client_id == client_id:
+            return token
+
+    def _create_token_credential(self, token, temporary_credential):
+        """Save the issued token credential."""
+        credential = _OAuth1Token(
+            temporary_credential.get_client_id(),
+            token["oauth_token"],
+            token["oauth_token_secret"],
+        )
+        self.tokens[credential.oauth_token] = credential
+        return credential
+
+    def _dispatch(self, path):
+        """Answer every path with the endpoint of its last part."""
+        name = path.rstrip("/").rsplit("/", 1)[-1]
+        if name == "request_token":
+            return self.server.create_temporary_credentials_response()
+
+        if name in ("authorize", "authenticate"):
+            return self.server.create_authorization_response(grant_user=_OAuth1User())
+
+        if name == "access_token":
+            return self.server.create_token_response()
+
+        return self.require_oauth()(self._resource)()
+
+    def _resource(self):
+        """Return the user of the token, for any protected resource."""
+        return jsonify(id_str="1", screen_name=USERNAME)
 
 
 def _requests_send(provider):

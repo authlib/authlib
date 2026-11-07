@@ -18,7 +18,11 @@ Starlette code. You should first read documentation of:
 1. :ref:`frameworks_oauth1_clients`
 2. :ref:`starlette_oauth1_client`
 
-Here is how you would create a FastAPI application::
+Here is how you would create a FastAPI application:
+
+.. skip: start "requires FastAPI"
+
+.. code-block:: python
 
     from fastapi import FastAPI
     from starlette.middleware.sessions import SessionMiddleware
@@ -29,7 +33,9 @@ Here is how you would create a FastAPI application::
 
 Since Authlib starlette requires using ``request`` instance, we need to
 expose that ``request`` to Authlib. According to the documentation on
-`Using the Request Directly <https://fastapi.tiangolo.com/advanced/using-request-directly/>`_::
+`Using the Request Directly <https://fastapi.tiangolo.com/advanced/using-request-directly/>`_:
+
+.. code-block:: python
 
     from starlette.requests import Request
 
@@ -49,3 +55,5 @@ expose that ``request`` to Authlib. According to the documentation on
 We have a blog post about how to create Twitter login in FastAPI:
 
 https://blog.authlib.org/2020/fastapi-twitter-login
+
+.. skip: end

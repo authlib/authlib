@@ -23,6 +23,7 @@ from pathlib import Path
 import httpx2
 import requests
 from _oauth_provider import LoggedInSession
+from _oauth_provider import OAuth1Provider
 from _oauth_provider import OAuthProvider
 from cachelib import SimpleCache
 from django.apps import apps
@@ -645,7 +646,7 @@ _OAUTH2_CLIENT_MODULES = [
 
 def _setup_oauth2_client(namespace):
     """Send the requests of the client examples to a provider."""
-    _start_provider(namespace)
+    _start_oauth2_provider(namespace)
     _import_oauth2_names(namespace, _OAUTH2_CLIENT_MODULES)
     namespace.update(
         requests=requests,
@@ -657,7 +658,7 @@ def _setup_oauth2_client(namespace):
     )
 
 
-def _teardown_oauth2_client(namespace):
+def _teardown_client(namespace):
     """Send the requests to the network again."""
     if "provider" in namespace:
         namespace["provider"].stop()
@@ -667,16 +668,19 @@ for _page in [
     "oauth2/client/index.rst",
     "oauth2/client/http/*.rst",
 ]:
-    _sybils.append(_sybil(_page, _setup_oauth2_client, _teardown_oauth2_client))
+    _sybils.append(_sybil(_page, _setup_oauth2_client, _teardown_client))
 
 
-def _start_provider(namespace):
-    """Send the HTTP requests of the page to a provider, and give the client values."""
-    provider = OAuthProvider(_rsa_key("provider"))
+def _start_provider(namespace, provider):
+    """Send the HTTP requests of the page to a provider."""
     provider.start()
+    namespace.update(provider=provider, consent=provider.authorize)
+
+
+def _start_oauth2_provider(namespace):
+    """Send the HTTP requests of the page to an OAuth 2 provider, and give the client values."""
+    _start_provider(namespace, OAuthProvider(_rsa_key("provider")))
     namespace.update(
-        provider=provider,
-        consent=provider.authorize,
         client_id="client-id",
         client_secret="client-secret",
         token_endpoint="https://example.com/oauth/token",
@@ -687,7 +691,7 @@ def _start_provider(namespace):
 
 def _setup_flask_client(namespace):
     """Give the names of the Flask client guide, and its application."""
-    _start_provider(namespace)
+    _start_oauth2_provider(namespace)
     _import_oauth2_names(namespace, ["flask", "authlib.integrations.flask_client"])
     app = _DocsFlask(__name__)
     app.secret_key = "secret-key"
@@ -696,7 +700,7 @@ def _setup_flask_client(namespace):
 
 def _setup_django_client(namespace):
     """Give the names of the Django client guide."""
-    _start_provider(namespace)
+    _start_oauth2_provider(namespace)
     _import_oauth2_names(
         namespace,
         ["django.http", "django.shortcuts", "authlib.integrations.django_client"],
@@ -705,7 +709,7 @@ def _setup_django_client(namespace):
 
 def _teardown_django_client(namespace):
     """Stop the provider, and disconnect the signal receivers of the page."""
-    _teardown_oauth2_client(namespace)
+    _teardown_client(namespace)
     if "on_token_update" in namespace:
         django_token_update.disconnect(namespace["on_token_update"])
 
@@ -715,9 +719,22 @@ def _setup_client_names(namespace):
     _import_oauth2_names(namespace, _OAUTH2_CLIENT_MODULES)
 
 
+def _setup_oauth1_client_names(namespace):
+    """Give the names of the OAuth 1 client guides, for the pages without requests."""
+    _import_names(namespace, _OAUTH1_CLIENT_MODULES)
+
+
+def _setup_oauth1_index(namespace):
+    """Give the names of the OAuth 1 client overview, and a Flask application."""
+    _import_names(
+        namespace, _OAUTH1_CLIENT_MODULES + ["authlib.integrations.flask_client"]
+    )
+    namespace["app"] = _DocsFlask(__name__)
+
+
 def _setup_starlette_client(namespace):
     """Give the names of the Starlette client guide, and its application."""
-    _start_provider(namespace)
+    _start_oauth2_provider(namespace)
     _import_oauth2_names(
         namespace,
         ["starlette.responses", "authlib.integrations.starlette_client"],
@@ -731,7 +748,7 @@ for _page, _setup in [
     (_WEB_CLIENT + "flask.rst", _setup_flask_client),
     (_WEB_CLIENT + "starlette.rst", _setup_starlette_client),
 ]:
-    _sybils.append(_sybil(_page, _setup, _teardown_oauth2_client))
+    _sybils.append(_sybil(_page, _setup, _teardown_client))
 
 for _page in [_WEB_CLIENT + "api.rst", _WEB_CLIENT + "fastapi.rst"]:
     _sybils.append(_sybil(_page, _setup_client_names, _teardown_nothing))
@@ -741,6 +758,74 @@ for _page in [_WEB_CLIENT + "index.rst", _WEB_CLIENT + "django.rst"]:
         _sybil(
             _page,
             _setup_django_client,
+            _teardown_django_client,
+            ["django_test_environment"],
+        )
+    )
+
+_OAUTH1_CLIENT_MODULES = [
+    "authlib.oauth1",
+    "authlib.integrations.httpx_client",
+    "authlib.integrations.requests_client",
+]
+
+
+def _setup_oauth1_client(namespace):
+    """Send the requests of the OAuth 1 client examples to a provider."""
+    _start_provider(namespace, OAuth1Provider())
+    _import_names(namespace, _OAUTH1_CLIENT_MODULES)
+    namespace.update(requests=requests, httpx2=httpx2, app=_DocsFlask(__name__))
+
+
+def _setup_oauth1_flask_client(namespace):
+    """Give the names of the OAuth 1 Flask client guide, and its application."""
+    _start_provider(namespace, OAuth1Provider())
+    _import_names(namespace, ["flask", "authlib.integrations.flask_client"])
+    app = _DocsFlask(__name__)
+    app.secret_key = "secret-key"
+    namespace.update(app=app, cache=SimpleCache())
+
+
+def _setup_oauth1_django_client(namespace):
+    """Give the names of the OAuth 1 Django client guide."""
+    _start_provider(namespace, OAuth1Provider())
+    _import_names(
+        namespace,
+        ["django.http", "django.shortcuts", "authlib.integrations.django_client"],
+    )
+
+
+def _setup_oauth1_starlette_client(namespace):
+    """Give the names of the OAuth 1 Starlette client guide, and its application."""
+    _start_provider(namespace, OAuth1Provider())
+    _import_names(
+        namespace,
+        ["starlette.responses", "authlib.integrations.starlette_client"],
+    )
+    middleware = [Middleware(SessionMiddleware, secret_key="secret-key")]
+    namespace["app"] = Starlette(middleware=middleware)
+
+
+_OAUTH1_CLIENT = "oauth1/client/"
+for _page, _setup in [
+    (_OAUTH1_CLIENT + "http/*.rst", _setup_oauth1_client),
+    (_OAUTH1_CLIENT + "web/flask.rst", _setup_oauth1_flask_client),
+    (_OAUTH1_CLIENT + "web/starlette.rst", _setup_oauth1_starlette_client),
+]:
+    _sybils.append(_sybil(_page, _setup, _teardown_client))
+
+for _page, _setup in [
+    (_OAUTH1_CLIENT + "index.rst", _setup_oauth1_index),
+    (_OAUTH1_CLIENT + "web/api.rst", _setup_oauth1_client_names),
+    (_OAUTH1_CLIENT + "web/fastapi.rst", _setup_oauth1_client_names),
+]:
+    _sybils.append(_sybil(_page, _setup, _teardown_nothing))
+
+for _page in [_OAUTH1_CLIENT + "web/index.rst", _OAUTH1_CLIENT + "web/django.rst"]:
+    _sybils.append(
+        _sybil(
+            _page,
+            _setup_oauth1_django_client,
             _teardown_django_client,
             ["django_test_environment"],
         )
