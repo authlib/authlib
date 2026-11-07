@@ -227,6 +227,23 @@ def test_plaintext_signature(app, test_client, use_cache):
 
 
 @pytest.mark.parametrize("use_cache", [True, False])
+def test_callback_confirmed(app, test_client, use_cache):
+    """Per RFC 5849 §2.1, oauth_callback_confirmed is set to "true"."""
+    create_authorization_server(app, use_cache)
+    rv = test_client.post(
+        "/oauth/initiate",
+        data={
+            "oauth_consumer_key": "client",
+            "oauth_callback": "oob",
+            "oauth_signature_method": "PLAINTEXT",
+            "oauth_signature": "secret&",
+        },
+    )
+    data = decode_response(rv.data)
+    assert data["oauth_callback_confirmed"] == "true"
+
+
+@pytest.mark.parametrize("use_cache", [True, False])
 def test_hmac_sha1_signature(app, test_client, use_cache):
     create_authorization_server(app, use_cache)
     url = "/oauth/initiate"

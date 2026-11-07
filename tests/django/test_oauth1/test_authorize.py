@@ -98,6 +98,7 @@ def test_authorize_granted(factory, plaintext_server):
     resp = server.create_temporary_credentials_response(request)
     data = decode_response(resp.content)
     assert "oauth_token" in data
+    assert data["oauth_callback_confirmed"] == "true"
 
     request = factory.post(authorize_url, data={"oauth_token": data["oauth_token"]})
     resp = server.create_authorization_response(request, user)
