@@ -242,6 +242,7 @@ class OAuth2Base:
             client_kwargs["authorization_endpoint"] = self.authorize_url
         if self.access_token_url:
             client_kwargs["token_endpoint"] = self.access_token_url
+        client_kwargs["access_token_params"] = self.access_token_params
 
         session = self.client_cls(
             client_id=self.client_id,
