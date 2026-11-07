@@ -37,7 +37,9 @@ Using ``client_secret_jwt`` in HTTPX2
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Here is how you could register and use ``client_secret_jwt`` client
-authentication method for HTTPX2::
+authentication method for HTTPX2:
+
+.. code-block:: python
 
     from authlib.integrations.httpx_client import AsyncOAuth2Client
     from authlib.oauth2.rfc7523 import ClientSecretJWT
@@ -57,7 +59,11 @@ Using ``private_key_jwt`` in HTTPX2
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Here is how you could register and use ``private_key_jwt`` client
-authentication method for HTTPX2::
+authentication method for HTTPX2:
+
+.. skip: next "reads a private key file"
+
+.. code-block:: python
 
     from authlib.integrations.httpx_client import AsyncOAuth2Client
     from authlib.oauth2.rfc7523 import PrivateKeyJWT
@@ -81,23 +87,27 @@ Async OAuth 2.0
 
 The async version of :class:`AsyncOAuth2Client` works the same as
 :ref:`OAuth 2 Session <oauth_2_session>`, except that we need to add ``await`` when
-required::
+required:
+
+.. code-block:: python
 
     # fetching access token
-    token = await client.fetch_token(token_endpoint, ...)
+    token = await client.fetch_token(token_endpoint)
 
     # normal requests
-    await client.get(...)
-    await client.post(...)
-    await client.put(...)
-    await client.delete(...)
+    await client.get(url)
+    await client.post(url)
+    await client.put(url)
+    await client.delete(url)
 
 
 Auto Update Token
 ~~~~~~~~~~~~~~~~~
 
 The :class:`AsyncOAuth2Client` also supports ``update_token`` parameter,
-the ``update_token`` can either be sync and async. For instance::
+the ``update_token`` can either be sync and async. For instance:
+
+.. code-block:: python
 
     async def update_token(token, refresh_token=None, access_token=None):
         if refresh_token:
@@ -125,7 +135,11 @@ OAuth 2.0 Authorization Grants. It is also know as service account. A configured
 which means you can just use it.
 
 Take Google Service Account as an example, with the information in your
-service account JSON configure file::
+service account JSON configure file:
+
+.. skip: next "reads a service account file"
+
+.. code-block:: python
 
     import json
     from authlib.integrations.httpx_client import AsyncAssertionClient
@@ -161,22 +175,26 @@ Close Client Hint
 
 Developers SHOULD **close** a HTTPX2 Session when the jobs are done. You
 can call ``.close()`` manually, or use a ``with`` context to automatically
-close the session::
+close the session:
 
-    client = OAuth2Client(client_id, client_secret)
+.. code-block:: python
+
+    client = OAuth2Client(client_id, client_secret, token=token)
     client.get(url)
     client.close()
 
-    with OAuth2Client(client_id, client_secret) as client:
+    with OAuth2Client(client_id, client_secret, token=token) as client:
         client.get(url)
 
-For **async** OAuth Client, use ``await client.close()``::
+For **async** OAuth Client, use ``await client.aclose()``:
 
-    client = AsyncOAuth2Client(client_id, client_secret)
+.. code-block:: python
+
+    client = AsyncOAuth2Client(client_id, client_secret, token=token)
     await client.get(url)
-    await client.close()
+    await client.aclose()
 
-    async with AsyncOAuth2Client(client_id, client_secret) as client:
+    async with AsyncOAuth2Client(client_id, client_secret, token=token) as client:
         await client.get(url)
 
 Our :ref:`frameworks_clients` will close every session automatically, no need

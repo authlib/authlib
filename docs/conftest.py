@@ -5,6 +5,8 @@ the names that the modules of the guide export. The examples may show their
 imports or not.
 """
 
+import ast
+import asyncio
 import doctest
 import functools
 import importlib
@@ -18,6 +20,10 @@ import time
 import unittest
 from pathlib import Path
 
+import httpx2
+import requests
+from _oauth_provider import LoggedInSession
+from _oauth_provider import OAuthProvider
 from cachelib import SimpleCache
 from django.apps import apps
 from django.conf import settings
@@ -30,8 +36,10 @@ from joserfc.jwk import RSAKey
 from sybil import Document
 from sybil import Region
 from sybil import Sybil
+from sybil.evaluators.python import PythonEvaluator
+from sybil.evaluators.python import pad
+from sybil.parsers.rest import CodeBlockParser
 from sybil.parsers.rest import DocTestParser
-from sybil.parsers.rest import PythonCodeBlockParser
 from sybil.parsers.rest import SkipParser
 
 import authlib.oauth2
@@ -39,11 +47,11 @@ import authlib.oidc
 from authlib.common.security import generate_token
 from authlib.integrations.flask_oauth2 import AuthorizationServer
 from authlib.integrations.flask_oauth2 import ResourceProtector
+from authlib.integrations.requests_client import OAuth2Session
 from authlib.integrations.sqla_oauth2 import OAuth2AuthorizationCodeMixin
 from authlib.integrations.sqla_oauth2 import OAuth2ClientMixin
 from authlib.integrations.sqla_oauth2 import OAuth2TokenMixin
 from authlib.oauth1.rfc5849.base_server import BaseServer
-from authlib.oauth2 import AuthorizationSession
 from authlib.oauth2.rfc6749 import grants
 from authlib.oauth2.rfc6750 import BearerTokenValidator
 from authlib.oauth2.rfc7591 import ClientRegistrationEndpoint
@@ -65,16 +73,6 @@ _FLASK_SERVER_MODULES = [
 def _rsa_key(kid):
     """Generate an RSA key once for all pages."""
     return RSAKey.generate_key(2048, parameters={"kid": kid}, private=True)
-
-
-class _LoggedInSession(AuthorizationSession):
-    """A session where the user has just logged in."""
-
-    def get_interaction_time(self, request, interaction):
-        if interaction == "login":
-            return int(time.time())
-
-        return None
 
 
 _MODULE_DIRECTIVE = re.compile(r"^\.\. (?:current)?module:: (\S+)", re.MULTILINE)
@@ -129,9 +127,35 @@ def _parse_module_directives(document):
         )
 
 
+class _AwaitPythonEvaluator(PythonEvaluator):
+    """Run a Python example that may use await outside of a function.
+
+    The examples of a page share one event loop, as they share their objects.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.flags |= ast.PyCF_ALLOW_TOP_LEVEL_AWAIT
+
+    def __call__(self, example):
+        source = pad(example.parsed, example.line + example.parsed.line_offset)
+        code = compile(
+            source, example.path, "exec", flags=self.flags, dont_inherit=True
+        )
+        result = eval(code, example.namespace)
+        del example.namespace["__builtins__"]
+        if not inspect.iscoroutine(result):
+            return
+
+        if "_loop" not in example.namespace:
+            example.namespace["_loop"] = asyncio.new_event_loop()
+
+        example.namespace["_loop"].run_until_complete(result)
+
+
 _PARSERS = [
     _parse_module_directives,
-    PythonCodeBlockParser(),
+    CodeBlockParser(language="python", evaluator=_AwaitPythonEvaluator()),
     DocTestParser(optionflags=doctest.ELLIPSIS),
     SkipParser(),
 ]
@@ -236,7 +260,7 @@ def _setup_flask_server(namespace):
     def _authorize():
         """Authorize the request for the first user."""
         user = User.query.first()
-        session = _LoggedInSession(user, {})
+        session = LoggedInSession(user, {})
         grant = server.get_consent_grant(session=session)
         return server.create_authorization_response(grant=grant, grant_user=user)
 
@@ -415,6 +439,14 @@ def _setup_django_server(namespace):
     namespace["_AuthorizationCodeGrant"] = grants.AuthorizationCodeGrant
 
 
+def _restore_insecure_transport(namespace):
+    """Restore the AUTHLIB_INSECURE_TRANSPORT variable of before the setup."""
+    if namespace["_insecure_transport"] is None:
+        os.environ.pop("AUTHLIB_INSECURE_TRANSPORT", None)
+    else:
+        os.environ["AUTHLIB_INSECURE_TRANSPORT"] = namespace["_insecure_transport"]
+
+
 def _teardown_django(namespace):
     """Drop the tables, forget the models and restore the settings."""
     if "_provider_settings" in namespace:
@@ -430,10 +462,7 @@ def _teardown_django(namespace):
         BaseServer.SIGNATURE_METHODS.clear()
         BaseServer.SIGNATURE_METHODS.update(namespace["_signature_methods"])
 
-    if namespace["_insecure_transport"] is None:
-        os.environ.pop("AUTHLIB_INSECURE_TRANSPORT", None)
-    else:
-        os.environ["AUTHLIB_INSECURE_TRANSPORT"] = namespace["_insecure_transport"]
+    _restore_insecure_transport(namespace)
 
     models = list(apps.get_app_config(_DJANGO_APP).get_models())
     blocker = namespace.get("django_db_blocker")
@@ -449,13 +478,27 @@ def _teardown_django(namespace):
     apps.clear_cache()
 
 
-def _sybil(pattern, setup, teardown=_teardown_flask, fixtures=()):
+def _close_loop(teardown):
+    """Close the event loop of the page after its teardown."""
+
+    def close(namespace):
+        try:
+            teardown(namespace)
+        finally:
+            if "_loop" in namespace:
+                namespace["_loop"].close()
+
+    return close
+
+
+def _sybil(pattern, setup, teardown=_teardown_flask, fixtures=(), excludes=()):
     """Run the examples of the pages that match the pattern."""
     return Sybil(
         parsers=_PARSERS,
         patterns=[pattern],
+        excludes=list(excludes),
         setup=setup,
-        teardown=teardown,
+        teardown=_close_loop(teardown),
         fixtures=list(fixtures),
     )
 
@@ -464,7 +507,36 @@ _sybils = _sybil(_FLASK_SERVER + "authorization-server.rst", _setup_flask_app) +
     _FLASK_SERVER + "grants.rst", _setup_flask_server
 )
 _sybils.append(_sybil(_FLASK_SERVER + "openid-connect.rst", _setup_flask_oidc))
-_sybils.append(_sybil("oauth2/specs/*.rst", _setup_flask_specs))
+_sybils.append(
+    _sybil(
+        "oauth2/specs/*.rst", _setup_flask_specs, excludes=["oauth2/specs/rfc7523.rst"]
+    )
+)
+
+
+def _setup_flask_specs_with_provider(namespace):
+    """Define what the Flask guide defines, and send the client requests to a provider."""
+    provider = OAuthProvider(_rsa_key("provider"))
+    provider.start()
+    namespace["provider"] = provider
+    _setup_flask_specs(namespace)
+
+
+def _teardown_flask_specs_with_provider(namespace):
+    """Stop the provider, and close the Flask application."""
+    if "provider" in namespace:
+        namespace["provider"].stop()
+
+    _teardown_flask(namespace)
+
+
+_sybils.append(
+    _sybil(
+        "oauth2/specs/rfc7523.rst",
+        _setup_flask_specs_with_provider,
+        _teardown_flask_specs_with_provider,
+    )
+)
 for _page in [
     "oauth2/concepts.rst",
     "oauth2/authorization-server/index.rst",
@@ -552,6 +624,50 @@ for _page, _setup in [
             ["transactional_db", "django_db_blocker"],
         )
     )
+
+_OAUTH2_CLIENT_MODULES = [
+    "authlib.oauth2",
+    "authlib.oauth2.rfc6749",
+    "authlib.oauth2.rfc7523",
+    "authlib.oauth2.rfc7636",
+    "authlib.integrations.httpx_client",
+    "authlib.integrations.requests_client",
+]
+
+
+def _setup_oauth2_client(namespace):
+    """Send the requests of the client examples to a provider."""
+    _import_oauth2_names(namespace, _OAUTH2_CLIENT_MODULES)
+    provider = OAuthProvider(_rsa_key("provider"))
+    provider.start()
+    namespace["provider"] = provider
+    token_endpoint = "https://example.com/oauth/token"
+    namespace.update(
+        requests=requests,
+        httpx2=httpx2,
+        app=_DocsFlask(__name__),
+        client_id="client-id",
+        client_secret="client-secret",
+        token_endpoint=token_endpoint,
+        url="https://api.example.com/data",
+        token=OAuth2Session("client-id", "client-secret").fetch_token(
+            token_endpoint, grant_type="client_credentials"
+        ),
+        authorize=provider.authorize,
+    )
+
+
+def _teardown_oauth2_client(namespace):
+    """Send the requests to the network again."""
+    if "provider" in namespace:
+        namespace["provider"].stop()
+
+
+for _page in [
+    "oauth2/client/index.rst",
+    "oauth2/client/http/*.rst",
+]:
+    _sybils.append(_sybil(_page, _setup_oauth2_client, _teardown_oauth2_client))
 
 _DJANGO_SERVER = "oauth2/authorization-server/django/"
 for _page, _setup in [

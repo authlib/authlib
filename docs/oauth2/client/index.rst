@@ -10,23 +10,27 @@ Client
 Authlib provides OAuth 2.0 client implementations for two distinct use cases:
 
 **HTTP Clients** — your Python code fetches tokens and calls APIs directly.
-Suitable for scripts, CLIs, service-to-service communication::
+Suitable for scripts, CLIs, service-to-service communication:
+
+.. code-block:: python
 
     from authlib.integrations.requests_client import OAuth2Session
 
     client = OAuth2Session(client_id, client_secret)
-    token = client.fetch_token(token_endpoint, ...)
+    token = client.fetch_token(token_endpoint)
     resp = client.get('https://api.example.com/data')
 
 **Web Clients** — your web application delegates authentication to an OAuth 2.0
 provider. Works with any provider: well-known services (GitHub, Google…) or
 your own authorization server. Integrations for Flask, Django, Starlette and
-FastAPI::
+FastAPI:
+
+.. code-block:: python
 
     from authlib.integrations.flask_client import OAuth
 
     oauth = OAuth(app)
-    github = oauth.register('github', client_id='...', client_secret='...', ...)
+    github = oauth.register('github', client_id='...', client_secret='...')
 
     @app.route('/login')
     def login():

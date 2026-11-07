@@ -260,8 +260,6 @@ Authlib RFC7523 provides two more client authentication methods for :ref:`OAuth 
 
 Here is an example of how to register ``client_secret_jwt`` for ``OAuth2Session``:
 
-.. skip: next "calls a remote server"
-
 .. code-block:: python
 
     from authlib.oauth2.rfc7523 import ClientSecretJWT
@@ -277,7 +275,7 @@ Here is an example of how to register ``client_secret_jwt`` for ``OAuth2Session`
 
 How about ``private_key_jwt``? It is the same as ``client_secret_jwt``:
 
-.. skip: next "calls a remote server"
+.. skip: next "reads a private key file"
 
 .. code-block:: python
 

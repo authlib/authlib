@@ -36,7 +36,9 @@ Using ``client_secret_jwt`` in Requests
 
 There are **three default client authentication methods** defined for
 ``OAuth2Session``. But what if you want to use ``client_secret_jwt`` instead?
-``client_secret_jwt`` is defined in RFC7523, use it for Requests::
+``client_secret_jwt`` is defined in RFC7523, use it for Requests:
+
+.. code-block:: python
 
     from authlib.integrations.requests_client import OAuth2Session
     from authlib.oauth2.rfc7523 import ClientSecretJWT
@@ -54,7 +56,11 @@ Using ``private_key_jwt`` in Requests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 What if you want to use ``private_key_jwt`` client authentication method,
-here is the way with  ``PrivateKeyJWT`` for Requests::
+here is the way with  ``PrivateKeyJWT`` for Requests:
+
+.. skip: next "reads a private key file"
+
+.. code-block:: python
 
     from authlib.integrations.requests_client import OAuth2Session
     from authlib.oauth2.rfc7523 import PrivateKeyJWT
@@ -77,9 +83,11 @@ OAuth2Auth
 
 Already obtained access token? We can use :class:`OAuth2Auth` directly in
 requests. But this OAuth2Auth can not refresh token automatically for you.
-Here is how to use it in requests::
+Here is how to use it in requests:
 
-    token = {'token_type': 'bearer', 'access_token': '....', ...}
+.. code-block:: python
+
+    token = {'token_type': 'bearer', 'access_token': '....'}
     auth = OAuth2Auth(token)
     requests.get(url, auth=auth)
 
@@ -109,13 +117,15 @@ Close Session Hint
 
 Developers SHOULD **close** a Requests Session when the jobs are done. You
 can call ``.close()`` manually, or use a ``with`` context to automatically
-close the session::
+close the session:
 
-    session = OAuth2Session(client_id, client_secret)
+.. code-block:: python
+
+    session = OAuth2Session(client_id, client_secret, token=token)
     session.get(url)
     session.close()
 
-    with OAuth2Session(client_id, client_secret) as session:
+    with OAuth2Session(client_id, client_secret, token=token) as session:
         session.get(url)
 
 
@@ -126,7 +136,9 @@ With mutual TLS client authentication (:rfc:`8705#section-2`), the client
 proves its identity with a TLS certificate. Authlib does not implement
 :rfc:`8705`. Give the certificate to Requests with the ``cert`` attribute, and
 use the ``none`` method, so that the client sends its ``client_id`` without a
-secret::
+secret:
+
+.. code-block:: python
 
     session = OAuth2Session(client_id, token_endpoint_auth_method='none')
     session.cert = ('/path/to/client-cert.pem', '/path/to/client-key.pem')
