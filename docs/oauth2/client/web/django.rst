@@ -17,7 +17,9 @@ Looking for OAuth 2.0 server?
 The Django client handles OAuth 2.0 services. Authlib has a shared API design
 among framework integrations. Get started with :ref:`frameworks_clients`.
 
-Create a registry with :class:`OAuth` object::
+Create a registry with :class:`OAuth` object:
+
+.. code-block:: python
 
     from authlib.integrations.django_client import OAuth
 
@@ -37,7 +39,9 @@ Configuration
 
 Authlib Django OAuth registry can load the configuration from your Django
 application settings automatically. Every key value pair can be omitted.
-They can be configured from your Django settings::
+They can be configured from your Django settings:
+
+.. code-block:: python
 
     AUTHLIB_OAUTH_CLIENTS = {
         'github': {
@@ -56,19 +60,23 @@ Routes for Authorization
 ------------------------
 
 Just like the example in :ref:`frameworks_clients`, everything is the same.
-But there is a hint to create ``redirect_uri`` with ``request`` in Django::
+But there is a hint to create ``redirect_uri`` with ``request`` in Django:
+
+.. code-block:: python
 
     def login(request):
         # build a full authorize callback uri
         redirect_uri = request.build_absolute_uri('/authorize')
-        return oauth.twitter.authorize_redirect(request, redirect_uri)
+        return oauth.github.authorize_redirect(request, redirect_uri)
 
 
 Auto Update Token via Signal
 ----------------------------
 
 Instead of defining an ``update_token`` method and passing it into OAuth registry,
-it is also possible to use signals to listen for token updates::
+it is also possible to use signals to listen for token updates:
+
+.. code-block:: python
 
     from django.dispatch import receiver
     from authlib.integrations.django_client import token_update
@@ -94,21 +102,32 @@ Django OpenID Connect Client
 
 An OpenID Connect client is no different than a normal OAuth 2.0 client. When
 registered with the ``openid`` scope, the built-in Django OAuth client will handle
-everything automatically::
+everything automatically:
+
+.. code-block:: python
 
     oauth.register(
         'google',
-        ...
+        client_id='Your Google client ID',
+        client_secret='Your Google client secret',
         server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
         client_kwargs={'scope': 'openid profile email'}
     )
 
-When we get the returned token::
+When we get the returned token:
+
+.. skip: next "fragment of the callback view"
+
+.. code-block:: python
 
     token = oauth.google.authorize_access_token(request)
 
 There should be a ``id_token`` in the response. Authlib has called `.parse_id_token`
-automatically, we can get ``userinfo`` in the ``token``::
+automatically, we can get ``userinfo`` in the ``token``:
+
+.. skip: next "fragment of the callback view"
+
+.. code-block:: python
 
     userinfo = token['userinfo']
 
@@ -131,7 +150,9 @@ RP-Initiated Logout
 -------------------
 
 To implement `OpenID Connect RP-Initiated Logout`_, use the ``logout_redirect`` method
-to redirect users to the provider's end session endpoint::
+to redirect users to the provider's end session endpoint:
+
+.. code-block:: python
 
     def logout(request):
         # Retrieve the ID token you stored during login
@@ -166,3 +187,21 @@ The ``logout_redirect`` method accepts:
     ``authorize_access_token()``.
 
 Find Django Google login example at https://github.com/authlib/demo-oauth-client/tree/master/django-google-login
+
+.. invisible-code-block: python
+
+    from django.contrib.sessions.backends.cache import SessionStore
+    from django.test import RequestFactory
+
+    oauth.register(
+        "github",
+        client_id="Your GitHub client ID",
+        client_secret="Your GitHub client secret",
+        access_token_url="https://github.com/login/oauth/access_token",
+        authorize_url="https://github.com/login/oauth/authorize",
+    )
+    request = RequestFactory().get("/login")
+    request.session = SessionStore()
+    response = login(request)
+    assert response.status_code == 302
+    assert response["Location"].startswith("https://github.com/login/oauth/authorize")

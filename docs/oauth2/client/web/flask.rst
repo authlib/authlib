@@ -19,13 +19,17 @@ Flask. Looking for OAuth 2.0 server?
 Flask OAuth client shares a similar API with Flask-OAuthlib, you can transfer
 your code from Flask-OAuthlib to Authlib with ease.
 
-Create a registry with :class:`OAuth` object::
+Create a registry with :class:`OAuth` object:
+
+.. code-block:: python
 
     from authlib.integrations.flask_client import OAuth
 
     oauth = OAuth(app)
 
-You can also initialize it later with :meth:`~OAuth.init_app` method::
+You can also initialize it later with :meth:`~OAuth.init_app` method:
+
+.. code-block:: python
 
     oauth = OAuth()
     oauth.init_app(app)
@@ -77,7 +81,9 @@ Routes for Authorization
 ------------------------
 
 Unlike the examples in :ref:`frameworks_clients`, Flask does not pass a ``request``
-into routes. In this case, the routes for authorization should look like::
+into routes. In this case, the routes for authorization should look like:
+
+.. code-block:: python
 
     from flask import url_for, redirect
 
@@ -100,7 +106,9 @@ Accessing OAuth Resources
 
 There is no ``request`` in accessing OAuth resources either. Just like above,
 we don't need to pass the ``request`` parameter, everything is handled by Authlib
-automatically::
+automatically:
+
+.. code-block:: python
 
     from flask import render_template
 
@@ -111,7 +119,11 @@ automatically::
         profile = resp.json()
         return render_template('github.html', profile=profile)
 
-In this case, our ``fetch_token`` could look like::
+In this case, our ``fetch_token`` could look like:
+
+.. skip: next "depends on the application models"
+
+.. code-block:: python
 
     from your_project import current_user
 
@@ -137,7 +149,9 @@ it is also possible to use a signal to listen for token updating.
 
 The signal requires the **blinker** library. Flask installs it since version 2.3.
 
-Connect the ``token_update`` signal::
+Connect the ``token_update`` signal:
+
+.. code-block:: python
 
     from authlib.integrations.flask_client import token_update
 
@@ -162,21 +176,32 @@ Flask OpenID Connect Client
 
 An OpenID Connect client is no different than a normal OAuth 2.0 client. When
 registered with ``openid`` scope, the built-in Flask OAuth client will handle everything
-automatically::
+automatically:
+
+.. code-block:: python
 
     oauth.register(
         'google',
-        ...
+        client_id='Your Google client ID',
+        client_secret='Your Google client secret',
         server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
         client_kwargs={'scope': 'openid profile email'}
     )
 
-When we get the returned token::
+When we get the returned token:
+
+.. skip: next "fragment of the callback view"
+
+.. code-block:: python
 
     token = oauth.google.authorize_access_token()
 
 There should be a ``id_token`` in the response. Authlib has called `.parse_id_token`
-automatically, we can get ``userinfo`` in the ``token``::
+automatically, we can get ``userinfo`` in the ``token``:
+
+.. skip: next "fragment of the callback view"
+
+.. code-block:: python
 
     userinfo = token['userinfo']
 
@@ -199,7 +224,9 @@ RP-Initiated Logout
 -------------------
 
 To implement `OpenID Connect RP-Initiated Logout`_, use the ``logout_redirect`` method
-to redirect users to the provider's end session endpoint::
+to redirect users to the provider's end session endpoint:
+
+.. code-block:: python
 
     @app.route('/logout')
     def logout():
@@ -240,3 +267,19 @@ Here are some example projects for you to learn Flask OAuth 2.0 client integrati
 1. `Flask Google Login`_.
 
 .. _`Flask Google Login`: https://github.com/authlib/demo-oauth-client/tree/master/flask-google-login
+
+.. invisible-code-block: python
+
+    oauth.register(
+        "github",
+        client_id="Your GitHub client ID",
+        client_secret="Your GitHub client secret",
+        access_token_url="https://github.com/login/oauth/access_token",
+        authorize_url="https://github.com/login/oauth/authorize",
+        api_base_url="https://api.github.com/",
+    )
+    http = app.test_client()
+    response = http.get("/login")
+    response = http.get(consent(response.location))
+    assert response.status_code == 302, response.data
+    assert response.location == "/"

@@ -23,7 +23,9 @@ Read :ref:`frameworks_clients` at first.
 
 The difference between Starlette and Flask/Django integrations is Starlette
 is **async**. We will use ``await`` for the functions we need to call. But
-first, let's create an :class:`OAuth` instance::
+first, let's create an :class:`OAuth` instance:
+
+.. code-block:: python
 
     from authlib.integrations.starlette_client import OAuth
 
@@ -35,13 +37,15 @@ with Twitter, GitHub, Google etc.
 Register Remote Apps
 --------------------
 
-``oauth.register`` is the same as :ref:`frameworks_clients`::
+``oauth.register`` is the same as :ref:`frameworks_clients`:
+
+.. code-block:: python
 
     oauth.register(
         'google',
-        client_id='...',
-        client_secret='...',
-        ...
+        client_id='Your Google client ID',
+        client_secret='Your Google client secret',
+        server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
     )
 
 However, unlike Flask/Django, Starlette OAuth registry uses HTTPX2
@@ -53,7 +57,9 @@ Routes for Authorization
 ------------------------
 
 Just like the examples in :ref:`frameworks_clients`, but Starlette is **async**,
-the routes for authorization should look like::
+the routes for authorization should look like:
+
+.. code-block:: python
 
     from starlette.responses import RedirectResponse
 
@@ -76,21 +82,32 @@ Starlette OpenID Connect
 
 An OpenID Connect client is no different than a normal OAuth 2.0 client, just add
 ``openid`` scope when ``.register``. The built-in Starlette OAuth client will handle
-everything automatically::
+everything automatically:
+
+.. code-block:: python
 
     oauth.register(
         'google',
-        ...
+        client_id='Your Google client ID',
+        client_secret='Your Google client secret',
         server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
         client_kwargs={'scope': 'openid profile email'}
     )
 
-When we get the returned token::
+When we get the returned token:
+
+.. skip: next "fragment of the callback view"
+
+.. code-block:: python
 
     token = await oauth.google.authorize_access_token(request)
 
 There should be a ``id_token`` in the response. Authlib has called `.parse_id_token`
-automatically, we can get ``userinfo`` in the ``token``::
+automatically, we can get ``userinfo`` in the ``token``:
+
+.. skip: next "fragment of the callback view"
+
+.. code-block:: python
 
     userinfo = token['userinfo']
 
@@ -113,7 +130,9 @@ RP-Initiated Logout
 -------------------
 
 To implement `OpenID Connect RP-Initiated Logout`_, use the ``logout_redirect`` method
-to redirect users to the provider's end session endpoint::
+to redirect users to the provider's end session endpoint:
+
+.. code-block:: python
 
     async def logout(request):
         # Retrieve the ID token you stored during login
@@ -156,3 +175,14 @@ Examples
 We have Starlette demos at https://github.com/authlib/demo-oauth-client
 
 1. `Starlette Google login <https://github.com/authlib/demo-oauth-client/tree/master/starlette-google-login>`_
+
+.. invisible-code-block: python
+
+    from starlette.testclient import TestClient
+
+    http = TestClient(app)
+    response = http.get("/login/google", follow_redirects=False)
+    callback = consent(response.headers["location"])
+    response = http.get(callback, follow_redirects=False)
+    assert response.status_code == 307, response.text
+    assert response.headers["location"] == "/"

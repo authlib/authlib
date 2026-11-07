@@ -91,7 +91,7 @@ attacks. Without ``state``, the client does not check it:
 
 .. invisible-code-block: python
 
-    authorization_response = authorize(uri)
+    authorization_response = consent(uri)
 
 .. code-block:: pycon
 
@@ -111,7 +111,7 @@ passed to the constructor is checked by ``fetch_token``:
 .. invisible-code-block: python
 
     uri, state = client.create_authorization_url(authorization_endpoint)
-    authorization_response = authorize(uri)
+    authorization_response = consent(uri)
 
     def restore_previous_state():
         return state
@@ -141,7 +141,7 @@ After the redirection, fetch the token with the same ``code_verifier``:
 
 .. invisible-code-block: python
 
-    authorization_response = authorize(uri)
+    authorization_response = consent(uri)
 
 .. code-block:: pycon
 
@@ -179,7 +179,7 @@ Fetch access token from the fragment with ``.fetch_token`` method:
 
 .. invisible-code-block: python
 
-    authorization_response = authorize(uri)
+    authorization_response = consent(uri)
 
 .. code-block:: pycon
 
@@ -537,7 +537,7 @@ a ``id_token``:
 
 .. invisible-code-block: python
 
-    authorization_response = authorize(uri)
+    authorization_response = consent(uri)
 
 .. code-block:: pycon
 

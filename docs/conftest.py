@@ -33,6 +33,9 @@ from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from joserfc.jwk import KeySet
 from joserfc.jwk import RSAKey
+from starlette.applications import Starlette
+from starlette.middleware import Middleware
+from starlette.middleware.sessions import SessionMiddleware
 from sybil import Document
 from sybil import Region
 from sybil import Sybil
@@ -45,6 +48,7 @@ from sybil.parsers.rest import SkipParser
 import authlib.oauth2
 import authlib.oidc
 from authlib.common.security import generate_token
+from authlib.integrations.django_client import token_update as django_token_update
 from authlib.integrations.flask_oauth2 import AuthorizationServer
 from authlib.integrations.flask_oauth2 import ResourceProtector
 from authlib.integrations.requests_client import OAuth2Session
@@ -478,6 +482,10 @@ def _teardown_django(namespace):
     apps.clear_cache()
 
 
+def _teardown_nothing(namespace):
+    """Leave the page as it is, for the pages that only import names."""
+
+
 def _close_loop(teardown):
     """Close the event loop of the page after its teardown."""
 
@@ -637,23 +645,15 @@ _OAUTH2_CLIENT_MODULES = [
 
 def _setup_oauth2_client(namespace):
     """Send the requests of the client examples to a provider."""
+    _start_provider(namespace)
     _import_oauth2_names(namespace, _OAUTH2_CLIENT_MODULES)
-    provider = OAuthProvider(_rsa_key("provider"))
-    provider.start()
-    namespace["provider"] = provider
-    token_endpoint = "https://example.com/oauth/token"
     namespace.update(
         requests=requests,
         httpx2=httpx2,
         app=_DocsFlask(__name__),
-        client_id="client-id",
-        client_secret="client-secret",
-        token_endpoint=token_endpoint,
-        url="https://api.example.com/data",
         token=OAuth2Session("client-id", "client-secret").fetch_token(
-            token_endpoint, grant_type="client_credentials"
+            namespace["token_endpoint"], grant_type="client_credentials"
         ),
-        authorize=provider.authorize,
     )
 
 
@@ -668,6 +668,83 @@ for _page in [
     "oauth2/client/http/*.rst",
 ]:
     _sybils.append(_sybil(_page, _setup_oauth2_client, _teardown_oauth2_client))
+
+
+def _start_provider(namespace):
+    """Send the HTTP requests of the page to a provider, and give the client values."""
+    provider = OAuthProvider(_rsa_key("provider"))
+    provider.start()
+    namespace.update(
+        provider=provider,
+        consent=provider.authorize,
+        client_id="client-id",
+        client_secret="client-secret",
+        token_endpoint="https://example.com/oauth/token",
+        url="https://api.example.com/data",
+        private_key=_rsa_key("private"),
+    )
+
+
+def _setup_flask_client(namespace):
+    """Give the names of the Flask client guide, and its application."""
+    _start_provider(namespace)
+    _import_oauth2_names(namespace, ["flask", "authlib.integrations.flask_client"])
+    app = _DocsFlask(__name__)
+    app.secret_key = "secret-key"
+    namespace["app"] = app
+
+
+def _setup_django_client(namespace):
+    """Give the names of the Django client guide."""
+    _start_provider(namespace)
+    _import_oauth2_names(
+        namespace,
+        ["django.http", "django.shortcuts", "authlib.integrations.django_client"],
+    )
+
+
+def _teardown_django_client(namespace):
+    """Stop the provider, and disconnect the signal receivers of the page."""
+    _teardown_oauth2_client(namespace)
+    if "on_token_update" in namespace:
+        django_token_update.disconnect(namespace["on_token_update"])
+
+
+def _setup_client_names(namespace):
+    """Give the names of the OAuth 2 client guides, for the pages without requests."""
+    _import_oauth2_names(namespace, _OAUTH2_CLIENT_MODULES)
+
+
+def _setup_starlette_client(namespace):
+    """Give the names of the Starlette client guide, and its application."""
+    _start_provider(namespace)
+    _import_oauth2_names(
+        namespace,
+        ["starlette.responses", "authlib.integrations.starlette_client"],
+    )
+    middleware = [Middleware(SessionMiddleware, secret_key="secret-key")]
+    namespace["app"] = Starlette(middleware=middleware)
+
+
+_WEB_CLIENT = "oauth2/client/web/"
+for _page, _setup in [
+    (_WEB_CLIENT + "flask.rst", _setup_flask_client),
+    (_WEB_CLIENT + "starlette.rst", _setup_starlette_client),
+]:
+    _sybils.append(_sybil(_page, _setup, _teardown_oauth2_client))
+
+for _page in [_WEB_CLIENT + "api.rst", _WEB_CLIENT + "fastapi.rst"]:
+    _sybils.append(_sybil(_page, _setup_client_names, _teardown_nothing))
+
+for _page in [_WEB_CLIENT + "index.rst", _WEB_CLIENT + "django.rst"]:
+    _sybils.append(
+        _sybil(
+            _page,
+            _setup_django_client,
+            _teardown_django_client,
+            ["django_test_environment"],
+        )
+    )
 
 _DJANGO_SERVER = "oauth2/authorization-server/django/"
 for _page, _setup in [

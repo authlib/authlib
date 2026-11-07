@@ -53,6 +53,7 @@ _CLIENTS = {
     "client-id": "client-secret",
     "client_id": "client_secret",
     "your-client-id": "your-client-secret",
+    "{{ your-github-client-id }}": "{{ your-github-client-secret }}",
     "Your GitHub client ID": "Your GitHub client secret",
     "Your Google client ID": "Your Google client secret",
 }
