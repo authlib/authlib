@@ -815,6 +815,51 @@ def test_request_with_refresh_token():
             assert resp.text == "hi"
 
 
+def test_request_with_expired_token_sends_access_token_params():
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        api_base_url="https://resource.test/api",
+        access_token_url="https://provider.test/token",
+        access_token_params={"audience": "api"},
+        client_kwargs={"grant_type": "client_credentials"},
+    )
+    expired_token = {
+        "token_type": "Bearer",
+        "access_token": "expired",
+        "expires_at": 1566465749,
+    }
+    bodies = []
+
+    def fake_send(sess, req, **kwargs):
+        bodies.append(req.body)
+        resp = mock.MagicMock()
+        resp.json = get_bearer_token
+        resp.status_code = 200
+        return resp
+
+    with app.test_request_context():
+        with mock.patch("requests.sessions.Session.send", fake_send):
+            client.get("/api/user", token=expired_token)
+
+    assert "audience=api" in bodies[0]
+
+
+def test_server_metadata_cannot_set_access_token_params():
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register("dev", client_id="dev", client_secret="dev")
+
+    session = client._get_oauth_client(access_token_params={"audience": "metadata"})
+
+    assert session.metadata["access_token_params"] is None
+
+
 def test_request_without_token():
     app = Flask(__name__)
     app.secret_key = "!"

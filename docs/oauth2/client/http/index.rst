@@ -382,7 +382,9 @@ with a saved token instead, pass ``grant_type``:
     ...     token_endpoint=token_endpoint, grant_type="client_credentials",
     ... )
 
-With the framework integrations, put ``grant_type`` in ``client_kwargs``.
+With the framework integrations, put ``grant_type`` in ``client_kwargs``. Extra
+parameters set with ``access_token_params``, such as ``audience``, are sent with
+these requests too.
 
 Manually refreshing tokens
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
