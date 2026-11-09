@@ -35,7 +35,7 @@ def compare_s256_code_challenge(code_verifier, code_challenge):
 
 class CodeChallenge:
     """CodeChallenge extension to Authorization Code Grant. It is used to
-    improve the security of Authorization Code flow for public clients by
+    improve the security of Authorization Code flow by
     sending extra "code_challenge" and "code_verifier" to the authorization
     server.
 
@@ -44,6 +44,9 @@ class CodeChallenge:
     Then register this extension via::
 
         server.register_grant(AuthorizationCodeGrant, [CodeChallenge(required=True)])
+
+    ``required=True`` requires PKCE for public clients, ``required="all"``
+    requires it for all clients, and ``required=False`` makes it optional.
     """
 
     #: defaults to "plain" if not present in the request
@@ -77,10 +80,11 @@ class CodeChallenge:
         challenge = request.payload.data.get("code_challenge")
         method = request.payload.data.get("code_challenge_method")
         if not challenge and not method:
-            # Per RFC 7636 §4.4.1, a server that requires PKCE for public
-            # clients rejects a request without code_challenge.
-            if self.required and request.client.check_endpoint_auth_method(
-                "none", "token"
+            # Per RFC 7636 §4.4.1, reject a missing challenge when PKCE
+            # is required for this client.
+            if self.required == "all" or (
+                self.required
+                and request.client.check_endpoint_auth_method("none", "token")
             ):
                 raise InvalidRequestError("Missing 'code_challenge'")
 
@@ -107,8 +111,10 @@ class CodeChallenge:
         request: OAuth2Request = grant.request
         verifier = request.form.get("code_verifier")
 
-        # public client MUST verify code challenge
-        if self.required and request.auth_method == "none" and not verifier:
+        # Require a verifier even for codes issued before enabling PKCE.
+        if (
+            self.required == "all" or (self.required and request.auth_method == "none")
+        ) and not verifier:
             raise InvalidRequestError("Missing 'code_verifier'")
 
         authorization_code = request.authorization_code

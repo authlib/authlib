@@ -358,3 +358,103 @@ def test_not_implemented_code_challenge_method(test_client):
                 "client_id": "client-id",
             },
         )
+
+
+@pytest.fixture(params=["none", "client_secret_basic", "client_secret_post"])
+def pkce_client(request, client, db):
+    metadata = dict(client.client_metadata)
+    metadata["token_endpoint_auth_method"] = request.param
+    client.set_client_metadata(metadata)
+    client.client_secret = "client-secret"
+    db.session.commit()
+    return request.param
+
+
+def token_request(test_client, auth_method, code, **parameters):
+    data = {"grant_type": "authorization_code", "code": code, **parameters}
+    headers = {}
+    if auth_method == "client_secret_basic":
+        headers = create_basic_header("client-id", "client-secret")
+    else:
+        data["client_id"] = "client-id"
+        if auth_method == "client_secret_post":
+            data["client_secret"] = "client-secret"
+    return test_client.post("/oauth/token", data=data, headers=headers).get_json()
+
+
+@pytest.mark.parametrize("method", ["get", "post"])
+@pytest.mark.parametrize("required", [False, True, "all"])
+def test_pkce_requirement_at_authorization_endpoint(
+    test_client, server, monkeypatch, pkce_client, method, required
+):
+    _, extensions = server._authorization_grants[0]
+    monkeypatch.setattr(extensions[0], "required", required)
+    response = getattr(test_client, method)(authorize_url + "&user_id=1")
+    if required == "all" or (required and pkce_client == "none"):
+        params = (
+            dict(url_decode(urlparse.urlparse(response.location).query))
+            if response.location
+            else json.loads(response.data)
+        )
+        assert params["error"] == "invalid_request"
+        assert params["error_description"] == "Missing 'code_challenge'"
+    elif method == "get":
+        assert response.status_code == 200
+    else:
+        params = dict(url_decode(urlparse.urlparse(response.location).query))
+        assert "code" in params
+
+
+@pytest.mark.parametrize("verifier_kind", ["valid", "missing", "mismatch"])
+def test_all_clients_s256(test_client, server, monkeypatch, pkce_client, verifier_kind):
+    _, extensions = server._authorization_grants[0]
+    monkeypatch.setattr(extensions[0], "required", "all")
+    verifier = generate_token(48)
+    challenge = create_s256_code_challenge(verifier)
+    response = test_client.post(
+        authorize_url + f"&code_challenge={challenge}&code_challenge_method=S256",
+        data={"user_id": "1"},
+    )
+    code = dict(url_decode(urlparse.urlparse(response.location).query))["code"]
+    parameters = {}
+    if verifier_kind == "valid":
+        parameters["code_verifier"] = verifier
+    elif verifier_kind == "mismatch":
+        parameters["code_verifier"] = generate_token(48)
+    result = token_request(test_client, pkce_client, code, **parameters)
+    if verifier_kind == "valid":
+        assert "access_token" in result
+    elif verifier_kind == "missing":
+        assert result["error"] == "invalid_request"
+        assert result["error_description"] == "Missing 'code_verifier'"
+    else:
+        assert result["error"] == "invalid_grant"
+
+
+def test_all_clients_reject_legacy_code_without_pkce(
+    test_client, server, monkeypatch, pkce_client
+):
+    _, extensions = server._authorization_grants[0]
+    monkeypatch.setattr(extensions[0], "required", False)
+    response = test_client.post(authorize_url, data={"user_id": "1"})
+    code = dict(url_decode(urlparse.urlparse(response.location).query))["code"]
+    monkeypatch.setattr(extensions[0], "required", "all")
+    result = token_request(test_client, pkce_client, code)
+    assert result["error"] == "invalid_request"
+    assert result["error_description"] == "Missing 'code_verifier'"
+
+
+@pytest.mark.parametrize("defer_errors", [False, True])
+def test_all_clients_validate_before_login(
+    test_client, server, monkeypatch, pkce_client, defer_errors
+):
+    _, extensions = server._authorization_grants[0]
+    monkeypatch.setattr(extensions[0], "required", "all")
+    monkeypatch.setattr(server, "defer_anonymous_errors", defer_errors)
+    response = test_client.get(authorize_url)
+    if defer_errors:
+        assert response.data == b"login"
+    else:
+        params = dict(url_decode(urlparse.urlparse(response.location).query))
+        assert params["error"] == "invalid_request"
+        assert params["error_description"] == "Missing 'code_challenge'"

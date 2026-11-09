@@ -123,13 +123,28 @@ endpoint rejects a public client that sends no ``code_verifier``.
 
 With ``required=False``, PKCE is optional for all clients.
 
-In both modes:
+With ``required="all"``, both public and confidential clients must use PKCE.
+Missing challenges and verifiers are rejected at the authorization and token
+endpoints respectively. This also rejects token requests for authorization
+codes issued without PKCE before this policy was enabled.
+
+Authorization errors follow the server's :ref:`authorization_session` policy.
+By default, errors for anonymous users are deferred until login; PKCE does not
+bypass this protection.
+
+.. code-block:: python
+
+    server.register_grant(MyAuthorizationCodeGrant, [CodeChallenge(required="all")])
+
+In all modes:
 
 * If the authorization request contained a ``code_challenge``, the token
   request must contain a matching ``code_verifier``.
 * If the authorization request contained no ``code_challenge``, a token
   request with a ``code_verifier`` is rejected.
-* Confidential clients may use PKCE, but are not required to.
+
+With ``required=True`` or ``required=False``, confidential clients may use PKCE,
+but are not required to.
 
 Per :rfc:`RFC 9700 §2.1.1 <9700#section-2.1.1>`, clients should use ``S256``. To refuse
 ``plain``, limit the supported methods:
