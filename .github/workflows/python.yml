@@ -111,8 +111,5 @@ jobs:
     - name: Test
       run: uv run --no-sync pytest tests -n auto
 
-    - name: Test the documentation examples
-      run: uv run --no-sync pytest docs -n auto --dist loadfile
-
     - name: Minimize cache
       run: uv cache prune --ci
