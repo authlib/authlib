@@ -119,6 +119,19 @@ def test_body_not_json_object(test_client, body):
     assert json.loads(rv.data)["error"] == "invalid_request"
 
 
+def test_body_without_json_content_type(test_client):
+    """The body is read as JSON whatever the Content-Type."""
+    headers = {"Authorization": "bearer abc"}
+    rv = test_client.post(
+        "/create_client",
+        data='{"client_name": "Authlib"}',
+        content_type="text/plain",
+        headers=headers,
+    )
+    assert rv.status_code == 201
+    assert json.loads(rv.data)["client_name"] == "Authlib"
+
+
 def test_create_client(test_client):
     headers = {"Authorization": "bearer abc"}
     body = {"client_name": "Authlib"}

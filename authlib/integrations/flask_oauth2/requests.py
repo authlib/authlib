@@ -54,7 +54,7 @@ class FlaskJsonPayload(JsonPayload):
     @cached_property
     def data(self):
         try:
-            return self._request.get_json(silent=True)
+            return self._request.get_json(force=True, silent=True)
         except RecursionError:
             return None
 
