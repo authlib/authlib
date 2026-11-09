@@ -1,0 +1,16 @@
+Added
+~~~~~
+
+- Optional ``issuer_id`` parameter on ``client_secret_jwt_sign``,
+  ``private_key_jwt_sign``, ``ClientSecretJWT`` and ``PrivateKeyJWT``
+  for :rfc:`10070` compliance: when set, it is used as the sole ``aud``
+  value of the client assertion and the assertion is explicitly typed
+  as ``client-authentication+jwt``. Without it, the audience remains
+  the token endpoint URL, as before (issue #1028).
+
+Changed
+~~~~~~~
+
+- ``JWTBearerClientAssertion`` now rejects client assertions whose
+  ``aud`` claim carries multiple values, per :rfc:`10070`'s tightened
+  audience requirements for client authentication.

@@ -509,3 +509,73 @@ def test_empty_audiences(test_client, server):
         == "No audience identifiers configured for this authorization server."
     )
     assert "access_token" not in resp
+
+
+def test_client_assertion_with_issuer_id_uses_sole_audience_and_explicit_type():
+    # RFC 10070 updates RFC 7523 Section 3: for client authentication the
+    # "aud" claim MUST use the issuer identifier as its sole value, and the
+    # JWT SHOULD be explicitly typed. Passing issuer_id opts into this.
+    from joserfc import jwt as _jwt
+
+    assertion = client_secret_jwt_sign(
+        HMAC_SECRET,
+        "client-id",
+        "https://provider.test/oauth/token",
+        issuer_id="https://provider.test",
+    )
+    token = _jwt.decode(assertion, secret_key)
+    assert token.header["typ"] == "client-authentication+jwt"
+    assert token.claims["aud"] == "https://provider.test"
+    assert token.claims["iss"] == "client-id"
+    assert token.claims["sub"] == "client-id"
+
+
+def test_client_assertion_without_issuer_id_keeps_legacy_audience_and_type():
+    # Backwards compatibility: without issuer_id the audience remains the
+    # token endpoint and no explicit type is added.
+    from joserfc import jwt as _jwt
+
+    assertion = client_secret_jwt_sign(
+        HMAC_SECRET, "client-id", "https://provider.test/oauth/token"
+    )
+    token = _jwt.decode(assertion, secret_key)
+    assert token.header.get("typ") != "client-authentication+jwt"
+    assert token.claims["aud"] == "https://provider.test/oauth/token"
+
+
+def test_client_auth_rejects_multi_valued_audience(test_client, server):
+    # RFC 10070 updates RFC 7523 Section 3: the "aud" claim MUST indicate
+    # only the issuer identifier of the authorization server.
+    from authlib.oauth2.rfc7523.assertion import sign_jwt_bearer_assertion
+
+    class JWTClientAuth(JWTBearerClientAssertion):
+        def get_audiences(self):
+            return ["https://provider.test", "https://provider.test/oauth/token"]
+
+        def validate_jti(self, claims, jti):
+            return True
+
+        def resolve_client_public_key(self, client):
+            return OctKey.import_key(client.client_secret)
+
+    server.register_client_auth_method(
+        JWTClientAuth.CLIENT_AUTH_METHOD,
+        JWTClientAuth(),
+    )
+    assertion = sign_jwt_bearer_assertion(
+        HMAC_SECRET,
+        issuer="client-id",
+        audience=["https://provider.test", "https://provider.test/oauth/token"],
+        subject="client-id",
+        alg="HS256",
+    )
+    rv = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "client_credentials",
+            "client_assertion_type": JWTBearerClientAssertion.CLIENT_ASSERTION_TYPE,
+            "client_assertion": assertion,
+        },
+    )
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_client"

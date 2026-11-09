@@ -86,6 +86,15 @@ class JWTBearerClientAssertion:
         if claims["sub"] != claims["iss"]:
             raise InvalidClientError(description="Issuer and Subject MUST match.")
 
+        # The "aud" claim MUST indicate only the issuer identifier of the
+        # authorization server as the audience of the JWT
+        # (:rfc:`10070` updates :rfc:`7523` Section 3).
+        audiences_claim = claims["aud"]
+        if isinstance(audiences_claim, list) and len(audiences_claim) != 1:
+            raise InvalidClientError(
+                description="The 'aud' claim MUST contain a single value."
+            )
+
         if self._validate_jti:
             if "jti" not in claims:
                 raise InvalidClientError(description="Missing JWT ID.")
@@ -98,10 +107,13 @@ class JWTBearerClientAssertion:
         server. Per RFC 7523 Section 3, the audience identifies the
         authorization server as an intended audience.
 
-        Developers MUST implement this method to return a non-empty list::
+        Developers MUST implement this method to return a non-empty list.
+        For client authentication, the list SHOULD contain only the issuer
+        identifier of the authorization server (:rfc:`10070` updates
+        :rfc:`7523` Section 3)::
 
             def get_audiences(self):
-                return ["https://example.com/oauth/token", "https://example.com"]
+                return ["https://example.com"]
 
         If this method returns an empty list, the assertion is rejected with
         an ``invalid_client`` error.

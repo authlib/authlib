@@ -73,8 +73,22 @@ def _sign(key, client_id, token_endpoint, alg, claims=None, **kwargs):
     issuer = client_id
     # REQUIRED. Subject. This MUST contain the client_id of the OAuth Client.
     subject = client_id
-    # The Audience SHOULD be the URL of the Authorization Server's Token Endpoint.
-    audience = token_endpoint
+    # Audience. RFC 7523 Section 3 allows the token endpoint URL; RFC 10070
+    # tightens this: for client authentication the "aud" claim value MUST
+    # use the issuer identifier of the authorization server as its sole
+    # value. Pass ``issuer_id`` to comply; the token endpoint remains the
+    # default for backwards compatibility.
+    issuer_id = kwargs.pop("issuer_id", None)
+    if issuer_id is not None:
+        audience = issuer_id
+        # Client authentication JWTs SHOULD be explicitly typed
+        # (:rfc:`10070` updates :rfc:`7523` Section 3.2). Only added when
+        # the tightened audience is used, so the type signal stays truthful.
+        header = dict(kwargs.pop("header", None) or {})
+        header.setdefault("typ", "client-authentication+jwt")
+        kwargs["header"] = header
+    else:
+        audience = token_endpoint
 
     return sign_jwt_bearer_assertion(
         key=key,

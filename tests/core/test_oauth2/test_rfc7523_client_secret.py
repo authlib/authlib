@@ -275,3 +275,18 @@ def test_sign_custom_expires_in():
 
     assert exp >= iat + 60
     assert exp <= iat + 60 + 2
+
+
+def test_client_secret_jwt_with_issuer_id():
+    """``ClientSecretJWT(issuer_id=...)`` signs a compliant assertion: the
+    issuer identifier is the sole ``aud`` value and the JWT is explicitly
+    typed, per :rfc:`10070`. The token endpoint is no longer the audience."""
+    jwt_signer = ClientSecretJWT(issuer_id="https://provider.test")
+    decoded, pre_sign_time, iat, exp, jti = sign_and_decode(
+        jwt_signer,
+        "client_id_1",
+        "secret",
+        "https://provider.test/oauth/access_token",
+    )
+    assert decoded.claims["aud"] == "https://provider.test"
+    assert decoded.header["typ"] == "client-authentication+jwt"

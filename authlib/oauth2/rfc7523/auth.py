@@ -34,6 +34,9 @@ class ClientSecretJWT:
     :param expires_in: Lifetime of the client assertion in seconds,
         default is 3600. Identity providers may cap this, e.g. Auth0
         rejects assertions that live longer than 5 minutes.
+    :param issuer_id: Issuer identifier of the authorization server. When
+        set, it replaces the token endpoint as the sole ``aud`` value and
+        the assertion is explicitly typed, per :rfc:`10070`.
     """
 
     name = "client_secret_jwt"
@@ -41,9 +44,19 @@ class ClientSecretJWT:
     expires_in = 3600
 
     def __init__(
-        self, token_endpoint=None, claims=None, headers=None, alg=None, expires_in=None
+        self,
+        token_endpoint=None,
+        claims=None,
+        headers=None,
+        alg=None,
+        expires_in=None,
+        issuer_id=None,
     ):
         self.token_endpoint = token_endpoint
+        #: Issuer identifier of the authorization server. When set, it is
+        #: used as the sole ``aud`` value of the client assertion and the
+        #: assertion is explicitly typed, per :rfc:`10070`.
+        self.issuer_id = issuer_id
         self.claims = claims
         self.headers = headers
         if alg is not None:
@@ -64,6 +77,7 @@ class ClientSecretJWT:
             header=self.headers,
             alg=self.alg,
             expires_in=self.expires_in,
+            issuer_id=self.issuer_id,
         )
 
     def __call__(self, auth, method, uri, headers, body):
@@ -134,4 +148,5 @@ class PrivateKeyJWT(ClientSecretJWT):
             header=self.headers,
             alg=self.alg,
             expires_in=self.expires_in,
+            issuer_id=self.issuer_id,
         )
