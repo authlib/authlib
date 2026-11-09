@@ -49,7 +49,7 @@ def client(user):
 
 @pytest.mark.parametrize("body", INVALID_JSON_BODIES)
 def test_register_body_not_json_object(factory, server, body):
-    """A body that is not a non-empty JSON object gets an invalid_request error."""
+    """A body that is not a JSON object gets an invalid_request error."""
     request = factory.post(
         "/register",
         data=body,
@@ -63,7 +63,7 @@ def test_register_body_not_json_object(factory, server, body):
 
 @pytest.mark.parametrize("body", INVALID_JSON_BODIES)
 def test_update_body_not_json_object(factory, server, token, body):
-    """A body that is not a non-empty JSON object gets an invalid_request error."""
+    """A body that is not a JSON object gets an invalid_request error."""
     request = factory.put(
         "/register/client-id",
         data=body,

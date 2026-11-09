@@ -180,7 +180,7 @@ def test_update_client(test_client, client, token):
 
 @pytest.mark.parametrize("body", INVALID_JSON_BODIES)
 def test_update_body_not_json_object(test_client, token, body):
-    """A body that is not a non-empty JSON object gets an invalid_request error."""
+    """A body that is not a JSON object gets an invalid_request error."""
     headers = {"Authorization": f"bearer {token.access_token}"}
     rv = test_client.put(
         "/configure_client/client-id",
