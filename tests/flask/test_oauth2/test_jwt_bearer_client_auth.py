@@ -389,6 +389,26 @@ def test_non_object_payload_assertion(test_client, server):
     assert resp["error_description"] == "Invalid JWT payload."
 
 
+def test_deeply_nested_payload_assertion(test_client, server):
+    register_jwt_client_auth(server)
+    client_assertion = jws.serialize_compact(
+        {"alg": "HS256"},
+        "[" * 30000 + "]" * 30000,
+        secret_key,
+    )
+    rv = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "client_credentials",
+            "client_assertion_type": JWTBearerClientAssertion.CLIENT_ASSERTION_TYPE,
+            "client_assertion": client_assertion,
+        },
+    )
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_client"
+    assert resp["error_description"] == "Invalid JWT payload."
+
+
 def test_missing_sub_claim(test_client, server):
     """The 'sub' claim is read before the claims are verified, so its absence
     must be reported as an OAuth error."""

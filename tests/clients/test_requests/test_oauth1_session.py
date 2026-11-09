@@ -255,6 +255,13 @@ def test_fetch_token_invalid_response():
             auth.fetch_request_token("https://provider.test/token")
 
 
+def test_fetch_token_deeply_nested_response():
+    auth = OAuth1Session("foo")
+    auth.send = mock_text_response('{"a":' + "[" * 1000000 + "]" * 1000000 + "}")
+    with pytest.raises(ValueError, match="Unable to decode token"):
+        auth.fetch_request_token("https://provider.test/token")
+
+
 def test_fetch_access_token_missing_verifier():
     _test_fetch_access_token_raises_error(OAuth1Session("foo"))
 

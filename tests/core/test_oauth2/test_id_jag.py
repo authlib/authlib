@@ -538,7 +538,10 @@ def test_extract_assertion_rejects_malformed_compact():
         g.validate_token_request()
 
 
-@pytest.mark.parametrize("payload", [b'["a"]', b"123", b'"str"', b"null", b"true"])
+@pytest.mark.parametrize(
+    "payload",
+    [b'["a"]', b"123", b'"str"', b"null", b"true", b"[" * 30000 + b"]" * 30000],
+)
 def test_extract_assertion_rejects_non_object_payload(rsa_private, payload):
     """A JSON payload that is not an object cannot hold claims."""
     header = {"alg": "RS256", "typ": "oauth-id-jag+jwt"}
