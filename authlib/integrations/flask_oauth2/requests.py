@@ -51,9 +51,12 @@ class FlaskJsonPayload(JsonPayload):
     def __init__(self, request: Request):
         self._request = request
 
-    @property
+    @cached_property
     def data(self):
-        return self._request.get_json()
+        try:
+            return self._request.get_json(silent=True)
+        except RecursionError:
+            return None
 
 
 class FlaskJsonRequest(JsonRequest):

@@ -2,6 +2,8 @@ import json
 import os
 from html.parser import HTMLParser
 
+import pytest
+
 from authlib.common.encoding import to_unicode
 from authlib.common.urls import url_decode
 
@@ -45,3 +47,16 @@ def parse_form(body):
     parser = FormParser()
     parser.feed(body.decode())
     return parser
+
+
+INVALID_JSON_BODIES = [
+    pytest.param("", id="empty"),
+    pytest.param("{", id="syntax"),
+    pytest.param(b"\xff", id="not-utf8"),
+    pytest.param("null", id="null"),
+    pytest.param("[]", id="empty-array"),
+    pytest.param("123", id="number"),
+    pytest.param('"client_name"', id="string"),
+    pytest.param('["client_name"]', id="array"),
+    pytest.param("[" * 1000000 + "]" * 1000000, id="deeply-nested"),
+]

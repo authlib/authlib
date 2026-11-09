@@ -10,6 +10,7 @@ from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.oauth2.rfc7591 import (
     ClientRegistrationEndpoint as _ClientRegistrationEndpoint,
 )
+from tests.util import INVALID_JSON_BODIES
 from tests.util import read_file_path
 
 from .models import Client
@@ -105,6 +106,17 @@ def test_invalid_request(test_client):
     rv = test_client.post("/create_client", json={}, headers=headers)
     resp = json.loads(rv.data)
     assert resp["error"] == "invalid_request"
+
+
+@pytest.mark.parametrize("body", INVALID_JSON_BODIES)
+def test_body_not_json_object(test_client, body):
+    """A body that is not a non-empty JSON object gets an invalid_request error."""
+    headers = {"Authorization": "bearer abc"}
+    rv = test_client.post(
+        "/create_client", data=body, content_type="application/json", headers=headers
+    )
+    assert rv.status_code == 400
+    assert json.loads(rv.data)["error"] == "invalid_request"
 
 
 def test_create_client(test_client):

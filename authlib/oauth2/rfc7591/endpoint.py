@@ -63,10 +63,10 @@ class ClientRegistrationEndpoint:
         return JsonResponse(body, status_code=201)
 
     def extract_client_metadata(self, request):
-        if not request.payload.data:
+        json_data = _get_json_object(request).copy()
+        if not json_data:
             raise InvalidRequestError()
 
-        json_data = request.payload.data.copy()
         software_statement = json_data.pop("software_statement", None)
         if software_statement and self.software_statement_alg_values_supported:
             data = self.extract_software_statement(software_statement, request)
@@ -192,3 +192,12 @@ class ClientRegistrationEndpoint:
                 return client
         """
         raise NotImplementedError()
+
+
+def _get_json_object(request):
+    """Return the request body, which must be a JSON object."""
+    data = request.payload.data
+    if not isinstance(data, dict):
+        raise InvalidRequestError()
+
+    return data

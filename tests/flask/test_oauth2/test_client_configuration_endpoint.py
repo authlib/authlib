@@ -4,6 +4,7 @@ from flask import json
 from authlib.oauth2.rfc7592 import (
     ClientConfigurationEndpoint as _ClientConfigurationEndpoint,
 )
+from tests.util import INVALID_JSON_BODIES
 
 from .models import Client
 from .models import Token
@@ -175,6 +176,20 @@ def test_update_client(test_client, client, token):
     assert resp["client_name"] == "NewAuthlib"
     assert client.client_name == "NewAuthlib"
     assert client.scope == ""
+
+
+@pytest.mark.parametrize("body", INVALID_JSON_BODIES)
+def test_update_body_not_json_object(test_client, token, body):
+    """A body that is not a non-empty JSON object gets an invalid_request error."""
+    headers = {"Authorization": f"bearer {token.access_token}"}
+    rv = test_client.put(
+        "/configure_client/client-id",
+        data=body,
+        content_type="application/json",
+        headers=headers,
+    )
+    assert rv.status_code == 400
+    assert json.loads(rv.data)["error"] == "invalid_request"
 
 
 def test_update_without_valid_token(test_client):

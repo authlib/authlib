@@ -8,6 +8,7 @@ from ..rfc6749 import UnauthorizedClientError
 from ..rfc6750 import InvalidTokenError
 from ..rfc7591 import InvalidClientMetadataError
 from ..rfc7591.claims import ClientMetadataClaims
+from ..rfc7591.endpoint import _get_json_object
 
 
 class ClientConfigurationEndpoint:
@@ -81,6 +82,8 @@ class ClientConfigurationEndpoint:
         return OAuth2Response(204, "", headers)
 
     def create_update_client_response(self, client, request):
+        data = _get_json_object(request)
+
         # The updated client metadata fields request MUST NOT include the
         # 'registration_access_token', 'registration_client_uri',
         # 'client_secret_expires_at', or 'client_id_issued_at' fields
@@ -91,11 +94,11 @@ class ClientConfigurationEndpoint:
             "client_id_issued_at",
         )
         for k in must_not_include:
-            if k in request.payload.data:
+            if k in data:
                 raise InvalidRequestError()
 
         # The client MUST include its 'client_id' field in the request
-        client_id = request.payload.data.get("client_id")
+        client_id = data.get("client_id")
         if not client_id:
             raise InvalidRequestError()
         if client_id != client.get_client_id():
@@ -104,8 +107,8 @@ class ClientConfigurationEndpoint:
         # If the client includes the 'client_secret' field in the request,
         # the value of this field MUST match the currently issued client
         # secret for that client.
-        if "client_secret" in request.payload.data:
-            if not client.check_client_secret(request.payload.data["client_secret"]):
+        if "client_secret" in data:
+            if not client.check_client_secret(data["client_secret"]):
                 raise InvalidRequestError()
 
         client_metadata = self.extract_client_metadata(request)
@@ -113,7 +116,7 @@ class ClientConfigurationEndpoint:
         return self.create_read_client_response(client, request)
 
     def extract_client_metadata(self, request):
-        json_data = request.payload.data.copy()
+        json_data = _get_json_object(request).copy()
         client_metadata = {}
         server_metadata = self.get_server_metadata()
         for claims_class in self.claims_classes:

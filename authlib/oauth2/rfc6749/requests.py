@@ -122,6 +122,7 @@ class OAuth2Request:
 class JsonPayload:
     @property
     def data(self):
+        """The decoded JSON body, or ``None`` if the body is not valid JSON."""
         raise NotImplementedError()
 
 

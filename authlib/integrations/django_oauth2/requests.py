@@ -79,7 +79,10 @@ class DjangoJsonPayload(JsonPayload):
 
     @cached_property
     def data(self):
-        return json_loads(self._request.body)
+        try:
+            return json_loads(self._request.body)
+        except ValueError:
+            return None
 
 
 class DjangoJsonRequest(JsonRequest):
