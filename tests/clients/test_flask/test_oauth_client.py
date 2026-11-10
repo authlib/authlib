@@ -511,6 +511,83 @@ def test_oauth2_authorize_with_metadata():
             assert resp.status_code == 302
 
 
+def test_oauth2_metadata_does_not_configure_client():
+    """The fetched server metadata does not change the client settings."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        api_base_url="https://resource.test/api",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+        client_kwargs={"scope": "openid", "verify": "/ca.pem"},
+    )
+    metadata = {
+        "authorization_endpoint": "https://provider.test/authorize",
+        "client_id": "other",
+        "scope": "admin",
+        "hooks": {"key": True},
+        "verify": False,
+    }
+
+    def fake_send(sess, req, **kwargs):
+        if req.url == "https://provider.test/.well-known/openid-configuration":
+            return mock_send_value(metadata)
+
+        assert kwargs["verify"] == "/ca.pem"
+        return mock_send_value({"sub": "123"})
+
+    with app.test_request_context():
+        with mock.patch("requests.sessions.Session.send", fake_send):
+            rv = client.create_authorization_url("https://client.test/callback")
+            resp = client.get("user", token=get_bearer_token())
+
+    params = dict(url_decode(urlparse.urlparse(rv["url"]).query))
+    assert params["client_id"] == "dev"
+    assert params["scope"] == "openid"
+    assert resp.json() == {"sub": "123"}
+    assert client.server_metadata["scope"] == "admin"
+
+
+def test_oauth2_refresh_token_with_metadata_token_endpoint():
+    """An expired token is refreshed at the token endpoint of the metadata."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        api_base_url="https://resource.test/api",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+    expired_token = {
+        "token_type": "Bearer",
+        "access_token": "expired-a",
+        "refresh_token": "expired-b",
+        "expires_at": 1566465749,
+    }
+    urls = []
+
+    def fake_send(sess, req, **kwargs):
+        urls.append(req.url)
+        if req.url == "https://provider.test/.well-known/openid-configuration":
+            return mock_send_value({"token_endpoint": "https://provider.test/token"})
+
+        if req.url == "https://provider.test/token":
+            return mock_send_value(get_bearer_token())
+
+        return mock_send_value({"sub": "123"})
+
+    with app.test_request_context():
+        with mock.patch("requests.sessions.Session.send", fake_send):
+            client.get("user", token=expired_token)
+
+    assert urls[1] == "https://provider.test/token"
+
+
 @pytest.mark.parametrize("method", ["S256", "plain"])
 def test_oauth2_authorize_code_challenge(method):
     app = Flask(__name__)

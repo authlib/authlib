@@ -463,6 +463,84 @@ async def test_oauth2_authorize_with_metadata():
 
 
 @pytest.mark.asyncio
+async def test_oauth2_metadata_does_not_configure_client():
+    """The fetched server metadata does not change the client settings."""
+    oauth = OAuth()
+    transport = ASGITransport(
+        AsyncPathMapDispatch(
+            {
+                "/.well-known/openid-configuration": {
+                    "body": {
+                        "authorization_endpoint": "https://provider.test/authorize",
+                        "client_id": "other",
+                        "scope": "admin",
+                        "base_url": "https://other.test/",
+                        "event_hooks": {"request": [None]},
+                    }
+                },
+                "/api/user": {"body": {"sub": "123"}},
+            }
+        )
+    )
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        api_base_url="https://resource.test/api/",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+        client_kwargs={"scope": "openid", "transport": transport},
+    )
+    rv = await client.create_authorization_url("https://client.test/callback")
+    resp = await client.get("user", token=get_bearer_token())
+
+    params = dict(url_decode(urlparse.urlparse(rv["url"]).query))
+    assert params["client_id"] == "dev"
+    assert params["scope"] == "openid"
+    assert resp.json() == {"sub": "123"}
+
+
+@pytest.mark.asyncio
+async def test_oauth2_refresh_token_with_metadata_token_endpoint():
+    """An expired token is refreshed at the token endpoint of the metadata."""
+    paths = []
+
+    def record_path(req):
+        paths.append(req.url.path)
+
+    oauth = OAuth()
+    transport = ASGITransport(
+        AsyncPathMapDispatch(
+            path_maps={
+                "/.well-known/openid-configuration": {
+                    "body": {"token_endpoint": "https://provider.test/token"}
+                },
+                "/token": {"body": get_bearer_token()},
+                "/api/user": {"body": {"sub": "123"}},
+            },
+            side_effects={"/token": record_path},
+        )
+    )
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        api_base_url="https://resource.test/api/",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+        client_kwargs={"transport": transport},
+    )
+    expired_token = {
+        "token_type": "Bearer",
+        "access_token": "expired-a",
+        "refresh_token": "expired-b",
+        "expires_at": 1566465749,
+    }
+    resp = await client.get("user", token=expired_token)
+
+    assert resp.json() == {"sub": "123"}
+    assert paths == ["/token"]
+
+
+@pytest.mark.asyncio
 async def test_oauth2_authorize_form_post_callback():
     """Test that POST callbacks (form_post response mode) work properly."""
     oauth = OAuth()
