@@ -693,3 +693,150 @@ async def test_repeated_body_parameters():
         assert [value for key, value in params if key == "audience"] == ["c", "d"]
         keys = [key for key, _ in params]
         assert len(set(keys)) == len(keys) - 2
+
+
+default_device_authorization = {
+    "device_code": "GmRhmhcxhwAzkoEqiMEg_DnyEysNkuNhszIySk9eS",
+    "user_code": "WDJB-MJHT",
+    "verification_uri": "https://provider.test/device",
+    "verification_uri_complete": "https://provider.test/device?user_code=WDJB-MJHT",
+    "expires_in": 1800,
+    "interval": 5,
+}
+
+
+@pytest.mark.asyncio
+async def test_fetch_device_authorization():
+    url = "https://provider.test/device_authorization"
+
+    async def assert_func(request):
+        content = await request.body()
+        content = content.decode()
+        assert "client_id=foo" in content
+        assert "scope=read+write" in content or "scope=read%20write" in content
+
+    transport = ASGITransport(
+        AsyncMockDispatch(default_device_authorization, assert_func=assert_func)
+    )
+    async with AsyncOAuth2Client(
+        "foo", scope="read write", transport=transport
+    ) as client:
+        data = await client.fetch_device_authorization(url)
+        assert data == default_device_authorization
+
+
+@pytest.mark.asyncio
+async def test_fetch_device_authorization_error():
+    url = "https://provider.test/device_authorization"
+    transport = ASGITransport(
+        AsyncMockDispatch({"error": "invalid_request"}, status_code=400)
+    )
+    async with AsyncOAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(OAuthError, match="invalid_request"):
+            await client.fetch_device_authorization(url)
+
+
+@pytest.mark.asyncio
+async def test_poll_device_token_pending_then_success():
+    import json
+
+    url = "https://provider.test/token"
+    dispatch = AsyncMockDispatch({"error": "authorization_pending"}, status_code=400)
+    calls = 0
+
+    async def assert_func(request):
+        nonlocal calls
+        calls += 1
+        if calls >= 2:
+            dispatch.body = json.dumps(default_token).encode()
+            dispatch.status_code = 200
+
+    dispatch.assert_func = assert_func
+    transport = ASGITransport(dispatch)
+    async with AsyncOAuth2Client("foo", transport=transport) as client:
+        token = await client.poll_device_token("dev-code", url, interval=0.01)
+    assert token == default_token
+    assert calls == 2
+
+
+@pytest.mark.asyncio
+async def test_poll_device_token_slow_down():
+    import json
+
+    url = "https://provider.test/token"
+    dispatch = AsyncMockDispatch({"error": "slow_down"}, status_code=400)
+    calls = 0
+
+    async def assert_func(request):
+        nonlocal calls
+        calls += 1
+        if calls >= 2:
+            dispatch.body = json.dumps(default_token).encode()
+            dispatch.status_code = 200
+
+    dispatch.assert_func = assert_func
+    transport = ASGITransport(dispatch)
+    async with AsyncOAuth2Client("foo", transport=transport) as client:
+        token = await client.poll_device_token("dev-code", url, interval=0.01)
+    assert token == default_token
+    assert calls == 2
+
+
+@pytest.mark.asyncio
+async def test_poll_device_token_access_denied():
+    transport = ASGITransport(
+        AsyncMockDispatch({"error": "access_denied"}, status_code=400)
+    )
+    async with AsyncOAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(OAuthError, match="access_denied"):
+            await client.poll_device_token(
+                "dev-code", "https://provider.test/token", interval=0.01
+            )
+
+
+@pytest.mark.asyncio
+async def test_fetch_device_authorization_from_metadata():
+    url = "https://provider.test/device_authorization"
+    transport = ASGITransport(AsyncMockDispatch(default_device_authorization))
+    async with AsyncOAuth2Client(
+        "foo", device_authorization_endpoint=url, transport=transport
+    ) as client:
+        data = await client.fetch_device_authorization()
+        assert data["device_code"] == default_device_authorization["device_code"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_device_authorization_missing_endpoint():
+    async with AsyncOAuth2Client("foo") as client:
+        with pytest.raises(ValueError, match="device authorization endpoint"):
+            await client.fetch_device_authorization()
+
+
+@pytest.mark.asyncio
+async def test_poll_device_token_from_metadata():
+    url = "https://provider.test/token"
+    transport = ASGITransport(AsyncMockDispatch(default_token))
+    async with AsyncOAuth2Client(
+        "foo", token_endpoint=url, transport=transport
+    ) as client:
+        token = await client.poll_device_token("dev-code", interval=0.01)
+        assert token == default_token
+
+
+@pytest.mark.asyncio
+async def test_poll_device_token_missing_endpoint():
+    async with AsyncOAuth2Client("foo") as client:
+        with pytest.raises(ValueError, match="token endpoint"):
+            await client.poll_device_token("dev-code", interval=0.01)
+
+
+@pytest.mark.asyncio
+async def test_poll_device_token_timeout():
+    transport = ASGITransport(
+        AsyncMockDispatch({"error": "authorization_pending"}, status_code=400)
+    )
+    async with AsyncOAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(TimeoutError):
+            await client.poll_device_token(
+                "dev-code", "https://provider.test/token", interval=0.01, timeout=0.05
+            )
