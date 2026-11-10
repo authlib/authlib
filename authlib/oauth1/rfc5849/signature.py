@@ -141,8 +141,10 @@ def normalize_base_string_uri(uri, host=None):
         ("https", "443"),
     )
     if ":" in netloc:
-        host, port = netloc.split(":", 1)
-        if (scheme, port) in default_ports:
+        # Split on the last colon only: an IPv6 host itself contains
+        # colons, and a missing port must not be mistaken for one.
+        host, sep, port = netloc.rpartition(":")
+        if sep and port.isdigit() and (scheme, port) in default_ports:
             netloc = host
 
     return urlparse.urlunparse((scheme, netloc, path, params, "", ""))
