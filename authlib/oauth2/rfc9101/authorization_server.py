@@ -4,6 +4,7 @@ from joserfc.errors import JoseError
 from joserfc.errors import UnsupportedAlgorithmError
 from joserfc.jws import JWSRegistry
 
+from authlib._joserfc_helpers import audience_matches
 from authlib._joserfc_helpers import import_any_key
 
 from ..rfc6749 import AuthorizationServer
@@ -208,7 +209,7 @@ class JWTAuthenticationRequest:
         jwks = self.resolve_client_public_key(client)
         key = import_any_key(jwks)
         algorithms = self.get_request_object_signing_algorithms(client)
-        metadata = self.get_server_metadata()
+        metadata = self.get_server_metadata() or {}
         if self.get_client_require_signed_request_object(client) or metadata.get(
             "require_signed_request_object", False
         ):
@@ -239,6 +240,17 @@ class JWTAuthenticationRequest:
             raise InvalidRequestError(
                 "The 'client_id' claim from the request parameters "
                 "and the request object claims don't match.",
+                state=request.payload.state,
+            )
+
+        # Per RFC 7519 §4.1.3, if the principal processing the claim does not
+        # identify itself with a value in the "aud" claim when this claim is
+        # present, then the JWT MUST be rejected.
+        if "aud" in request_object.claims and not audience_matches(
+            request_object.claims["aud"], self.get_audiences()
+        ):
+            raise InvalidRequestObjectError(
+                description="The 'aud' claim does not identify this server.",
                 state=request.payload.state,
             )
 
@@ -350,6 +362,25 @@ class JWTAuthenticationRequest:
 
         """
         return {}  # pragma: no cover
+
+    def get_audiences(self) -> list[str]:
+        """Return the accepted values of the request object ``aud`` claim.
+
+        A request object with an ``aud`` claim is rejected when ``aud`` does not
+        contain one of these values. A request object without ``aud`` is
+        accepted. By default, it returns the ``issuer`` of
+        :meth:`get_server_metadata`, or an empty list when there is none.
+        Developers MAY re-implement it in subclass, for example to also accept
+        the authorization endpoint URL::
+
+            def get_audiences(self):
+                metadata = self.get_server_metadata()
+                return [metadata["issuer"], metadata["authorization_endpoint"]]
+
+        :return: list of strings
+        """
+        issuer = (self.get_server_metadata() or {}).get("issuer")
+        return [issuer] if issuer else []
 
     def get_client_require_signed_request_object(self, client: ClientMixin) -> bool:
         """Return the 'require_signed_request_object' client metadata.
