@@ -944,3 +944,54 @@ def test_request_object_parameter_numbers(test_client, server):
     )
     rv = test_client.get(url)
     assert rv.data == b"login"
+
+
+@pytest.mark.parametrize(
+    "aud",
+    ["https://provider.test", ["https://other.test", "https://provider.test"]],
+)
+def test_request_object_audience(test_client, server, aud):
+    """A request object whose aud contains the issuer is accepted."""
+    register_request_object_extension(
+        server, metadata={"issuer": "https://provider.test"}
+    )
+    rv = authorize_with_request_object(test_client, {"aud": aud})
+    assert rv.data == b"login"
+
+
+@pytest.mark.parametrize(
+    "metadata,aud",
+    [
+        ({"issuer": "https://provider.test"}, "https://other.test"),
+        ({"issuer": "https://provider.test"}, []),
+        ({"issuer": "https://provider.test"}, 1),
+        ({}, "https://provider.test"),
+    ],
+)
+def test_request_object_unexpected_audience(test_client, server, metadata, aud):
+    """A request object whose aud does not contain the issuer is rejected."""
+    register_request_object_extension(server, metadata=metadata)
+    rv = authorize_with_request_object(test_client, {"aud": aud})
+    params = json.loads(rv.data)
+    assert params["error"] == "invalid_request_object"
+
+
+def test_request_object_custom_audiences(test_client, server):
+    """get_audiences can accept other aud values than the issuer."""
+
+    class JWTAuthenticationRequest(rfc9101.JWTAuthenticationRequest):
+        def get_audiences(self):
+            return ["https://provider.test/oauth/authorize"]
+
+    register_request_object_extension(
+        server,
+        metadata={"issuer": "https://provider.test"},
+        extension_cls=JWTAuthenticationRequest,
+    )
+    rv = authorize_with_request_object(
+        test_client, {"aud": "https://provider.test/oauth/authorize"}
+    )
+    assert rv.data == b"login"
+
+    rv = authorize_with_request_object(test_client, {"aud": "https://provider.test"})
+    assert json.loads(rv.data)["error"] == "invalid_request_object"

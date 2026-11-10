@@ -304,3 +304,5 @@ API Reference
 .. autoclass:: ClientSecretJWT
 
 .. autoclass:: PrivateKeyJWT
+
+.. autoclass:: JWTBearerTokenValidator

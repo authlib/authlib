@@ -447,3 +447,70 @@ def test_software_statement_clock_skew(test_client):
     body = {"software_statement": software_statement}
     rv = test_client.post("/create_client", json=body, headers=headers)
     assert rv.status_code == 201
+
+
+@pytest.mark.parametrize(
+    "aud",
+    ["https://provider.test", ["https://other.test", "https://provider.test"]],
+)
+def test_software_statement_audience(test_client, metadata, aud):
+    """A software statement whose aud contains the issuer is accepted."""
+    metadata["issuer"] = "https://provider.test"
+    payload = {"software_id": "uuid-123", "client_name": "Authlib", "aud": aud}
+    key = RSAKey.import_key(read_file_path("rsa_private.pem"))
+    body = {"software_statement": jwt.encode({"alg": "RS256"}, payload, key)}
+    headers = {"Authorization": "bearer abc"}
+    rv = test_client.post("/create_client", json=body, headers=headers)
+    resp = json.loads(rv.data)
+    assert resp["client_name"] == "Authlib"
+
+
+@pytest.mark.parametrize(
+    "issuer,aud",
+    [
+        ("https://provider.test", "https://other.test"),
+        ("https://provider.test", []),
+        ("https://provider.test", 1),
+        (None, "https://provider.test"),
+    ],
+)
+def test_software_statement_unexpected_audience(test_client, metadata, issuer, aud):
+    """A software statement whose aud does not contain the issuer is rejected."""
+    if issuer:
+        metadata["issuer"] = issuer
+
+    payload = {"software_id": "uuid-123", "client_name": "Authlib", "aud": aud}
+    key = RSAKey.import_key(read_file_path("rsa_private.pem"))
+    body = {"software_statement": jwt.encode({"alg": "RS256"}, payload, key)}
+    headers = {"Authorization": "bearer abc"}
+    rv = test_client.post("/create_client", json=body, headers=headers)
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_software_statement"
+
+
+def test_software_statement_custom_audiences(test_client, server, metadata):
+    """get_audiences can accept other aud values than the issuer."""
+
+    class CustomAudiencesEndpoint(ClientRegistrationEndpoint):
+        def get_server_metadata(self):
+            return metadata
+
+        def get_audiences(self):
+            return ["https://provider.test/register"]
+
+    server._endpoints[ClientRegistrationEndpoint.ENDPOINT_NAME] = [
+        CustomAudiencesEndpoint(server)
+    ]
+    metadata["issuer"] = "https://provider.test"
+    key = RSAKey.import_key(read_file_path("rsa_private.pem"))
+    headers = {"Authorization": "bearer abc"}
+
+    payload = {"client_name": "Authlib", "aud": "https://provider.test/register"}
+    body = {"software_statement": jwt.encode({"alg": "RS256"}, payload, key)}
+    rv = test_client.post("/create_client", json=body, headers=headers)
+    assert json.loads(rv.data)["client_name"] == "Authlib"
+
+    payload = {"client_name": "Authlib", "aud": "https://provider.test"}
+    body = {"software_statement": jwt.encode({"alg": "RS256"}, payload, key)}
+    rv = test_client.post("/create_client", json=body, headers=headers)
+    assert json.loads(rv.data)["error"] == "invalid_software_statement"

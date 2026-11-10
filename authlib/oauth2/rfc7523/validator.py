@@ -30,11 +30,28 @@ class JWTBearerToken(TokenMixin, dict):
 
 
 class JWTBearerTokenValidator(BearerTokenValidator):
+    """Validate JWT access tokens, such as those of ``JWTBearerTokenGenerator``.
+
+    :param public_key: the key that verifies the token signature.
+    :param issuer: the expected ``iss`` value.
+    :param audience: the identifier of this resource server, as a string. When
+        it is set, the ``aud`` claim must contain it. When it is not set, tokens
+        with an ``aud`` claim are rejected.
+    :param realm: the realm of the ``WWW-Authenticate`` header.
+    :param leeway: the clock skew tolerance, in seconds.
+    """
+
     TOKEN_TYPE = "bearer"
     token_cls = JWTBearerToken
 
     def __init__(
-        self, public_key, issuer=None, realm=None, leeway=60, **extra_attributes
+        self,
+        public_key,
+        issuer=None,
+        realm=None,
+        leeway=60,
+        audience=None,
+        **extra_attributes,
     ):
         super().__init__(realm, **extra_attributes)
         self.public_key = import_any_key(public_key)
@@ -46,6 +63,10 @@ class JWTBearerTokenValidator(BearerTokenValidator):
         }
         if issuer:
             claims_options["iss"] = {"essential": True, "value": issuer}
+
+        if audience:
+            claims_options["aud"] = {"essential": True, "value": audience}
+
         self.claims_options = claims_options
 
     def authenticate_token(self, token_string: str):
@@ -62,6 +83,13 @@ class JWTBearerTokenValidator(BearerTokenValidator):
             claims_requests.validate(token.claims)
         except JoseError as error:
             logger.debug("Authenticate token failed. %r", error)
+            return None
+
+        # Per RFC 7519 §4.1.3, if the principal processing the claim does not
+        # identify itself with a value in the "aud" claim when this claim is
+        # present, then the JWT MUST be rejected.
+        if "aud" in token.claims and "aud" not in self.claims_options:
+            logger.debug("Authenticate token failed. Unexpected 'aud' claim.")
             return None
 
         return JWTBearerToken(token.claims)

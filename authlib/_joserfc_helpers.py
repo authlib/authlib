@@ -46,3 +46,12 @@ def import_any_key(data: Any):
             return KeySet.import_key_set(data)
         return import_key(data)
     return data
+
+
+def audience_matches(aud: Any, accepted: str | list[str]) -> bool:
+    """Tell whether the aud claim contains one of the accepted values."""
+    if isinstance(accepted, str):
+        accepted = [accepted]
+
+    audiences = aud if isinstance(aud, list) else [aud]
+    return any(audience in accepted for audience in audiences)
