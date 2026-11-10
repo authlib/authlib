@@ -126,6 +126,19 @@ separate setting. It defaults to 120 seconds and is passed to
 
     token = oauth.github.authorize_access_token(request, leeway=30)
 
+To send HTTP headers with every request to the provider, for instance through
+a gateway that requires them, pass ``headers``. They are also sent with the
+``server_metadata_url`` and ``jwks_uri`` requests. They are sent to every host
+the client contacts, so only put a secret there if all the endpoints are behind
+the gateway:
+
+.. code-block:: python
+
+    client_kwargs = {
+        'scope': 'profile',
+        'headers': {'X-Api-Key': '...'},
+    }
+
 Routes for Authorization
 ~~~~~~~~~~~~~~~~~~~~~~~~
 

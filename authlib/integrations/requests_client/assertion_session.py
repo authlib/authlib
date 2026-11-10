@@ -22,6 +22,7 @@ class AssertionSession(AssertionClient, Session):
     :param access_token_params: Extra parameters for the token request, such as
         ``resource`` (:rfc:`8707`). A list is sent as a repeated parameter. The
         other arguments, such as ``scope``, take precedence.
+    :param headers: HTTP headers to send with every request of the session.
     """
 
     token_auth_class = AssertionAuth

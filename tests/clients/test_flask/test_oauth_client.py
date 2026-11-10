@@ -479,6 +479,45 @@ def test_oauth2_fetch_metadata():
         assert send.call_count == 2
 
 
+def test_oauth2_client_kwargs_headers():
+    """The client_kwargs headers are sent with the server metadata, JWKS and
+    token requests."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+        client_kwargs={"headers": {"X-Api-Key": "secret"}},
+    )
+    sent = []
+
+    def fake_send(sess, req, **kwargs):
+        sent.append(req)
+        if req.url.endswith("/openid-configuration"):
+            return mock_send_value(
+                {
+                    "token_endpoint": "https://provider.test/token",
+                    "jwks_uri": "https://provider.test/jwks",
+                }
+            )
+
+        if req.url.endswith("/jwks"):
+            return mock_send_value({"keys": []})
+
+        return mock_send_value(get_bearer_token())
+
+    with mock.patch("requests.sessions.Session.send", fake_send):
+        client.fetch_jwk_set()
+        client.fetch_access_token(code="a")
+
+    assert len(sent) == 3
+    assert all(req.headers["X-Api-Key"] == "secret" for req in sent)
+    assert all(req.headers["User-Agent"] == client._user_agent for req in sent)
+
+
 def test_oauth2_authorize_with_metadata():
     app = Flask(__name__)
     app.secret_key = "!"

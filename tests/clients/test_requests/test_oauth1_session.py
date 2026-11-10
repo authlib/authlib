@@ -127,6 +127,19 @@ def test_nonascii(generate_nonce, generate_timestamp):
     auth.post("https://provider.test?cjk=%E5%95%A6%E5%95%A6")
 
 
+def test_session_headers():
+    """The headers given to the session are sent with every request."""
+
+    def verifier(r, **kwargs):
+        assert r.headers["X-Api-Key"] == "secret"
+        assert "OAuth " in to_unicode(r.headers["Authorization"])
+        return mock.MagicMock()
+
+    sess = OAuth1Session("foo", headers={"X-Api-Key": "secret"})
+    sess.send = verifier
+    sess.get("https://provider.test")
+
+
 def test_redirect_uri():
     sess = OAuth1Session("foo")
     assert sess.redirect_uri is None
