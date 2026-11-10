@@ -392,6 +392,29 @@ async def test_auto_refresh_token_after_explicit_client_credentials():
 
 
 @pytest.mark.asyncio
+async def test_auto_refresh_token_sends_access_token_params():
+    """A new token fetched on expiry is requested with access_token_params."""
+    bodies = []
+
+    async def assert_func(request):
+        bodies.append((await request.body()).decode())
+
+    transport = ASGITransport(AsyncMockDispatch(default_token, assert_func=assert_func))
+
+    async with AsyncOAuth2Client(
+        "foo",
+        token=dict(access_token="a", token_type="bearer", expires_at=100),
+        token_endpoint="https://provider.test/token",
+        grant_type="client_credentials",
+        access_token_params={"audience": "api"},
+        transport=transport,
+    ) as client:
+        await client.get("https://resource.test/user")
+
+    assert "audience=api" in bodies[0]
+
+
+@pytest.mark.asyncio
 async def test_auto_refresh_token3():
     async def _update_token(token, refresh_token=None, access_token=None):
         assert access_token == "a"

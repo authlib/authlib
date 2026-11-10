@@ -12,6 +12,7 @@ from authlib.common.urls import urlparse
 from authlib.integrations.starlette_client import OAuth
 from authlib.integrations.starlette_client import OAuthError
 
+from ..asgi_helper import AsyncMockDispatch
 from ..asgi_helper import AsyncPathMapDispatch
 from ..util import get_bearer_token
 
@@ -376,6 +377,38 @@ async def test_request_withhold_token():
     req = Request(req_scope)
     resp = await client.get("/user", request=req, withhold_token=True)
     assert resp.json()["sub"] == "123"
+
+
+@pytest.mark.asyncio
+async def test_request_with_expired_token_sends_access_token_params():
+    """A new token fetched on expiry is requested with access_token_params."""
+    bodies = []
+
+    async def assert_func(request):
+        bodies.append((await request.body()).decode())
+
+    transport = ASGITransport(
+        AsyncMockDispatch(get_bearer_token(), assert_func=assert_func)
+    )
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        api_base_url="https://resource.test/api",
+        access_token_url="https://provider.test/token",
+        access_token_params={"audience": "api"},
+        client_kwargs={"transport": transport, "grant_type": "client_credentials"},
+    )
+    expired_token = {
+        "token_type": "Bearer",
+        "access_token": "expired",
+        "expires_at": 1566465749,
+    }
+
+    await client.get("/user", token=expired_token)
+
+    assert "audience=api" in bodies[0]
 
 
 @pytest.mark.asyncio

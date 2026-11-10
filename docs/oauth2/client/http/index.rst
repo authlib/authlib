@@ -382,7 +382,19 @@ with a saved token instead, pass ``grant_type``:
     ...     token_endpoint=token_endpoint, grant_type="client_credentials",
     ... )
 
-With the framework integrations, put ``grant_type`` in ``client_kwargs``.
+The extra parameters of the first ``fetch_token`` call, such as ``audience``,
+are not sent again. Pass them with ``access_token_params`` instead:
+
+.. code-block:: pycon
+
+    >>> session = OAuth2Session(
+    ...     client_id, client_secret, token=token,
+    ...     token_endpoint=token_endpoint, grant_type="client_credentials",
+    ...     access_token_params={"audience": "https://api.example.com"},
+    ... )
+
+With the framework integrations, put ``grant_type`` in ``client_kwargs``. The
+``access_token_params`` given to ``register()`` are sent with these requests too.
 
 Manually refreshing tokens
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
