@@ -4,18 +4,22 @@ import pytest
 from httpx2 import ASGITransport
 from joserfc import jwk
 from joserfc import jwt
+from joserfc.errors import ExpiredTokenError
 from joserfc.errors import InvalidClaimError
 from joserfc.errors import InvalidKeyIdError
+from joserfc.errors import JoseError
 from joserfc.errors import MissingClaimError
 from joserfc.errors import UnsupportedAlgorithmError
 from joserfc.jwk import KeySet
 from starlette.requests import Request
 
+from authlib.common.errors import AuthlibBaseError
 from authlib.integrations.starlette_client import OAuth
 from authlib.oidc.core.grants.util import create_half_hash
 
 from ..asgi_helper import AsyncPathMapDispatch
 from ..util import get_bearer_token
+from ..util import raises_id_token_error
 from ..util import read_key_file
 
 secret_key = jwk.import_key("test-oct-secret", "oct", {"kid": "f"})
@@ -87,7 +91,7 @@ async def test_parse_id_token():
     user = await client.parse_id_token(token, nonce="n", claims_options=claims_options)
     assert user.sub == "123"
 
-    with pytest.raises(InvalidClaimError):
+    with raises_id_token_error(InvalidClaimError):
         claims_options = {"iss": {"value": "https://wrong-provider.test"}}
         await client.parse_id_token(token, nonce="n", claims_options=claims_options)
 
@@ -126,7 +130,7 @@ async def test_parse_id_token_nonce_supported(token_nonce):
         assert (await client.parse_id_token(token, nonce="n")).sub == "123"
     else:
         error = MissingClaimError if token_nonce is None else InvalidClaimError
-        with pytest.raises(error):
+        with raises_id_token_error(error):
             await client.parse_id_token(token, nonce="n")
 
     assert (await client.parse_id_token(token, nonce=None)).sub == "123"
@@ -233,7 +237,7 @@ async def test_parse_id_token_refused_algorithm(alg, key, algorithms):
         issuer="https://provider.test",
         **metadata,
     )
-    with pytest.raises(UnsupportedAlgorithmError):
+    with raises_id_token_error(UnsupportedAlgorithmError):
         await client.parse_id_token({"id_token": id_token}, nonce="n")
 
 
@@ -260,7 +264,7 @@ async def test_parse_id_token_claims_options_keep_issuer():
         issuer="https://provider.test",
         id_token_signing_alg_values_supported=["HS256"],
     )
-    with pytest.raises(InvalidClaimError):
+    with raises_id_token_error(InvalidClaimError):
         await client.parse_id_token(
             {"id_token": id_token},
             nonce="n",
@@ -295,11 +299,57 @@ async def test_parse_id_token_unknown_kid_refresh_interval():
         client_kwargs={"transport": transport},
     )
     for _ in range(3):
-        with pytest.raises(InvalidKeyIdError):
+        with raises_id_token_error(InvalidKeyIdError):
             await client.parse_id_token({"id_token": id_token}, nonce="n")
     assert len(fetches) == 1
 
     client._jwk_set_refreshed_at -= client.jwks_refresh_interval
-    with pytest.raises(InvalidKeyIdError):
+    with raises_id_token_error(InvalidKeyIdError):
         await client.parse_id_token({"id_token": id_token}, nonce="n")
     assert len(fetches) == 2
+
+
+@pytest.mark.asyncio
+async def test_parse_id_token_errors_are_authlib_errors():
+    """ID token failures can be caught as AuthlibBaseError."""
+    now = int(time.time())
+    claims = {"sub": "123", "iss": "https://provider.test", "aud": "dev"}
+    claims.update({"iat": now - 7200, "exp": now - 3600, "nonce": "n"})
+    id_token = jwt.encode({"alg": "HS256"}, claims, secret_key)
+
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        jwks={"keys": [secret_key.as_dict()]},
+        issuer="https://provider.test",
+        id_token_signing_alg_values_supported=["HS256"],
+    )
+    with pytest.raises(AuthlibBaseError) as exc_info:
+        await client.parse_id_token({"id_token": id_token}, nonce="n")
+
+    assert isinstance(exc_info.value.__cause__, ExpiredTokenError)
+    assert exc_info.value.error == ExpiredTokenError.error
+    assert exc_info.value.description == exc_info.value.__cause__.description
+
+
+@pytest.mark.asyncio
+async def test_parse_id_token_invalid_jwk_set():
+    """An invalid JWK set from the provider raises an InvalidIDTokenError."""
+    now = int(time.time())
+    claims = {"sub": "123", "iss": "https://provider.test", "aud": "dev"}
+    claims.update({"iat": now, "exp": now + 3600, "nonce": "n"})
+    id_token = jwt.encode({"alg": "HS256"}, claims, secret_key)
+
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        jwks={"keys": [{"kty": "unknown"}]},
+        issuer="https://provider.test",
+        id_token_signing_alg_values_supported=["HS256"],
+    )
+    with raises_id_token_error(JoseError):
+        await client.parse_id_token({"id_token": id_token}, nonce="n")

@@ -606,6 +606,18 @@ Without a discovery endpoint, pass the missing values to ``register``:
         jwks={"keys": [...]}
     )
 
+When the ``id_token`` is invalid, ``authorize_access_token`` raises
+``InvalidIDTokenError``. It is an ``OAuthError``. Its ``error`` and
+``description`` attributes tell what failed, for instance ``expired_token`` or
+``invalid_claim``::
+
+    from authlib.integrations.base_client import InvalidIDTokenError
+
+    try:
+        token = oauth.google.authorize_access_token(request)
+    except InvalidIDTokenError as error:
+        return f"Login failed: {error.description}", 400
+
 
 Custom claims
 ~~~~~~~~~~~~~

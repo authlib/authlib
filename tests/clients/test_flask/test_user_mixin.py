@@ -4,17 +4,22 @@ from unittest import mock
 import pytest
 from flask import Flask
 from joserfc import jwt
+from joserfc.errors import BadSignatureError
+from joserfc.errors import ExpiredTokenError
 from joserfc.errors import InvalidClaimError
 from joserfc.errors import InvalidKeyIdError
+from joserfc.errors import JoseError
 from joserfc.errors import MissingClaimError
 from joserfc.errors import UnsupportedAlgorithmError
 from joserfc.jwk import KeySet
 from joserfc.jwk import OctKey
 
+from authlib.common.errors import AuthlibBaseError
 from authlib.integrations.flask_client import OAuth
 from authlib.oidc.core.grants.util import create_half_hash
 
 from ..util import get_bearer_token
+from ..util import raises_id_token_error
 from ..util import read_key_file
 
 secret_key = OctKey.import_key("test-oct-secret", {"kty": "oct", "kid": "f"})
@@ -83,7 +88,7 @@ def test_parse_id_token():
         assert user.sub == "123"
 
         claims_options = {"iss": {"value": "https://wrong-provider.test"}}
-        with pytest.raises(InvalidClaimError):
+        with raises_id_token_error(InvalidClaimError):
             client.parse_id_token(token, "n", claims_options)
 
 
@@ -124,14 +129,15 @@ def test_parse_id_token_nonce_supported(token_nonce):
             assert client.parse_id_token(token, nonce="n").sub == "123"
         else:
             error = MissingClaimError if token_nonce is None else InvalidClaimError
-            with pytest.raises(error):
+            with raises_id_token_error(error):
                 client.parse_id_token(token, nonce="n")
 
         # Only the application can explicitly omit the expected nonce.
         assert client.parse_id_token(token, nonce=None).sub == "123"
 
 
-def test_runtime_error_fetch_jwks_uri():
+def test_unknown_kid_without_jwks_uri():
+    """An unknown kid without jwks_uri raises an InvalidIDTokenError."""
     token = get_bearer_token()
     now = int(time.time())
     claims = {
@@ -162,7 +168,7 @@ def test_runtime_error_fetch_jwks_uri():
     )
     with app.test_request_context():
         token["id_token"] = id_token
-        with pytest.raises(RuntimeError):
+        with raises_id_token_error(InvalidKeyIdError):
             client.parse_id_token(token, "n")
 
 
@@ -243,7 +249,7 @@ def test_parse_id_token_default_algorithm():
     app, client = _register_client()
     token = {"id_token": _create_id_token("HS256", secret_key)}
     with app.test_request_context():
-        with pytest.raises(UnsupportedAlgorithmError):
+        with raises_id_token_error(UnsupportedAlgorithmError):
             client.parse_id_token(token, nonce="n")
 
 
@@ -255,7 +261,7 @@ def test_parse_id_token_none_algorithm():
     )
     token = {"id_token": _create_id_token("none", None)}
     with app.test_request_context():
-        with pytest.raises(UnsupportedAlgorithmError):
+        with raises_id_token_error(UnsupportedAlgorithmError):
             client.parse_id_token(token, nonce="n")
 
 
@@ -265,7 +271,7 @@ def test_parse_id_token_claims_options_keep_issuer():
     token = {"id_token": _create_id_token("HS256", secret_key, "https://other.test")}
     claims_options = {"email": {"essential": False}}
     with app.test_request_context():
-        with pytest.raises(InvalidClaimError):
+        with raises_id_token_error(InvalidClaimError):
             client.parse_id_token(token, nonce="n", claims_options=claims_options)
 
 
@@ -275,7 +281,7 @@ def test_parse_id_token_only_none_algorithm():
     app, client = _register_client(id_token_signing_alg_values_supported=["none"])
     token = {"id_token": _create_id_token("HS256", secret_key)}
     with app.test_request_context():
-        with pytest.raises(UnsupportedAlgorithmError):
+        with raises_id_token_error(UnsupportedAlgorithmError):
             client.parse_id_token(token, nonce="n")
 
 
@@ -293,7 +299,7 @@ def test_parse_id_token_claims_options_iss_without_value():
     token = {"id_token": _create_id_token("HS256", secret_key, "https://other.test")}
     claims_options = {"iss": {"essential": True}}
     with app.test_request_context():
-        with pytest.raises(InvalidClaimError):
+        with raises_id_token_error(InvalidClaimError):
             client.parse_id_token(token, nonce="n", claims_options=claims_options)
     assert claims_options == {"iss": {"essential": True}}
 
@@ -344,11 +350,55 @@ def test_parse_id_token_unknown_kid_refresh_interval():
     with app.test_request_context():
         with mock.patch("requests.sessions.Session.send", fake_send):
             for _ in range(3):
-                with pytest.raises(InvalidKeyIdError):
+                with raises_id_token_error(InvalidKeyIdError):
                     client.parse_id_token({"id_token": id_token}, nonce="n")
             assert len(fetches) == 1
 
             client._jwk_set_refreshed_at -= client.jwks_refresh_interval
-            with pytest.raises(InvalidKeyIdError):
+            with raises_id_token_error(InvalidKeyIdError):
                 client.parse_id_token({"id_token": id_token}, nonce="n")
             assert len(fetches) == 2
+
+
+@pytest.mark.parametrize(
+    "case,cause",
+    [("expired", ExpiredTokenError), ("bad_signature", BadSignatureError)],
+)
+def test_parse_id_token_errors_are_authlib_errors(case, cause):
+    """ID token failures can be caught as AuthlibBaseError."""
+    now = int(time.time())
+    claims = {"sub": "123", "iss": "https://provider.test", "aud": "dev"}
+    claims.update({"iat": now, "exp": now + 3600, "nonce": "n"})
+    key = secret_key
+    if case == "expired":
+        claims.update({"iat": now - 7200, "exp": now - 3600})
+    else:
+        key = OctKey.import_key("another-oct-secret", {"kty": "oct", "kid": "f"})
+
+    token = {"id_token": jwt.encode({"alg": "HS256"}, claims, key)}
+    app, client = _register_client(id_token_signing_alg_values_supported=["HS256"])
+    with app.test_request_context():
+        with pytest.raises(AuthlibBaseError) as exc_info:
+            client.parse_id_token(token, nonce="n")
+
+    assert isinstance(exc_info.value.__cause__, cause)
+    assert exc_info.value.error == cause.error
+    assert exc_info.value.description == exc_info.value.__cause__.description
+
+
+def test_parse_id_token_invalid_jwk_set():
+    """An invalid JWK set from the provider raises an InvalidIDTokenError."""
+    app = Flask(__name__)
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        jwks={"keys": [{"kty": "unknown"}]},
+        issuer="https://provider.test",
+        id_token_signing_alg_values_supported=["HS256"],
+    )
+    token = {"id_token": _create_id_token("HS256", secret_key)}
+    with app.test_request_context():
+        with raises_id_token_error(JoseError):
+            client.parse_id_token(token, nonce="n")
