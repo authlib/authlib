@@ -114,22 +114,37 @@ Now you can register your ``AuthorizationCodeGrant`` with the extension:
 .. code-block:: python
 
     from authlib.oauth2.rfc7636 import CodeChallenge
-    server.register_grant(MyAuthorizationCodeGrant, [CodeChallenge(required=True)])
+    server.register_grant(MyAuthorizationCodeGrant, [CodeChallenge()])
 
-With ``required=True``, public clients must use PKCE. Per
+By default, public clients must use PKCE. Per
 :rfc:`RFC 7636 §4.4.1 <7636#section-4.4.1>`, the authorization endpoint rejects a public client
 that sends no ``code_challenge`` with an ``invalid_request`` error. The token
-endpoint rejects a public client that sends no ``code_verifier``.
+endpoint rejects a public client that sends no ``code_verifier``. Confidential
+clients may use PKCE, but are not required to.
 
-With ``required=False``, PKCE is optional for all clients.
+Per :rfc:`RFC 9700 §2.1.1 <9700#section-2.1.1>`, PKCE is also recommended for
+confidential clients. To require it for all clients, override
+:meth:`~CodeChallenge.is_code_challenge_required`:
 
-In both modes:
+.. code-block:: python
+
+    class MyCodeChallenge(CodeChallenge):
+        def is_code_challenge_required(self, request):
+            return True
+
+The method receives the request, so the policy can depend on
+``request.client``. It is called at the authorization endpoint and at the
+token endpoint, and must give the same answer at both for a given code. When
+it returns ``True``, the token endpoint rejects the codes that were issued
+without ``code_challenge``. To make PKCE optional for all clients, return
+``False``.
+
+In all cases:
 
 * If the authorization request contained a ``code_challenge``, the token
   request must contain a matching ``code_verifier``.
 * If the authorization request contained no ``code_challenge``, a token
   request with a ``code_verifier`` is rejected.
-* Confidential clients may use PKCE, but are not required to.
 
 Per :rfc:`RFC 9700 §2.1.1 <9700#section-2.1.1>`, clients should use ``S256``. To refuse
 ``plain``, limit the supported methods:

@@ -5,6 +5,7 @@ import re
 from authlib.common.encoding import to_bytes
 from authlib.common.encoding import to_unicode
 from authlib.common.encoding import urlsafe_b64encode
+from authlib.deprecate import deprecate
 
 from ..rfc6749 import InvalidGrantError
 from ..rfc6749 import InvalidRequestError
@@ -43,7 +44,10 @@ class CodeChallenge:
     ``code_challenge_method`` into database when ``save_authorization_code``.
     Then register this extension via::
 
-        server.register_grant(AuthorizationCodeGrant, [CodeChallenge(required=True)])
+        server.register_grant(AuthorizationCodeGrant, [CodeChallenge()])
+
+    To change which clients must use PKCE, override
+    :meth:`is_code_challenge_required`.
     """
 
     #: defaults to "plain" if not present in the request
@@ -56,8 +60,15 @@ class CodeChallenge:
         "S256": compare_s256_code_challenge,
     }
 
-    def __init__(self, required=True):
-        self.required = required
+    def __init__(self, required=None):
+        if required is not None:
+            deprecate(
+                "The 'required' parameter of 'CodeChallenge' is deprecated. "
+                "Override 'is_code_challenge_required' instead.",
+                version="1.11",
+            )
+
+        self.required = True if required is None else required
 
     def __call__(self, grant):
         grant.register_authorization_parameters(
@@ -79,9 +90,7 @@ class CodeChallenge:
         if not challenge and not method:
             # Per RFC 7636 §4.4.1, a server that requires PKCE for public
             # clients rejects a request without code_challenge.
-            if self.required and request.client.check_endpoint_auth_method(
-                "none", "token"
-            ):
+            if self.is_code_challenge_required(request):
                 raise InvalidRequestError("Missing 'code_challenge'")
 
             return
@@ -107,8 +116,7 @@ class CodeChallenge:
         request: OAuth2Request = grant.request
         verifier = request.form.get("code_verifier")
 
-        # public client MUST verify code challenge
-        if self.required and request.auth_method == "none" and not verifier:
+        if not verifier and self.is_code_challenge_required(request):
             raise InvalidRequestError("Missing 'code_verifier'")
 
         authorization_code = request.authorization_code
@@ -147,6 +155,29 @@ class CodeChallenge:
         # "invalid_grant" MUST be returned.
         if not func(verifier, challenge):
             raise InvalidGrantError(description="Code challenge failed.")
+
+    def is_code_challenge_required(self, request):
+        """Tell whether the client must use PKCE for this request.
+
+        It is called at the authorization endpoint and at the token endpoint.
+        For a given code, it must give the same answer at both endpoints.
+        Otherwise a code issued without ``code_challenge`` is rejected at the
+        token endpoint. At the token endpoint, ``request.authorization_code``
+        is available.
+
+        By default, public clients must use PKCE. Developers MAY re-implement
+        it in subclass. For example, to require PKCE for all clients::
+
+            def is_code_challenge_required(self, request):
+                return True
+
+        :param request: the OAuth2Request instance, with its ``client``
+        :return: bool
+        """
+        if not self.required:
+            return False
+
+        return request.client.check_endpoint_auth_method("none", "token")
 
     def get_authorization_code_challenge(self, authorization_code):
         """Get "code_challenge" associated with this authorization code.
