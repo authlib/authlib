@@ -112,21 +112,20 @@ after retrieval and cannot prevent SSRF from the retrieval itself.
 Request objects during consent
 ------------------------------
 
-Applications that call ``get_consent_grant`` separately for the consent GET and
-approval POST resolve ``request_uri`` on each call. The referenced content can
-change between those requests. A valid JWT signature on each response does not
-establish that the user approved the second document's parameters.
+The authorization view usually calls ``get_consent_grant`` twice: once to show
+the consent page, and once to handle the answer of the user. With
+``request_uri``, each call fetches the request object again. The client can
+return a different document the second time, for instance with a wider scope.
+Both documents have a valid signature, but the user only approved the first
+one.
 
-Retain the original request object in a server-side transaction bound to the
-authenticated user and browser session. On approval, use that retained content
-with the original authorization parameters. Continue to enforce URI policy,
-signature and claims validation, and grant validation. Apply CSRF protection,
-transaction expiry and one-time consumption; do not accept a replacement claims
-dictionary from the browser or use a shared URI-only cache as the consent record.
+Per OpenID Connect Core §6.2, servers may cache the request object. Keep the
+first request object, for instance in the session of the user, and return it
+from ``get_request_object`` when the same ``request_uri`` comes back. Remove
+it when the authorization ends. If it has expired, start a new authorization
+instead of fetching the document again.
 
-Authlib does not provide this transaction storage. If the retained JWT has
-expired or current client policy rejects it, restart authorization instead of
-fetching a new document and applying the earlier approval to it.
+Authlib does not keep request objects yet, see :issue:`971`.
 
 API Reference
 -------------
