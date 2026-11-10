@@ -5,6 +5,7 @@ import time
 from joserfc import jwt
 from joserfc.errors import JoseError
 
+from authlib._joserfc_helpers import audience_matches
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.security import generate_token
 
@@ -103,9 +104,20 @@ class ClientRegistrationEndpoint:
             # its exp or before its nbf.
             registry = jwt.JWTClaimsRegistry(leeway=self.software_statement_leeway)
             registry.validate(token.claims)
-            return token.claims
         except JoseError as exc:
             raise InvalidSoftwareStatementError() from exc
+
+        # Per RFC 7519 §4.1.3, if the principal processing the claim does not
+        # identify itself with a value in the "aud" claim when this claim is
+        # present, then the JWT MUST be rejected.
+        if "aud" in token.claims and not audience_matches(
+            token.claims["aud"], self.get_audiences()
+        ):
+            raise InvalidSoftwareStatementError(
+                "The 'aud' claim does not identify this server."
+            )
+
+        return token.claims
 
     def generate_client_info(self, request):
         # https://tools.ietf.org/html/rfc7591#section-3.2.1
@@ -147,6 +159,25 @@ class ClientRegistrationEndpoint:
         response types and etc.
         """
         raise NotImplementedError()
+
+    def get_audiences(self):
+        """Return the accepted values of the software statement ``aud`` claim.
+
+        A software statement with an ``aud`` claim is rejected when ``aud`` does
+        not contain one of these values. A software statement without ``aud``
+        is accepted. By default, it returns the ``issuer`` of
+        :meth:`get_server_metadata`, or an empty list when there is none.
+        Developers MAY re-implement it in subclass, for example to also accept
+        the registration endpoint URL::
+
+            def get_audiences(self):
+                metadata = self.get_server_metadata()
+                return [metadata["issuer"], metadata["registration_endpoint"]]
+
+        :return: list of strings
+        """
+        issuer = (self.get_server_metadata() or {}).get("issuer")
+        return [issuer] if issuer else []
 
     def authenticate_token(self, request):
         """Authenticate current credential who is requesting to register a client.
