@@ -643,6 +643,35 @@ when the matching scope is requested. In that case, add the scope to
 Check the provider's documentation for the scope names and the claims each
 endpoint returns.
 
+Validating the claims
+~~~~~~~~~~~~~~~~~~~~~
+
+Authlib validates the claims of the ``id_token``, with ``CodeIDToken`` for the
+authorization code flow. Some providers send a claim in a form that the
+specification does not allow. For instance, ``amr`` must be an array of
+strings (OpenID Connect Core §2), but a provider may send a single string. To
+accept it, subclass ``CodeIDToken`` and override the ``validate_`` method of
+this claim:
+
+.. code-block:: python
+
+    from joserfc.errors import InvalidClaimError
+    from authlib.oidc.core import CodeIDToken
+
+    class LenientIDToken(CodeIDToken):
+        def validate_amr(self):
+            amr = self.get('amr')
+            if amr and not isinstance(amr, (list, str)):
+                raise InvalidClaimError('amr')
+
+Then pass the class to ``authorize_access_token`` with ``claims_cls``:
+
+.. skip: next "fragment of the callback view"
+
+.. code-block:: python
+
+    token = oauth.example.authorize_access_token(request, claims_cls=LenientIDToken)
+
 
 RP-Initiated Logout
 -------------------
