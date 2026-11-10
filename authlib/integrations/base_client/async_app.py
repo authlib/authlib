@@ -108,7 +108,8 @@ class AsyncOAuth2Mixin(OAuth2Base):
             kwargs.update(self.authorize_params)
 
         async with self._get_oauth_client() as client:
-            client.redirect_uri = redirect_uri
+            if redirect_uri is not None:
+                client.redirect_uri = redirect_uri
             return self._create_oauth2_authorization_url(
                 client, authorization_endpoint, **kwargs
             )

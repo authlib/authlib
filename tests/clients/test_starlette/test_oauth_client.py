@@ -541,6 +541,23 @@ async def test_oauth2_refresh_token_with_metadata_token_endpoint():
 
 
 @pytest.mark.asyncio
+async def test_oauth2_authorize_with_client_kwargs_redirect_uri():
+    """The redirect_uri of client_kwargs is used when none is given."""
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        authorize_url="https://provider.test/authorize",
+        client_kwargs={"redirect_uri": "https://client.test/callback"},
+    )
+    rv = await client.create_authorization_url()
+
+    params = dict(url_decode(urlparse.urlparse(rv["url"]).query))
+    assert params["redirect_uri"] == "https://client.test/callback"
+
+
+@pytest.mark.asyncio
 async def test_oauth2_authorize_form_post_callback():
     """Test that POST callbacks (form_post response mode) work properly."""
     oauth = OAuth()
