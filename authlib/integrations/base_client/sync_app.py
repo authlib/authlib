@@ -223,7 +223,8 @@ class OAuth2Base:
         self._user_agent = user_agent or default_user_agent
 
         self._server_metadata_url = server_metadata_url
-        self.server_metadata = kwargs
+        self._register_kwargs = kwargs
+        self.server_metadata = dict(kwargs)
 
     def _on_update_token(self, token, refresh_token=None, access_token=None):
         raise NotImplementedError()
@@ -233,15 +234,22 @@ class OAuth2Base:
         session.headers["User-Agent"] = self._user_agent
         return session
 
-    def _get_oauth_client(self, **metadata):
-        client_kwargs = {}
-        client_kwargs.update(self.client_kwargs)
-        client_kwargs.update(metadata)
+    def _update_server_metadata(self, metadata):
+        """Merge the fetched server metadata document."""
+        metadata["_loaded_at"] = time.time()
+        self.server_metadata.update(metadata)
 
-        if self.authorize_url:
-            client_kwargs["authorization_endpoint"] = self.authorize_url
-        if self.access_token_url:
-            client_kwargs["token_endpoint"] = self.access_token_url
+    def _get_oauth_client(self):
+        """Create the HTTP client from the application settings.
+
+        The fetched server metadata only provides the token endpoint.
+        """
+        client_kwargs = {**self.client_kwargs, **self._register_kwargs}
+        token_endpoint = self.access_token_url or self.server_metadata.get(
+            "token_endpoint"
+        )
+        if token_endpoint:
+            client_kwargs["token_endpoint"] = token_endpoint
 
         session = self.client_cls(
             client_id=self.client_id,
@@ -319,8 +327,8 @@ class OAuth2Mixin(_RequestMixin, OAuth2Base):
         )
 
     def request(self, method, url, token=None, **kwargs):
-        metadata = self.load_server_metadata()
-        with self._get_oauth_client(**metadata) as session:
+        self.load_server_metadata()
+        with self._get_oauth_client() as session:
             return self._send_token_request(session, method, url, token, kwargs)
 
     def load_server_metadata(self):
@@ -332,8 +340,8 @@ class OAuth2Mixin(_RequestMixin, OAuth2Base):
                 resp.raise_for_status()
                 metadata = resp.json()
 
-            metadata["_loaded_at"] = time.time()
-            self.server_metadata.update(metadata)
+            self._update_server_metadata(metadata)
+
         return self.server_metadata
 
     def create_authorization_url(self, redirect_uri=None, **kwargs):
@@ -354,7 +362,7 @@ class OAuth2Mixin(_RequestMixin, OAuth2Base):
         if self.authorize_params:
             kwargs.update(self.authorize_params)
 
-        with self._get_oauth_client(**metadata) as client:
+        with self._get_oauth_client() as client:
             if redirect_uri is not None:
                 client.redirect_uri = redirect_uri
             return self._create_oauth2_authorization_url(
@@ -371,7 +379,7 @@ class OAuth2Mixin(_RequestMixin, OAuth2Base):
         """
         metadata = self.load_server_metadata()
         token_endpoint = self.access_token_url or metadata.get("token_endpoint")
-        with self._get_oauth_client(**metadata) as client:
+        with self._get_oauth_client() as client:
             if redirect_uri is not None:
                 client.redirect_uri = redirect_uri
             params = {}
