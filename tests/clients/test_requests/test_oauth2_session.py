@@ -94,6 +94,19 @@ def test_add_token_to_header(token):
     sess.get("https://provider.test")
 
 
+def test_session_headers():
+    """The headers given to the session are sent with every request."""
+
+    def verifier(r, **kwargs):
+        assert r.headers["X-Api-Key"] == "secret"
+        assert r.headers["User-Agent"] == requests.utils.default_user_agent()
+        return mock.MagicMock()
+
+    sess = OAuth2Session(client_id="foo", headers={"X-Api-Key": "secret"})
+    sess.send = verifier
+    sess.get("https://provider.test", withhold_token=True)
+
+
 def test_add_token_to_body(token):
     def verifier(r, **kwargs):
         assert token["access_token"] in r.body
