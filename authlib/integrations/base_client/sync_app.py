@@ -331,11 +331,14 @@ class OAuth2Mixin(_RequestMixin, OAuth2Base):
         with self._get_oauth_client() as session:
             return self._send_token_request(session, method, url, token, kwargs)
 
-    def load_server_metadata(self):
+    def load_server_metadata(self, headers=None):
         if self._server_metadata_url and "_loaded_at" not in self.server_metadata:
             with self._get_session() as session:
                 resp = session.request(
-                    "GET", self._server_metadata_url, withhold_token=True
+                    "GET",
+                    self._server_metadata_url,
+                    headers=headers,
+                    withhold_token=True,
                 )
                 resp.raise_for_status()
                 metadata = resp.json()
@@ -344,14 +347,15 @@ class OAuth2Mixin(_RequestMixin, OAuth2Base):
 
         return self.server_metadata
 
-    def create_authorization_url(self, redirect_uri=None, **kwargs):
+    def create_authorization_url(self, redirect_uri=None, headers=None, **kwargs):
         """Generate the authorization url and state for HTTP redirect.
 
         :param redirect_uri: Callback or redirect URI for authorization.
+        :param headers: HTTP headers for the server metadata request.
         :param kwargs: Extra parameters to include.
         :return: dict
         """
-        metadata = self.load_server_metadata()
+        metadata = self.load_server_metadata(headers=headers)
         authorization_endpoint = self.authorize_url or metadata.get(
             "authorization_endpoint"
         )

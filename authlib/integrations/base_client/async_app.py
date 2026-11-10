@@ -72,11 +72,14 @@ class AsyncOAuth2Mixin(OAuth2Base):
                 access_token=access_token,
             )
 
-    async def load_server_metadata(self):
+    async def load_server_metadata(self, headers=None):
         if self._server_metadata_url and "_loaded_at" not in self.server_metadata:
             async with self._get_session() as client:
                 resp = await client.request(
-                    "GET", self._server_metadata_url, withhold_token=True
+                    "GET",
+                    self._server_metadata_url,
+                    headers=headers,
+                    withhold_token=True,
                 )
                 resp.raise_for_status()
                 metadata = resp.json()
@@ -90,14 +93,15 @@ class AsyncOAuth2Mixin(OAuth2Base):
         async with self._get_oauth_client() as session:
             return await _http_request(self, session, method, url, token, kwargs)
 
-    async def create_authorization_url(self, redirect_uri=None, **kwargs):
+    async def create_authorization_url(self, redirect_uri=None, headers=None, **kwargs):
         """Generate the authorization url and state for HTTP redirect.
 
         :param redirect_uri: Callback or redirect URI for authorization.
+        :param headers: HTTP headers for the server metadata request.
         :param kwargs: Extra parameters to include.
         :return: dict
         """
-        metadata = await self.load_server_metadata()
+        metadata = await self.load_server_metadata(headers=headers)
         authorization_endpoint = self.authorize_url or metadata.get(
             "authorization_endpoint"
         )

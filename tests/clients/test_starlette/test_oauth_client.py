@@ -463,6 +463,45 @@ async def test_oauth2_authorize_with_metadata():
 
 
 @pytest.mark.asyncio
+async def test_oauth2_authorize_with_metadata_headers():
+    headers = {"X-Metadata-Auth": "test-value"}
+
+    def assert_metadata_headers(request):
+        assert request.headers["x-metadata-auth"] == headers["X-Metadata-Auth"]
+
+    oauth = OAuth()
+    transport = ASGITransport(
+        AsyncPathMapDispatch(
+            {
+                "/.well-known/openid-configuration": {
+                    "body": {
+                        "authorization_endpoint": "https://provider.test/authorize"
+                    }
+                }
+            },
+            side_effects={
+                "/.well-known/openid-configuration": assert_metadata_headers,
+            },
+        )
+    )
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+        client_kwargs={"transport": transport},
+    )
+    req_scope = {"type": "http", "session": {}}
+    req = Request(req_scope)
+    resp = await client.authorize_redirect(
+        req, "https://client.test/callback", headers=headers
+    )
+
+    assert resp.status_code == 302
+    assert "X-Metadata-Auth" not in resp.headers["location"]
+
+
+@pytest.mark.asyncio
 async def test_oauth2_metadata_does_not_configure_client():
     """The fetched server metadata does not change the client settings."""
     oauth = OAuth()

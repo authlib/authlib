@@ -22,6 +22,7 @@ class DjangoAppMixin:
 
         :param request: HTTP request instance from Django view.
         :param redirect_uri: Callback or redirect URI for authorization.
+        :param headers: HTTP headers for the server metadata request.
         :param kwargs: Extra parameters to include.
         :return: A HTTP redirect response.
         """

@@ -511,6 +511,34 @@ def test_oauth2_authorize_with_metadata():
             assert resp.status_code == 302
 
 
+def test_oauth2_authorize_with_metadata_headers():
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+    headers = {"X-Metadata-Auth": "test-value"}
+
+    def fake_send(sess, req, **kwargs):
+        assert req.headers["X-Metadata-Auth"] == headers["X-Metadata-Auth"]
+        return mock_send_value(
+            {"authorization_endpoint": "https://provider.test/authorize"}
+        )
+
+    with mock.patch("requests.sessions.Session.send", fake_send):
+        with app.test_request_context():
+            resp = client.authorize_redirect(
+                "https://client.test/callback", headers=headers
+            )
+
+    assert resp.status_code == 302
+    assert "X-Metadata-Auth" not in resp.headers["Location"]
+
+
 def test_oauth2_metadata_does_not_configure_client():
     """The fetched server metadata does not change the client settings."""
     app = Flask(__name__)

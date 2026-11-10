@@ -569,6 +569,20 @@ A simple solution is to provide the OpenID Connect Discovery Endpoint:
 The discovery endpoint provides all the information we need so that we don't
 have to add ``authorize_url`` and ``access_token_url``.
 
+If the discovery endpoint requires HTTP headers, pass them to
+``authorize_redirect``. They are sent only with the initial metadata request,
+not included in the authorization URL:
+
+.. skip: next "fragment of a view using framework clients"
+
+.. code-block:: python
+
+    # Flask and Django
+    client.authorize_redirect(redirect_uri, headers=metadata_headers)
+
+    # Starlette
+    await client.authorize_redirect(request, redirect_uri, headers=metadata_headers)
+
 Check out our client example: https://github.com/authlib/demo-oauth-client
 
 Without a discovery endpoint, pass the missing values to ``register``:
