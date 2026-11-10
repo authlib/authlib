@@ -90,6 +90,10 @@ class OAuth2Client:
     :param leeway: Time window in seconds before the actual expiration of the
         authentication token, that the token is considered expired and will
         be refreshed.
+    :param access_token_params: Extra parameters for ``fetch_token``, such as
+        ``audience``. They are also sent when a new token is fetched
+        automatically, but not when a token is refreshed with a refresh token.
+        The keyword arguments of ``fetch_token`` take precedence.
     """
 
     client_auth_class = ClientAuth
@@ -114,6 +118,7 @@ class OAuth2Client:
         token_placement="header",
         update_token=None,
         leeway=60,
+        access_token_params=None,
         **metadata,
     ):
         self.session = session
@@ -140,6 +145,7 @@ class OAuth2Client:
         self.scope = scope
         self.redirect_uri = redirect_uri
         self.code_challenge_method = code_challenge_method
+        self.access_token_params = dict(access_token_params or {})
 
         self.token_auth = self.token_auth_class(token, token_placement, self)
         self.update_token = update_token
@@ -274,7 +280,9 @@ class OAuth2Client:
         :return: A :class:`OAuth2Token` object (a dict too).
         """
         state = state or self.state
-        kwargs = {**(self.metadata.get("access_token_params") or {}), **kwargs}
+        kwargs = {**self.access_token_params, **kwargs}
+        default_grant_type = kwargs.pop("grant_type", None)
+        grant_type = grant_type or default_grant_type
         # implicit  grant_type
         authorization_response = to_unicode(kwargs.pop("authorization_response", None))
         if "redirect_uri" in kwargs:

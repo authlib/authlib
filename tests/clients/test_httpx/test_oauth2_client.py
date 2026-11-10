@@ -382,6 +382,7 @@ def test_auto_refresh_token_after_explicit_client_credentials():
 
 
 def test_auto_refresh_token_sends_access_token_params():
+    """A new token fetched on expiry is requested with access_token_params."""
     forms = []
 
     def assert_func(request):

@@ -393,6 +393,7 @@ async def test_auto_refresh_token_after_explicit_client_credentials():
 
 @pytest.mark.asyncio
 async def test_auto_refresh_token_sends_access_token_params():
+    """A new token fetched on expiry is requested with access_token_params."""
     bodies = []
 
     async def assert_func(request):

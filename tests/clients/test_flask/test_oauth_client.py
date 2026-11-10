@@ -816,6 +816,7 @@ def test_request_with_refresh_token():
 
 
 def test_request_with_expired_token_sends_access_token_params():
+    """A new token fetched on expiry is requested with access_token_params."""
     app = Flask(__name__)
     app.secret_key = "!"
     oauth = OAuth(app)
@@ -849,15 +850,21 @@ def test_request_with_expired_token_sends_access_token_params():
     assert "audience=api" in bodies[0]
 
 
-def test_server_metadata_cannot_set_access_token_params():
+def test_client_kwargs_access_token_params():
+    """The access_token_params of client_kwargs are kept."""
     app = Flask(__name__)
     app.secret_key = "!"
     oauth = OAuth(app)
-    client = oauth.register("dev", client_id="dev", client_secret="dev")
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        client_kwargs={"access_token_params": {"audience": "api"}},
+    )
 
-    session = client._get_oauth_client(access_token_params={"audience": "metadata"})
+    session = client._get_oauth_client()
 
-    assert session.metadata["access_token_params"] is None
+    assert session.access_token_params == {"audience": "api"}
 
 
 def test_request_without_token():

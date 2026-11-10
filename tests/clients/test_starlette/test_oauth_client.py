@@ -381,6 +381,7 @@ async def test_request_withhold_token():
 
 @pytest.mark.asyncio
 async def test_request_with_expired_token_sends_access_token_params():
+    """A new token fetched on expiry is requested with access_token_params."""
     bodies = []
 
     async def assert_func(request):

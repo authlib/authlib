@@ -127,12 +127,7 @@ class AsyncOAuth2Mixin(OAuth2Base):
         async with self._get_oauth_client() as client:
             if redirect_uri is not None:
                 client.redirect_uri = redirect_uri
-            params = {}
-            if self.access_token_params:
-                params.update(self.access_token_params)
-            params.update(kwargs)
-            token = await client.fetch_token(token_endpoint, **params)
-        return token
+            return await client.fetch_token(token_endpoint, **kwargs)
 
 
 async def _http_request(ctx, session, method, url, token, kwargs):

@@ -70,6 +70,9 @@ class OAuth2Session(OAuth2Client, Session):
         authentication token, that the token is considered expired and will
         be refreshed.
     :param default_timeout: If settled, every requests will have a default timeout.
+    :param access_token_params: Extra parameters for ``fetch_token``, such as
+        ``audience``. They are also sent when a new token is fetched
+        automatically, but not when a token is refreshed with a refresh token.
     """
 
     client_auth_class = OAuth2ClientAuth

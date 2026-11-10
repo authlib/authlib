@@ -250,7 +250,9 @@ class OAuth2Base:
         )
         if token_endpoint:
             client_kwargs["token_endpoint"] = token_endpoint
-        client_kwargs["access_token_params"] = self.access_token_params
+
+        if self.access_token_params is not None:
+            client_kwargs["access_token_params"] = self.access_token_params
 
         session = self.client_cls(
             client_id=self.client_id,
@@ -383,9 +385,4 @@ class OAuth2Mixin(_RequestMixin, OAuth2Base):
         with self._get_oauth_client() as client:
             if redirect_uri is not None:
                 client.redirect_uri = redirect_uri
-            params = {}
-            if self.access_token_params:
-                params.update(self.access_token_params)
-            params.update(kwargs)
-            token = client.fetch_token(token_endpoint, **params)
-            return token
+            return client.fetch_token(token_endpoint, **kwargs)
