@@ -68,6 +68,19 @@ list or is returned by ``get_request_object_signing_algorithms()``. Unsigned
 request objects remain supported when signatures are optional and the algorithm
 configuration permits ``none``.
 
+The keys from ``resolve_client_public_key()`` verify request objects signed with
+an asymmetric algorithm. Per OpenID Connect Core §10.1, request objects signed
+with ``HS256``, ``HS384`` or ``HS512`` use the client secret instead. Implement
+``resolve_client_secret()`` to accept them::
+
+    class JWTAuthenticationRequest(rfc9101.JWTAuthenticationRequest):
+        def resolve_client_secret(self, client):
+            return client.client_secret
+
+The server must be able to read the secret, so it cannot be stored as a hash.
+Return ``None`` when the secret has expired. Without this method, request
+objects signed with an HMAC algorithm are rejected.
+
 Retrieving request objects
 --------------------------
 
