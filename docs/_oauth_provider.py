@@ -311,6 +311,10 @@ class OAuthProvider(_Provider):
                     scope
                 )
 
+        class OptionalCodeChallenge(CodeChallenge):
+            def is_code_challenge_required(self, request):
+                return False
+
         class MyIntrospectionEndpoint(IntrospectionEndpoint):
             def query_token(self, token, token_type_hint):
                 return provider.Token.query.filter_by(access_token=token).first()
@@ -331,7 +335,7 @@ class OAuthProvider(_Provider):
         )
         server.register_grant(
             AuthorizationCodeGrant,
-            [CodeChallenge(required=False), OpenIDCode(require_nonce=False)],
+            [OptionalCodeChallenge(), OpenIDCode(require_nonce=False)],
         )
         server.register_grant(grants.ImplicitGrant)
         server.register_grant(PasswordGrant)

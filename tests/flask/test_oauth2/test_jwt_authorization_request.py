@@ -15,7 +15,7 @@ from authlib.oauth2.multiple_response_types import MultipleResponseTypes
 from authlib.oauth2.rfc6749.grants import (
     AuthorizationCodeGrant as _AuthorizationCodeGrant,
 )
-from authlib.oauth2.rfc7636 import CodeChallenge
+from authlib.oauth2.rfc7636 import CodeChallenge as _CodeChallenge
 from authlib.oidc.core import OpenIDCode as _OpenIDCode
 from authlib.oidc.core import OpenIDJWTAuthenticationRequest
 from authlib.oidc.prompt_create import PromptValues
@@ -54,9 +54,11 @@ def server(server):
         def exists_nonce(self, nonce, request):
             return exists_nonce(nonce, request)
 
-    server.register_grant(
-        AuthorizationCodeGrant, [CodeChallenge(required=False), OpenIDCode()]
-    )
+    class CodeChallenge(_CodeChallenge):
+        def is_code_challenge_required(self, request):
+            return False
+
+    server.register_grant(AuthorizationCodeGrant, [CodeChallenge(), OpenIDCode()])
     return server
 
 
