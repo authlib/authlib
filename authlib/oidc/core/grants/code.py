@@ -18,7 +18,9 @@ from authlib.oauth2.rfc6749 import OAuth2Response
 from ..models import AuthorizationCodeMixin
 from ._legacy import LegacyMixin
 from .util import OPENID_AUTHORIZATION_PARAMETERS
+from .util import call_generate_user_info
 from .util import create_half_hash
+from .util import get_requested_claims
 from .util import is_openid_scope
 from .util import resolve_auth_time
 from .util import resolve_authentication
@@ -46,21 +48,23 @@ class OpenIDToken(LegacyMixin):
             claims["amr"] = amr
         return claims
 
-    def generate_user_info(self, user, scope):
+    def generate_user_info(self, user, scope, claims):
         """Provide user information for the given scope. Developers
         MUST implement this method in subclass, e.g.::
 
             from authlib.oidc.core import UserInfo
 
 
-            def generate_user_info(self, user, scope):
-                user_info = UserInfo(sub=user.id, name=user.name)
-                if "email" in scope:
-                    user_info["email"] = user.email
-                return user_info
+            def generate_user_info(self, user, scope, claims):
+                return UserInfo(sub=user.id, name=user.name, email=user.email).filter(
+                    scope, claims
+                )
 
         :param user: user instance
         :param scope: scope of the token
+        :param claims: the claims that the ``id_token`` member of the
+            ``claims`` parameter requests, or ``None``. See
+            :class:`~authlib.oidc.core.ClaimsParameter`.
         :return: ``authlib.oidc.core.UserInfo`` instance
         """
         raise NotImplementedError()
@@ -70,11 +74,16 @@ class OpenIDToken(LegacyMixin):
         header = self.get_encode_header(request.client)
 
         claims = self.get_compatible_claims(request)
+        claims_request = None
         if request.authorization_code:
             claims.pop("auth_time", None)
             claims.update(
                 self.get_authorization_code_claims(request.authorization_code)
             )
+            get_claims_request = getattr(
+                request.authorization_code, "get_claims_request", None
+            )
+            claims_request = get_claims_request() if get_claims_request else None
 
         access_token = token.get("access_token")
         if access_token:
@@ -82,7 +91,12 @@ class OpenIDToken(LegacyMixin):
             if at_hash is not None:
                 claims["at_hash"] = at_hash.decode("utf-8")
 
-        user_info = self.generate_user_info(request.user, token["scope"])
+        user_info = call_generate_user_info(
+            self.generate_user_info,
+            request.user,
+            token["scope"],
+            get_requested_claims(claims_request, "id_token"),
+        )
         claims.update(user_info)
 
         if alg == "none":
@@ -125,7 +139,7 @@ class OpenIDCode(OpenIDToken):
             def exists_nonce(self, nonce, request):
                 return check_if_nonce_in_cache(request.payload.client_id, nonce)
 
-            def generate_user_info(self, user, scope):
+            def generate_user_info(self, user, scope, claims):
                 return {...}
 
     The register this extension with AuthorizationCodeGrant::

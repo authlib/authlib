@@ -5,6 +5,7 @@ from joserfc import jwt
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.encoding import to_native
+from authlib.deprecate import accepts_argument
 from authlib.deprecate import deprecate
 from authlib.oauth2.form_post import FormPost
 from authlib.oauth2.multiple_response_types import MultipleResponseTypes
@@ -23,6 +24,7 @@ from ..util import create_half_hash
 
 _warned_servers = weakref.WeakSet()
 _warned_session_servers = weakref.WeakSet()
+_warned_user_info_generators = weakref.WeakSet()
 
 _INTERACTION_ERRORS = {
     "login": LoginRequiredError,
@@ -366,3 +368,44 @@ def resolve_authentication(grant, redirect_uri):
     session."""
     grant.request.auth_time = resolve_auth_time(grant)
     set_authentication_context(grant, redirect_uri)
+
+
+def get_requested_claims(claims_request, member):
+    """Return a member of a ``claims`` request, such as ``"id_token"`` or
+    ``"userinfo"``, or ``None``."""
+    if not claims_request:
+        return None
+
+    return claims_request.get(member)
+
+
+def call_generate_user_info(generate_user_info, user, scope, claims):
+    """Call a ``generate_user_info`` method with the requested claims. A method
+    without a ``claims`` argument gets a deprecation warning, once."""
+    if accepts_argument(generate_user_info, "claims"):
+        return generate_user_info(user, scope, claims=claims)
+
+    function = getattr(generate_user_info, "__func__", generate_user_info)
+    if not _is_warned(function):
+        name = getattr(function, "__qualname__", None) or repr(function)
+        deprecate(
+            f"'{name}' does not accept a 'claims' argument. "
+            "In 1.11, it will always receive it.",
+        )
+
+    return generate_user_info(user, scope)
+
+
+def _is_warned(function):
+    """Tell whether the deprecation of a generate_user_info function was
+    already emitted, and remember it. A function that cannot be weakly
+    referenced is always warned."""
+    try:
+        if function in _warned_user_info_generators:
+            return True
+
+        _warned_user_info_generators.add(function)
+    except TypeError:
+        pass
+
+    return False

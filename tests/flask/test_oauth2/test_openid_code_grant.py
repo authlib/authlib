@@ -18,6 +18,7 @@ from authlib.oauth2.rfc6749.grants import (
     AuthorizationCodeGrant as _AuthorizationCodeGrant,
 )
 from authlib.oauth2.rfc9470 import StepUpAuthentication
+from authlib.oidc.core import ClaimsParameter
 from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core.grants import OpenIDCode as _OpenIDCode
 from authlib.oidc.prompt_create import PromptValues
@@ -27,6 +28,7 @@ from authlib.oidc.unmet_authentication_requirements import (
 from tests.util import HMAC_SECRET
 from tests.util import read_file_path
 
+from .models import AuthorizationCode
 from .models import AuthorizationSession
 from .models import CodeGrantMixin
 from .models import exists_nonce
@@ -93,7 +95,7 @@ class OpenIDCode(_OpenIDCode):
     def exists_nonce(self, nonce, request):
         return exists_nonce(nonce, request)
 
-    def generate_user_info(self, user, scopes):
+    def generate_user_info(self, user, scopes, claims):
         return user.generate_user_info(scopes)
 
 
@@ -1231,3 +1233,129 @@ def test_acr_amr_without_openid_scope(test_client, server, monkeypatch):
         },
     )
     assert "code" in dict(url_decode(urlparse.urlparse(rv.location).query))
+
+
+class ClaimsOpenIDCode(OpenIDCode):
+    def generate_user_info(self, user, scopes, claims):
+        return user.generate_user_info().filter(scopes, claims)
+
+
+def test_claims_parameter(test_client, server):
+    """The ID token contains the claims of the scope, and the claims that the
+    id_token member of the claims parameter requests."""
+    server.register_extension(ClaimsParameter())
+    register_oidc_code_grant(server, extension=ClaimsOpenIDCode)
+    claims_request = {"id_token": {"email": None}, "userinfo": {"locale": None}}
+    claims = exchange_code_for_id_token(
+        test_client, {"scope": "openid", "claims": json.dumps(claims_request)}
+    )
+    assert claims["sub"] == "1"
+    assert claims["email"] == "janedoe@example.com"
+    assert "locale" not in claims
+    assert "name" not in claims
+
+
+def test_claims_parameter_not_registered(test_client, server):
+    """Without the ClaimsParameter extension, the claims parameter is
+    ignored."""
+    register_oidc_code_grant(server, extension=ClaimsOpenIDCode)
+    claims = exchange_code_for_id_token(
+        test_client,
+        {"scope": "openid", "claims": json.dumps({"id_token": {"email": None}})},
+    )
+    assert "email" not in claims
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "not json",
+        "[]",
+        '{"id_token": null}',
+        '{"userinfo": []}',
+        "[" * 100000 + "]" * 100000,
+    ],
+)
+def test_invalid_claims_parameter(test_client, server, value):
+    """An invalid claims parameter is an invalid_request error, redirected to
+    the client."""
+    server.register_extension(ClaimsParameter())
+    register_oidc_code_grant(server, extension=ClaimsOpenIDCode)
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "code",
+            "client_id": "client-id",
+            "scope": "openid",
+            "redirect_uri": "https://client.test",
+            "state": "bar",
+            "claims": value,
+            "user_id": "1",
+        },
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert params["error"] == "invalid_request"
+    assert params["state"] == "bar"
+
+
+def test_claims_parameter_unknown_members(test_client, server):
+    """The members that OIDC Core does not define are kept as they are."""
+    server.register_extension(ClaimsParameter())
+    register_oidc_code_grant(server, extension=ClaimsOpenIDCode)
+    claims_request = {
+        "id_token": {"verified_claims": {"claims": {"email": None}}},
+        "purpose": "test",
+    }
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "code",
+            "client_id": "client-id",
+            "scope": "openid",
+            "redirect_uri": "https://client.test",
+            "claims": json.dumps(claims_request),
+            "user_id": "1",
+        },
+    )
+    code = dict(url_decode(urlparse.urlparse(rv.location).query))["code"]
+    authorization_code = AuthorizationCode.query.filter_by(code=code).one()
+    assert authorization_code.get_claims_request() == claims_request
+
+
+def test_claims_parameter_without_openid_scope(test_client, server):
+    """Without the openid scope, the claims parameter is ignored."""
+    server.register_extension(ClaimsParameter())
+    register_oidc_code_grant(server, extension=ClaimsOpenIDCode)
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "code",
+            "client_id": "client-id",
+            "scope": "profile",
+            "redirect_uri": "https://client.test",
+            "claims": "not json",
+            "user_id": "1",
+        },
+    )
+    code = dict(url_decode(urlparse.urlparse(rv.location).query))["code"]
+    authorization_code = AuthorizationCode.query.filter_by(code=code).one()
+    assert authorization_code.get_claims_request() is None
+
+
+def test_generate_user_info_without_claims(test_client, server):
+    """A generate_user_info method without a claims argument still works,
+    with a deprecation warning."""
+
+    class LegacyOpenIDCode(OpenIDCode):
+        def generate_user_info(self, user, scopes):
+            return user.generate_user_info(scopes)
+
+    server.register_extension(ClaimsParameter())
+    register_oidc_code_grant(server, extension=LegacyOpenIDCode)
+    with pytest.warns(AuthlibDeprecationWarning, match="'claims' argument"):
+        claims = exchange_code_for_id_token(
+            test_client,
+            {"scope": "openid", "claims": json.dumps({"id_token": {"email": None}})},
+        )
+
+    assert claims["sub"] == "1"

@@ -19,8 +19,8 @@ def server(server, app, db):
         def get_issuer(self) -> str:
             return "https://provider.test"
 
-        def generate_user_info(self, user, scope):
-            return user.generate_user_info().filter(scope)
+        def generate_user_info(self, user, scope, claims):
+            return user.generate_user_info().filter(scope, claims)
 
         def resolve_private_key(self):
             return KeySet.import_key_set(read_file_path("jwks_private.json"))
@@ -466,3 +466,19 @@ def test_scope_signed_jwks_dict(test_client, client, token, db, server, monkeypa
     pub_key = KeySet.import_key_set(read_file_path("jwks_public.json"))
     token = jwt.decode(rv.data, pub_key)
     assert token.claims["sub"] == "1"
+
+
+def test_claims_parameter(test_client, db, token, monkeypatch):
+    """The response contains the claims that the userinfo member of the claims
+    parameter requests."""
+    token.claims_request = {"userinfo": {"email": None}, "id_token": {"name": None}}
+    db.session.add(token)
+    db.session.commit()
+    monkeypatch.setattr(
+        oidc_core.UserInfoEndpoint,
+        "get_token_claims_request",
+        lambda self, token: token.claims_request,
+    )
+    headers = {"Authorization": "Bearer access-token"}
+    rv = test_client.get("/oauth/userinfo", headers=headers)
+    assert json.loads(rv.data) == {"sub": "1", "email": "janedoe@example.com"}

@@ -31,6 +31,18 @@ class AuthorizationCodeMixin(_AuthorizationCodeMixin):
         """
         return None
 
+    def get_claims_request(self) -> dict | None:
+        """Get the ``claims`` parameter of the authorization request, saved
+        from ``request.claims_request``. The ``id_token`` member of this
+        parameter gives the claims of the ID token. By default, there is none.
+        See :class:`~authlib.oidc.core.ClaimsParameter`::
+
+            def get_claims_request(self):
+                return self.claims_request
+
+        """
+        return None
+
 
 class AuthorizationSessionMixin(_AuthorizationSessionMixin):
     """The authorization session of OpenID Connect. It adds the account

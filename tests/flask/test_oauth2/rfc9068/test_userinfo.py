@@ -40,8 +40,8 @@ def server(server, app, jwks):
         def get_token_user(self, token):
             return db.session.get(User, int(token["sub"]))
 
-        def generate_user_info(self, user, scope):
-            return user.generate_user_info().filter(scope)
+        def generate_user_info(self, user, scope, claims):
+            return user.generate_user_info().filter(scope, claims)
 
         def resolve_private_key(self):
             return jwks

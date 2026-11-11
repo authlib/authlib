@@ -14,7 +14,9 @@ from authlib.oauth2.rfc6749.errors import InvalidRequestError
 
 from ._legacy import LegacyMixin
 from .util import OPENID_AUTHORIZATION_PARAMETERS
+from .util import call_generate_user_info
 from .util import create_half_hash
+from .util import get_requested_claims
 from .util import has_multiple_response_types
 from .util import is_openid_scope
 from .util import resolve_authentication
@@ -61,21 +63,23 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
         """
         raise NotImplementedError()
 
-    def generate_user_info(self, user, scope):
+    def generate_user_info(self, user, scope, claims):
         """Provide user information for the given scope. Developers
         MUST implement this method in subclass, e.g.::
 
             from authlib.oidc.core import UserInfo
 
 
-            def generate_user_info(self, user, scope):
-                user_info = UserInfo(sub=user.id, name=user.name)
-                if "email" in scope:
-                    user_info["email"] = user.email
-                return user_info
+            def generate_user_info(self, user, scope, claims):
+                return UserInfo(sub=user.id, name=user.name, email=user.email).filter(
+                    scope, claims
+                )
 
         :param user: user instance
         :param scope: scope of the token
+        :param claims: the claims that the ``id_token`` member of the
+            ``claims`` parameter requests, or ``None``. See
+            :class:`~authlib.oidc.core.ClaimsParameter`.
         :return: ``authlib.oidc.core.UserInfo`` instance
         """
         raise NotImplementedError()
@@ -193,7 +197,14 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
             if at_hash is not None:
                 claims["at_hash"] = at_hash.decode("utf-8")
 
-        user_info = self.generate_user_info(self.request.user, token["scope"])
+        user_info = call_generate_user_info(
+            self.generate_user_info,
+            self.request.user,
+            token["scope"],
+            get_requested_claims(
+                getattr(self.request, "claims_request", None), "id_token"
+            ),
+        )
         claims.update(user_info)
         key = self.resolve_client_private_key(self.request.client)
         private_key = import_any_key(key)

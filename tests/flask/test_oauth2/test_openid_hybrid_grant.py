@@ -55,7 +55,7 @@ def server(server):
         def exists_nonce(self, nonce, request):
             return exists_nonce(nonce, request)
 
-        def generate_user_info(self, user, scopes):
+        def generate_user_info(self, user, scopes, claims):
             return user.generate_user_info(scopes)
 
     class OpenIDHybridGrant(IDTokenConfigMixin, _OpenIDHybridGrant):
@@ -65,7 +65,7 @@ def server(server):
         def exists_nonce(self, nonce, request):
             return exists_nonce(nonce, request)
 
-        def generate_user_info(self, user, scopes):
+        def generate_user_info(self, user, scopes, claims):
             return user.generate_user_info(scopes)
 
     server.register_grant(OpenIDHybridGrant)

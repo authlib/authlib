@@ -44,6 +44,14 @@ OpenID Endpoints
     :show-inheritance:
     :members:
 
+.. autoclass:: ClaimsParameter
+    :show-inheritance:
+    :members:
+
+.. autoclass:: AuthorizationCodeMixin
+    :show-inheritance:
+    :members: get_claims_request
+
 .. _oidc_request_objects:
 
 OpenID request objects
