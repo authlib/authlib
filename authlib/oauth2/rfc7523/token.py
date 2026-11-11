@@ -3,6 +3,7 @@ import time
 from joserfc import jwt
 
 from authlib._joserfc_helpers import import_any_key
+from authlib.deprecate import deprecate
 
 
 class JWTBearerTokenGenerator:
@@ -25,11 +26,20 @@ class JWTBearerTokenGenerator:
     :param secret_key: private RSA key in bytes, JWK or JWK Set.
     :param issuer: a string or URI of the issuer
     :param alg: ``alg`` to use in JWT
+
+    .. deprecated:: 1.10
+        Use :class:`authlib.oauth2.rfc9068.JWTBearerTokenGenerator`, which
+        follows :rfc:`9068`.
     """
 
     DEFAULT_EXPIRES_IN = 3600
 
     def __init__(self, secret_key, issuer=None, alg="RS256"):
+        deprecate(
+            "'authlib.oauth2.rfc7523.JWTBearerTokenGenerator' is deprecated, "
+            "use 'authlib.oauth2.rfc9068.JWTBearerTokenGenerator' instead.",
+            version="1.11",
+        )
         self.secret_key = import_any_key(secret_key)
         self.issuer = issuer
         self.alg = alg

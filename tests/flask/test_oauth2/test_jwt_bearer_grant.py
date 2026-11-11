@@ -144,6 +144,9 @@ def test_token_generator(test_client, app, server):
     assert "c-" in resp["access_token"]
 
 
+@pytest.mark.filterwarnings(
+    "ignore:'authlib.oauth2.rfc7523.JWTBearerTokenGenerator' is deprecated"
+)
 def test_jwt_bearer_token_generator(test_client, server):
     private_key = KeySet.import_key_set(read_file_path("jwks_private.json"))
     server.register_token_generator(
@@ -166,6 +169,9 @@ def test_jwt_bearer_token_generator(test_client, server):
     assert resp["access_token"].count(".") == 2
 
 
+@pytest.mark.filterwarnings(
+    "ignore:'authlib.oauth2.rfc7523.JWTBearerTokenGenerator' is deprecated"
+)
 def test_jwt_bearer_token_generator_jwks_dict(client):
     """A JWKS dict is still accepted as the generator key but deprecated."""
     with pytest.warns(AuthlibDeprecationWarning, match="KeySet.import_key_set"):
@@ -193,6 +199,9 @@ def test_sign_with_raw_key(test_client):
     assert "access_token" in json.loads(rv.data)
 
 
+@pytest.mark.filterwarnings(
+    "ignore:'authlib.oauth2.rfc7523.JWTBearerTokenGenerator' is deprecated"
+)
 def test_jwt_bearer_token_generator_casts_sub_to_string(client, user):
     """The generated JWT ``sub`` must be a string (RFC 7519 Section 4.1.2), even
     when ``get_user_id()`` returns a non-string such as an integer primary key.
@@ -404,3 +413,11 @@ def test_unknown_issuer(test_client):
     resp = json.loads(rv.data)
     assert resp["error"] == "invalid_grant"
     assert resp["error_description"] == "The client does not exist on this server."
+
+
+def test_jwt_bearer_token_generator_deprecated():
+    """The generator is deprecated in favor of the RFC 9068 one."""
+    with pytest.warns(AuthlibDeprecationWarning, match="rfc9068"):
+        JWTBearerTokenGenerator(
+            KeySet.import_key_set(read_file_path("jwks_private.json"))
+        )

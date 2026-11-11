@@ -5,6 +5,7 @@ from joserfc import jwt
 from joserfc.errors import JoseError
 
 from authlib._joserfc_helpers import import_any_key
+from authlib.deprecate import deprecate
 
 from ..rfc6749 import TokenMixin
 from ..rfc6750 import BearerTokenValidator
@@ -39,6 +40,10 @@ class JWTBearerTokenValidator(BearerTokenValidator):
         with an ``aud`` claim are rejected.
     :param realm: the realm of the ``WWW-Authenticate`` header.
     :param leeway: the clock skew tolerance, in seconds.
+
+    .. deprecated:: 1.10
+        Use :class:`authlib.oauth2.rfc9068.JWTBearerTokenValidator`, which
+        follows :rfc:`9068`.
     """
 
     TOKEN_TYPE = "bearer"
@@ -53,6 +58,11 @@ class JWTBearerTokenValidator(BearerTokenValidator):
         audience=None,
         **extra_attributes,
     ):
+        deprecate(
+            "'authlib.oauth2.rfc7523.JWTBearerTokenValidator' is deprecated, "
+            "use 'authlib.oauth2.rfc9068.JWTBearerTokenValidator' instead.",
+            version="2.0.0",
+        )
         super().__init__(realm, **extra_attributes)
         self.public_key = import_any_key(public_key)
         self.leeway = leeway

@@ -5,8 +5,13 @@ from joserfc import jws
 from joserfc import jwt
 from joserfc.jwk import OctKey
 
+from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.oauth2.rfc6750.errors import InvalidTokenError
 from authlib.oauth2.rfc7523 import JWTBearerTokenValidator
+
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:'authlib.oauth2.rfc7523.JWTBearerTokenValidator' is deprecated"
+)
 
 
 @pytest.fixture
@@ -140,3 +145,10 @@ def test_custom_audience_claims_option(oct_key, claims):
         {"alg": "HS256"}, {**claims, "aud": "https://rs-a.example"}, oct_key
     )
     assert validator.authenticate_token(token_string) is not None
+
+
+@pytest.mark.filterwarnings("default")
+def test_deprecated(oct_key):
+    """The validator is deprecated in favor of the RFC 9068 one."""
+    with pytest.warns(AuthlibDeprecationWarning, match="rfc9068"):
+        JWTBearerTokenValidator(oct_key)
