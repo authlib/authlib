@@ -303,3 +303,52 @@ def test_get_audiences_override(client, user, jwks, token_generator):
         )
 
     assert jwt.decode(access_token, jwks).claims["aud"] == resource
+
+
+def test_explicit_expires_in(client, user, jwks, token_generator):
+    """The JWT lifetime matches an expires_in given to the generator."""
+    token = token_generator.generate(
+        "authorization_code", client, user, "profile", expires_in=300
+    )
+
+    claims = jwt.decode(token["access_token"], jwks).claims
+    assert token["expires_in"] == 300
+    assert claims["exp"] - claims["iat"] == 300
+
+
+def test_expires_generator(client, user, jwks):
+    """The JWT lifetime matches the lifetime given by expires_generator."""
+
+    class MyJWTBearerTokenGenerator(JWTBearerTokenGenerator):
+        def get_jwks(self):
+            return jwks
+
+        def get_audiences(self, client, user, scope):
+            return resource
+
+    token_generator = MyJWTBearerTokenGenerator(issuer=issuer, expires_generator=600)
+    token = token_generator.generate("authorization_code", client, user, "profile")
+
+    claims = jwt.decode(token["access_token"], jwks).claims
+    assert token["expires_in"] == 600
+    assert claims["exp"] - claims["iat"] == 600
+
+
+def test_override_without_expires_in(client, user, jwks):
+    """An override without expires_in is deprecated but still works."""
+
+    class MyJWTBearerTokenGenerator(JWTBearerTokenGenerator):
+        def get_jwks(self):
+            return jwks
+
+        def get_audiences(self, client, user, scope):
+            return resource
+
+        def access_token_generator(self, client, grant_type, user, scope):
+            return super().access_token_generator(client, grant_type, user, scope)
+
+    with pytest.warns(AuthlibDeprecationWarning, match="expires_in"):
+        token_generator = MyJWTBearerTokenGenerator(issuer=issuer)
+
+    token = token_generator.generate("authorization_code", client, user, "profile")
+    assert jwt.decode(token["access_token"], jwks).claims["sub"] == str(user.id)

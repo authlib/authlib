@@ -37,7 +37,7 @@ class SupportedPromptValues(PromptValues):
         }
 
 
-def token_generator(client, grant_type, user=None, scope=None):
+def token_generator(client, grant_type, user=None, scope=None, expires_in=None):
     token = f"{client.client_id[0]}-{grant_type}"
     if user:
         token = f"{token}.{user.get_user_id()}"

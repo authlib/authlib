@@ -111,7 +111,7 @@ class AuthorizationServer(_AuthorizationServer):
             # and in module `your_project.generators`, you can define:
 
 
-            def gen_token(client, grant_type, user, scope):
+            def gen_token(client, grant_type, user, scope, expires_in):
                 # generate token according to these parameters
                 token = create_random_token()
                 return f"{client.id}-{user.id}-{token}"

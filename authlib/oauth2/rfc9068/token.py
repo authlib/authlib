@@ -142,13 +142,23 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         """
         return generate_token(16)
 
-    def access_token_generator(self, client, grant_type, user, scope):
-        now = int(time.time())
-        expires_in = now + self._get_expires_in(client, grant_type)
+    def access_token_generator(self, client, grant_type, user, scope, expires_in=None):
+        """Generate a JWT access token.
 
+        :param client: the client that makes the request.
+        :param grant_type: the requested grant type.
+        :param user: the authorized user.
+        :param scope: the granted scope.
+        :param expires_in: the lifetime of the token, in seconds. Defaults to
+            the lifetime of the grant type.
+        """
+        if expires_in is None:
+            expires_in = self._get_expires_in(client, grant_type)
+
+        now = int(time.time())
         token_data = {
             "iss": self.issuer,
-            "exp": expires_in,
+            "exp": now + expires_in,
             "client_id": client.get_client_id(),
             "iat": now,
             "jti": self.get_jti(client, grant_type, user, scope),

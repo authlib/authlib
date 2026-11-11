@@ -1,4 +1,21 @@
+import inspect
+
+from authlib.deprecate import deprecate
+
 from ..rfc6749.errors import InvalidScopeError
+
+
+def _accepts_expires_in(func):
+    """Tell whether the function accepts an expires_in keyword argument."""
+    try:
+        parameters = inspect.signature(func).parameters.values()
+    except (TypeError, ValueError):
+        return False
+
+    return any(
+        parameter.name == "expires_in" or parameter.kind == parameter.VAR_KEYWORD
+        for parameter in parameters
+    )
 
 
 class BearerTokenGenerator:
@@ -18,6 +35,14 @@ class BearerTokenGenerator:
             "expires_in":3600,
             "refresh_token":"tGzv3JOkF0XG5Qx2TlKWIA"
         }
+
+    :param access_token_generator: a function that returns the access token.
+        It receives ``client``, ``grant_type``, ``user``, ``scope`` and
+        ``expires_in``, the lifetime of the token in seconds.
+    :param refresh_token_generator: a function that returns the refresh token.
+        It receives ``client``, ``grant_type``, ``user`` and ``scope``.
+    :param expires_generator: the lifetime of the access tokens, as a number of
+        seconds or a function that receives ``client`` and ``grant_type``.
     """
 
     #: default expires_in value
@@ -39,6 +64,15 @@ class BearerTokenGenerator:
         self.access_token_generator = access_token_generator
         self.refresh_token_generator = refresh_token_generator
         self.expires_generator = expires_generator
+        if access_token_generator is not None and not _accepts_expires_in(
+            access_token_generator
+        ):
+            name = getattr(access_token_generator, "__qualname__", None)
+            deprecate(
+                f"The access token generator {name or access_token_generator!r} "
+                "does not accept an 'expires_in' argument. "
+                "In 1.11, it will always receive it.",
+            )
 
     def _get_expires_in(self, client, grant_type):
         if self.expires_generator is None:
@@ -91,12 +125,19 @@ class BearerTokenGenerator:
         :return: Token dict
         """
         scope = self.get_allowed_scope(client, scope)
-        access_token = self.access_token_generator(
-            client=client, grant_type=grant_type, user=user, scope=scope
-        )
         if expires_in is None:
             expires_in = self._get_expires_in(client, grant_type)
 
+        kwargs = {
+            "client": client,
+            "grant_type": grant_type,
+            "user": user,
+            "scope": scope,
+        }
+        if _accepts_expires_in(self.access_token_generator):
+            kwargs["expires_in"] = expires_in
+
+        access_token = self.access_token_generator(**kwargs)
         token = {
             "token_type": "Bearer",
             "access_token": access_token,

@@ -1,10 +1,12 @@
 import pytest
 
+from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.oauth2.rfc6749 import InvalidRequestError
 from authlib.oauth2.rfc6749 import JsonRequest
 from authlib.oauth2.rfc6749 import MissingAuthorizationError
 from authlib.oauth2.rfc6749 import OAuth2Request
 from authlib.oauth2.rfc6749 import ResourceProtector
+from authlib.oauth2.rfc6750 import BearerTokenGenerator
 from authlib.oauth2.rfc6750 import BearerTokenValidator
 from authlib.oauth2.rfc6750 import FormEncodedBodyToken
 from authlib.oauth2.rfc6750.errors import InvalidTokenError
@@ -129,3 +131,74 @@ def test_missing_authorization_error_with_realm():
     assert status_code == 401
     assert body == {}
     assert ("WWW-Authenticate", 'Bearer realm="example"') in headers
+
+
+class ScopeClient:
+    """Client that allows every scope."""
+
+    def get_allowed_scope(self, scope):
+        """Return the requested scope."""
+        return scope or "profile"
+
+
+def test_access_token_generator_receives_expires_in():
+    """The access token generator receives the lifetime of the token."""
+
+    def access_token_generator(client, grant_type, user, scope, expires_in):
+        return f"token-{expires_in}"
+
+    generator = BearerTokenGenerator(access_token_generator)
+    token = generator.generate("client_credentials", ScopeClient(), expires_in=300)
+
+    assert token["access_token"] == "token-300"
+    assert token["expires_in"] == 300
+
+
+def test_access_token_generator_with_kwargs():
+    """An access token generator with **kwargs receives the lifetime."""
+
+    def access_token_generator(**kwargs):
+        return f"token-{kwargs['expires_in']}"
+
+    generator = BearerTokenGenerator(access_token_generator, expires_generator=600)
+    token = generator.generate("client_credentials", ScopeClient())
+
+    assert token["access_token"] == "token-600"
+
+
+def test_access_token_generator_without_expires_in():
+    """An access token generator without expires_in is deprecated but works."""
+
+    def access_token_generator(client, grant_type, user, scope):
+        return "token"
+
+    with pytest.warns(AuthlibDeprecationWarning, match="expires_in"):
+        generator = BearerTokenGenerator(access_token_generator)
+
+    token = generator.generate("client_credentials", ScopeClient(), expires_in=300)
+    assert token["access_token"] == "token"
+    assert token["expires_in"] == 300
+
+
+def test_access_token_generator_without_signature():
+    """A callable without an introspectable signature is called as before."""
+
+    class Generator:
+        """Callable whose signature cannot be read."""
+
+        __signature__ = "invalid"
+
+        def __call__(self, client, grant_type, user, scope):
+            return "token"
+
+    with pytest.warns(AuthlibDeprecationWarning, match="expires_in"):
+        generator = BearerTokenGenerator(Generator())
+
+    token = generator.generate("client_credentials", ScopeClient())
+    assert token["access_token"] == "token"
+
+
+def test_no_access_token_generator():
+    """A generator without access token generator can be created."""
+    generator = BearerTokenGenerator(None)
+    assert generator.access_token_generator is None
