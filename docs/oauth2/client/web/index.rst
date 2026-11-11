@@ -139,6 +139,31 @@ the gateway:
         'headers': {'X-Api-Key': '...'},
     }
 
+To check the provider certificate against your own certificate authority, pass
+``verify``. It also applies to the ``server_metadata_url`` and ``jwks_uri``
+requests. With the Flask and Django integrations, give the path of the CA
+bundle:
+
+.. code-block:: python
+
+    client_kwargs = {
+        'scope': 'profile',
+        'verify': '/path/to/ca-bundle.pem',
+    }
+
+With the Starlette and FastAPI integrations, HTTPX expects an SSL context:
+
+.. skip: next "the CA bundle file does not exist"
+
+.. code-block:: python
+
+    import ssl
+
+    client_kwargs = {
+        'scope': 'profile',
+        'verify': ssl.create_default_context(cafile='/path/to/ca-bundle.pem'),
+    }
+
 Routes for Authorization
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
