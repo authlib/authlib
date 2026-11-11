@@ -683,3 +683,33 @@ def test_acr_amr_claims(test_client, monkeypatch):
     )
     assert token.claims["acr"] == "urn:mace:incommon:iap:silver"
     assert token.claims["amr"] == ["pwd", "otp"]
+
+
+@pytest.mark.parametrize(
+    ("sub", "error"),
+    [("1", None), ("2", "login_required"), (None, "invalid_request")],
+)
+def test_id_token_hint(test_client, sub, error):
+    """An id_token_hint of another user is refused with login_required, and
+    an invalid one with invalid_request, redirected in the fragment."""
+    id_token_hint = jwt.encode(
+        {"alg": "HS256"},
+        {"iss": "Authlib", "aud": "client-id", "sub": sub},
+        OctKey.import_key(HMAC_SECRET),
+    )
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "client_id": "client-id",
+            "response_type": "code id_token",
+            "scope": "openid",
+            "state": "bar",
+            "nonce": "abc",
+            "redirect_uri": "https://client.test",
+            "id_token_hint": id_token_hint,
+            "user_id": "1",
+        },
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params.get("error") == error
+    assert params["state"] == "bar"

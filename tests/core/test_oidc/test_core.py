@@ -26,6 +26,7 @@ from authlib.oidc.core import OpenIDCode
 from authlib.oidc.core import UserInfo
 from authlib.oidc.core import get_claim_cls_by_response_type
 from authlib.oidc.core import get_requested_acr_values
+from authlib.oidc.core import get_requested_sub
 from authlib.oidc.core.errors import LoginRequiredError
 from authlib.oidc.core.grants.util import call_generate_user_info
 from authlib.oidc.core.grants.util import validate_request_prompt
@@ -332,6 +333,26 @@ def test_get_requested_acr_values():
         claims_request = {"id_token": {"acr": acr}}
         request = acr_request({"acr_values": "gold"}, claims_request)
         assert get_requested_acr_values(request) == ["gold"]
+
+
+def test_get_requested_sub():
+    """The sub of the claims parameter comes before the sub of the
+    id_token_hint. Invalid sub values are ignored."""
+    request = acr_request({})
+    assert get_requested_sub(request) is None
+
+    request.id_token_hint_sub = "1"
+    assert get_requested_sub(request) == "1"
+
+    request.claims_request = {"id_token": {"sub": {"value": "2"}}}
+    assert get_requested_sub(request) == "2"
+
+    request.claims_request = {"id_token": {"sub": {"value": 3}}}
+    assert get_requested_sub(request) == "3"
+
+    for sub in (None, {"value": None}, {"value": True}, {"value": ["2"]}):
+        request.claims_request = {"id_token": {"sub": sub}}
+        assert get_requested_sub(request) == "1"
 
 
 def test_unmet_extension_with_unhookable_get_acr():

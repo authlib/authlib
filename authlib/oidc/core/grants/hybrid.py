@@ -8,6 +8,7 @@ from authlib.oauth2.rfc6749.grants.authorization_code import (
 
 from .implicit import OpenIDImplicitGrant
 from .util import is_openid_scope
+from .util import set_id_token_hint_sub
 from .util import validate_nonce
 from .util import validate_response_mode
 
@@ -66,6 +67,10 @@ class OpenIDHybridGrant(OpenIDImplicitGrant):
                 redirect_uri=redirect_uri,
                 redirect_fragment=True,
             )
+
+        set_id_token_hint_sub(
+            self.request, self, redirect_uri=redirect_uri, redirect_fragment=True
+        )
         return redirect_uri
 
     def create_granted_params(self, grant_user):

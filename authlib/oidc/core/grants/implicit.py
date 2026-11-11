@@ -19,11 +19,14 @@ from .util import create_half_hash
 from .util import get_requested_claims
 from .util import has_multiple_response_types
 from .util import is_openid_scope
+from .util import is_requested_sub_unmet
 from .util import resolve_authentication
+from .util import set_id_token_hint_sub
 from .util import set_silent
 from .util import validate_nonce
 from .util import validate_prompt_none
 from .util import validate_request_prompt
+from .util import validate_requested_sub
 from .util import validate_response_mode
 
 log = logging.getLogger(__name__)
@@ -75,6 +78,9 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
                     scope, claims
                 )
 
+        It is also called during the authorization request, to read the
+        ``sub`` of the user, when the client asks for a specific user.
+
         :param user: user instance
         :param scope: scope of the token
         :param claims: the claims that the ``id_token`` member of the
@@ -95,6 +101,7 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
             )
         try:
             validate_nonce(self.request, self.exists_nonce, required=True)
+            set_id_token_hint_sub(self.request, self)
         except OAuth2Error as error:
             error.redirect_uri = redirect_uri
             error.redirect_fragment = True
@@ -105,7 +112,12 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
         set_silent(self)
         redirect_uri = self.validate_authorization_request()
         self.redirect_uri = redirect_uri
-        validate_request_prompt(self, redirect_uri, redirect_fragment=True)
+        validate_request_prompt(
+            self,
+            redirect_uri,
+            redirect_fragment=True,
+            other_user=is_requested_sub_unmet(self.request, self),
+        )
         return redirect_uri
 
     def validate_interactions(self):
@@ -117,6 +129,7 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
             raise AccessDeniedError(redirect_uri=redirect_uri, redirect_fragment=True)
 
         self.request.user = grant_user
+        validate_requested_sub(self, self, redirect_uri)
         resolve_authentication(self, redirect_uri)
         params = self.create_granted_params(grant_user)
         if state := self.request.payload.state:

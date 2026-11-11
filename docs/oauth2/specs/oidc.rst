@@ -50,6 +50,8 @@ OpenID Endpoints
 
 .. autofunction:: get_requested_acr_values
 
+.. autofunction:: get_requested_sub
+
 .. autoclass:: AuthorizationCodeMixin
     :show-inheritance:
     :members: get_claims_request

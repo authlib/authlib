@@ -14,6 +14,12 @@ Added
 - ``get_requested_acr_values(request)`` returns the requested ``acr`` values:
   from ``acr_values`` in ``authlib.oauth2.rfc9470``, and also from the
   ``claims`` parameter in ``authlib.oidc.core``.
+- The OpenID Connect grants check the user that the request asks for, with
+  ``id_token_hint`` or with the ``sub`` claim of the ``claims`` parameter. An
+  ``id_token_hint`` with an invalid signature is refused with
+  ``invalid_request``. When the user is another user, they must log in, and
+  the request is refused with ``login_required`` if they do not.
+  ``get_requested_sub(request)`` returns the requested user.
 
 Deprecated
 ~~~~~~~~~~

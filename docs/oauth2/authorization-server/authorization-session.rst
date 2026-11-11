@@ -31,7 +31,12 @@ With ``prompt=none``, the server returns an error instead, such as
 ``login_required`` or ``consent_required``.
 
 - ``"login"`` is added when the user is not logged in, when the request asks
-  for a new login, or when the last login is older than ``max_age``.
+  for a new login, or when the last login is older than ``max_age``. With
+  OpenID Connect, it is also added when the request asks for another user,
+  with ``id_token_hint`` or with the ``sub`` claim of the ``claims``
+  parameter. :func:`~authlib.oidc.core.get_requested_sub` returns this user.
+  If the user who logs in is still another user, the request is refused with
+  ``login_required``.
 - ``"select_account"`` is added when the request asks for it, or when
   ``is_account_selection_needed`` returns true. A login also counts as an
   account selection, so an anonymous user only has to log in.

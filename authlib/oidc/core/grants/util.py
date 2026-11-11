@@ -1,7 +1,10 @@
+import json
 import time
 import weakref
 
+from joserfc import jws
 from joserfc import jwt
+from joserfc.errors import JoseError
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.encoding import to_native
@@ -69,7 +72,9 @@ def get_prompt_values(request):
     return prompt.split() if prompt else []
 
 
-def validate_request_prompt(grant, redirect_uri, redirect_fragment=False):
+def validate_request_prompt(
+    grant, redirect_uri, redirect_fragment=False, other_user=False
+):
     """Validate the ``prompt`` and ``max_age`` parameters, and add the
     interactions they ask for to ``grant.interactions``, in this order:
     ``"login"``, ``"select_account"`` and ``"consent"``.
@@ -86,8 +91,13 @@ def validate_request_prompt(grant, redirect_uri, redirect_fragment=False):
     :param grant: the grant that validates the authorization request
     :param redirect_uri: the redirect URI of the authorization request
     :param redirect_fragment: whether errors are redirected in the fragment
+    :param other_user: whether the request asks for another user. The user
+        must then log in, unless they already did after the request started.
     :raises InvalidRequestError: if ``prompt`` contains ``none`` with another
         value, or if ``max_age`` is not a non-negative integer
+    :raises LoginRequiredError: if ``prompt`` is ``none`` and the user must log
+        in, or if the request asks for another user than the one who logged in
+        after the request started
     """
     prompts = get_prompt_values(grant.request)
     if "none" in prompts and len(prompts) > 1:
@@ -112,12 +122,15 @@ def validate_request_prompt(grant, redirect_uri, redirect_fragment=False):
     if session is None:
         _warn_missing_authorization_session(grant.server)
         # OIDC Core §3.1.2.1: max_age=0 is equivalent to prompt=login.
-        login_required = "login" in prompts or max_age == 0
+        login_required = "login" in prompts or max_age == 0 or other_user
         consent_required = "consent" in prompts
         account_selection_required = "select_account" in prompts and bool(request.user)
     else:
         login_required = is_login_required(
-            request, session, max_age=max_age, fresh_login="login" in prompts
+            request,
+            session,
+            max_age=max_age,
+            fresh_login="login" in prompts or other_user,
         )
         consent_required = "consent" in prompts and (
             not request.user or not session.is_interaction_done(request, "consent")
@@ -132,6 +145,13 @@ def validate_request_prompt(grant, redirect_uri, redirect_fragment=False):
     if login_required and "none" in prompts:
         raise LoginRequiredError(
             redirect_uri=redirect_uri, redirect_fragment=redirect_fragment
+        )
+
+    if other_user and not login_required:
+        raise LoginRequiredError(
+            "The user is not the requested user.",
+            redirect_uri=redirect_uri,
+            redirect_fragment=redirect_fragment,
         )
 
     if login_required:
@@ -428,6 +448,131 @@ def validate_essential_acr(grant, redirect_uri):
 
     raise AccessDeniedError(
         "The authentication does not satisfy the requested 'acr' values.",
+        redirect_uri=redirect_uri,
+        redirect_fragment=grant.ERROR_RESPONSE_FRAGMENT,
+    )
+
+
+def set_id_token_hint_sub(
+    request, generator, redirect_uri=None, redirect_fragment=False
+):
+    """Set ``request.id_token_hint_sub`` to the ``sub`` of the
+    ``id_token_hint`` parameter, or to ``None``.
+
+    Per OIDC Core §3.1.2.1, the hint is an ID token that the server issued
+    before. Its signature is checked with the key and the algorithm of the ID
+    tokens of the client. When these ID tokens are not signed, the ``sub`` is
+    read without a check. Its expiration time is not checked.
+
+    :param request: the authorization request
+    :param generator: the extension or the grant that generates the ID tokens
+    :param redirect_uri: the redirect URI of the authorization request
+    :param redirect_fragment: whether errors are redirected in the fragment
+    :raises InvalidRequestError: if the hint is not an ID token of the server
+    """
+    request.id_token_hint_sub = None
+    hint = request.payload.data.get("id_token_hint")
+    if not hint:
+        return
+
+    sub = _decode_id_token_hint(hint, generator, request.client)
+    if sub is None:
+        raise InvalidRequestError(
+            "Invalid 'id_token_hint' parameter.",
+            redirect_uri=redirect_uri,
+            redirect_fragment=redirect_fragment,
+        )
+
+    request.id_token_hint_sub = sub
+
+
+def _decode_id_token_hint(hint, generator, client):
+    """Return the sub of an ID token of the client, or None. The signature of
+    an unsigned ID token is not checked."""
+    alg = generator.get_client_algorithm(client)
+    key = None
+    if alg != "none":
+        key = import_any_key(generator.resolve_client_private_key(client))
+
+    try:
+        if key is None:
+            claims = json.loads(jws.extract_compact(hint.encode()).payload)
+        else:
+            claims = jwt.decode(hint, key, algorithms=[alg]).claims
+    except (JoseError, ValueError):
+        return None
+
+    if not isinstance(claims, dict):
+        return None
+
+    return _normalize_sub(claims.get("sub"))
+
+
+def _normalize_sub(sub):
+    """Return a sub as a string, or None. Integers are accepted, because
+    applications often use the id of the user."""
+    if isinstance(sub, int) and not isinstance(sub, bool):
+        return str(sub)
+
+    return sub if isinstance(sub, str) else None
+
+
+def get_requested_subs(request):
+    """Return the ``sub`` values that the request asks for: the ``sub`` claim
+    of the ``claims`` parameter, then the ``sub`` of the ``id_token_hint``.
+
+    :param request: the authorization request
+    """
+    claims_request = getattr(request, "claims_request", None)
+    sub_request = (get_requested_claims(claims_request, "id_token") or {}).get("sub")
+    if not isinstance(sub_request, dict):
+        sub_request = {}
+
+    subs = [
+        _normalize_sub(sub_request.get("value")),
+        getattr(request, "id_token_hint_sub", None),
+    ]
+    return [sub for sub in subs if sub is not None]
+
+
+def is_requested_sub_unmet(request, generator):
+    """Tell whether the request asks for a ``sub`` that is not the ``sub`` of
+    ``request.user``. The ``sub`` of the user comes from
+    ``generate_user_info``.
+
+    :param request: the authorization request
+    :param generator: the extension or the grant that generates the ID tokens
+    """
+    requested = get_requested_subs(request)
+    if not requested or not request.user:
+        return False
+
+    user_info = call_generate_user_info(
+        generator.generate_user_info, request.user, request.scope, None
+    )
+    sub = _normalize_sub(user_info.get("sub"))
+    return any(value != sub for value in requested)
+
+
+def validate_requested_sub(grant, generator, redirect_uri):
+    """Refuse the request when it asks for another user than the user who
+    grants it.
+
+    Per OIDC Core §5.5.1, the server MUST NOT return an ID token or an access
+    token for another user than the one of the ``sub`` claim request or of
+    the ``id_token_hint``. Per OIDC Core §3.1.2.1, the error is
+    ``login_required``, redirected to the client.
+
+    :param grant: the grant that creates the authorization response
+    :param generator: the extension or the grant that generates the ID tokens
+    :param redirect_uri: the redirect URI of the authorization request
+    :raises LoginRequiredError: if the user is not the requested user
+    """
+    if not is_requested_sub_unmet(grant.request, generator):
+        return
+
+    raise LoginRequiredError(
+        "The user is not the requested user.",
         redirect_uri=redirect_uri,
         redirect_fragment=grant.ERROR_RESPONSE_FRAGMENT,
     )

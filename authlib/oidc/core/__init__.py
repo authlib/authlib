@@ -15,6 +15,7 @@ from .claims import UserInfo
 from .claims import get_claim_cls_by_response_type
 from .claims_parameter import ClaimsParameter
 from .claims_parameter import get_requested_acr_values
+from .claims_parameter import get_requested_sub
 from .grants import OpenIDCode
 from .grants import OpenIDHybridGrant
 from .grants import OpenIDImplicitGrant
@@ -36,6 +37,7 @@ __all__ = [
     "UserInfoEndpoint",
     "get_claim_cls_by_response_type",
     "get_requested_acr_values",
+    "get_requested_sub",
     "OpenIDToken",
     "OpenIDCode",
     "OpenIDHybridGrant",

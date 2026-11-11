@@ -10,6 +10,7 @@ from authlib.oauth2.rfc6749 import AuthorizationServer
 from authlib.oauth2.rfc6749 import InvalidRequestError
 
 from .grants.util import get_claims_parameter_acr_values
+from .grants.util import get_requested_subs
 from .grants.util import is_openid_scope
 
 # OIDC Core §5.5: the members that request claims for the ID token and for the
@@ -44,7 +45,9 @@ class ClaimsParameter:
     with ``access_denied``. To return ``unmet_authentication_requirements``
     instead, register
     :class:`~authlib.oidc.unmet_authentication_requirements.UnmetAuthenticationRequirements`.
-    The extension does not check a requested ``sub`` value.
+
+    When the parameter asks for a ``sub`` value, the user must be this user.
+    See :func:`get_requested_sub`.
     """
 
     def __call__(self, authorization_server):
@@ -112,6 +115,24 @@ def get_requested_acr_values(request):
         return values
 
     return rfc9470.get_requested_acr_values(request)
+
+
+def get_requested_sub(request):
+    """Return the ``sub`` of the user that the request asks for, or ``None``.
+    The value of the ``sub`` claim in the ``id_token`` member of the
+    ``claims`` parameter comes first. Without it, the ``sub`` of the
+    ``id_token_hint`` parameter is returned.
+
+    The OpenID Connect grants validate ``id_token_hint`` with the request.
+    When the user is another user, ``"login"`` is in ``grant.interactions``.
+    If the user who logs in is still another user, the request is refused with
+    ``login_required``. When the two values differ, no user can meet the
+    request.
+
+    :param request: the authorization request
+    """
+    subs = get_requested_subs(request)
+    return subs[0] if subs else None
 
 
 def _parse_claims_request(value):
