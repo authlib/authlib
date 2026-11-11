@@ -65,6 +65,10 @@ class Client(db.Model, OAuth2ClientMixin):
 class AuthorizationCode(db.Model, OAuth2AuthorizationCodeMixin):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, nullable=False)
+    claims_request = db.Column(db.JSON)
+
+    def get_claims_request(self):
+        return self.claims_request
 
     @property
     def user(self):
@@ -75,6 +79,7 @@ class Token(db.Model, OAuth2TokenMixin):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"))
     user = db.relationship("User")
+    claims_request = db.Column(db.JSON)
 
     def is_refresh_token_active(self):
         return not self.refresh_token_revoked_at
@@ -116,6 +121,7 @@ def save_authorization_code(code, request):
         code_challenge_method=request.payload.data.get("code_challenge_method"),
         acr="urn:mace:incommon:iap:silver",
         amr="pwd otp",
+        claims_request=getattr(request, "claims_request", None),
     )
     db.session.add(auth_code)
     db.session.commit()

@@ -31,6 +31,18 @@ class AuthorizationCodeMixin(_AuthorizationCodeMixin):
         """
         return None
 
+    def get_claims_request(self) -> dict | None:
+        """Get the ``claims`` parameter of the authorization request, saved
+        from ``request.claims_request``. The ``id_token`` member of this
+        parameter gives the claims of the ID token. By default, there is none.
+        See :class:`~authlib.oidc.core.ClaimsParameter`::
+
+            def get_claims_request(self):
+                return self.claims_request
+
+        """
+        return None
+
 
 class AuthorizationSessionMixin(_AuthorizationSessionMixin):
     """The authorization session of OpenID Connect. It adds the account
@@ -38,8 +50,9 @@ class AuthorizationSessionMixin(_AuthorizationSessionMixin):
 
     The time of the ``"login"`` interaction becomes the ``auth_time`` claim of
     the ID token, and :meth:`get_acr` and :meth:`get_amr` give its ``acr`` and
-    ``amr`` claims. To refuse a request whose ``acr_values`` cannot be met,
-    raise
+    ``amr`` claims. The ``acr`` values that the client requests are given by
+    :func:`~authlib.oidc.core.get_requested_acr_values`. To refuse a request
+    whose requested ``acr`` cannot be met, raise
     :class:`~authlib.oidc.unmet_authentication_requirements.UnmetAuthenticationRequirementsError`
     from :meth:`get_acr`. :meth:`get_interaction_time` also takes
     ``"select_account"``, the time the user selected their account.

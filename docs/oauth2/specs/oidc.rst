@@ -44,6 +44,18 @@ OpenID Endpoints
     :show-inheritance:
     :members:
 
+.. autoclass:: ClaimsParameter
+    :show-inheritance:
+    :members:
+
+.. autofunction:: get_requested_acr_values
+
+.. autofunction:: get_requested_sub
+
+.. autoclass:: AuthorizationCodeMixin
+    :show-inheritance:
+    :members: get_claims_request
+
 .. _oidc_request_objects:
 
 OpenID request objects

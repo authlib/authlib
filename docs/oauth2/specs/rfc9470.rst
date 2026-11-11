@@ -49,3 +49,5 @@ API Reference
 .. autoclass:: AuthorizationSessionMixin
     :member-order: bysource
     :members:
+
+.. autofunction:: get_requested_acr_values

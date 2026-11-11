@@ -31,7 +31,12 @@ With ``prompt=none``, the server returns an error instead, such as
 ``login_required`` or ``consent_required``.
 
 - ``"login"`` is added when the user is not logged in, when the request asks
-  for a new login, or when the last login is older than ``max_age``.
+  for a new login, or when the last login is older than ``max_age``. With
+  OpenID Connect, it is also added when the request asks for another user,
+  with ``id_token_hint`` or with the ``sub`` claim of the ``claims``
+  parameter. :func:`~authlib.oidc.core.get_requested_sub` returns this user.
+  If the user who logs in is still another user, the request is refused with
+  ``login_required``.
 - ``"select_account"`` is added when the request asks for it, or when
   ``is_account_selection_needed`` returns true. A login also counts as an
   account selection, so an anonymous user only has to log in.
@@ -64,13 +69,23 @@ The grants also set them in ``request.amr`` and ``request.acr``, so that
             return self.session.get("acr")
 
 A client can ask for ``acr`` values with the ``acr_values`` parameter, in
-order of preference. They are in ``request.payload.data.get("acr_values")``.
-The server does not have to meet them. Per OpenID Connect Core §5.5.1.1, when
-it cannot provide a requested value, it should return the current ``acr`` of
-the session, as in this example. To refuse the request instead, raise
+order of preference. :func:`~authlib.oauth2.rfc9470.get_requested_acr_values`
+returns them. With OpenID Connect, use
+:func:`~authlib.oidc.core.get_requested_acr_values` instead. It also reads the
+``acr`` claim of the ``claims`` parameter (:ref:`specs/oidc`).
+
+The server does not have to meet the ``acr_values``. Per OpenID Connect Core
+§5.5.1.1, when it cannot provide a requested value, it should return the
+current ``acr`` of the session, as in this example. To refuse the request
+instead, raise
 :class:`~authlib.oidc.unmet_authentication_requirements.UnmetAuthenticationRequirementsError`
 from ``get_acr``. The error is redirected to the client. ``get_acr`` is called
 after the login and the consent, so it cannot ask the user to log in again.
+
+An essential ``acr`` requested with the ``claims`` parameter is stricter. When
+``get_acr`` returns another value, the OpenID Connect grants refuse the
+request with ``access_denied``, or with ``unmet_authentication_requirements``
+with the extension of :ref:`specs/unmet_authentication_requirements`.
 
 The time of the login comes from ``get_interaction_time(request, "login")``.
 It must come from a real authentication, with a password or another factor.

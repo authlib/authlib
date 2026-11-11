@@ -306,9 +306,9 @@ class OAuthProvider(_Provider):
             def exists_nonce(self, nonce, request):
                 return False
 
-            def generate_user_info(self, user, scope):
+            def generate_user_info(self, user, scope, claims):
                 return UserInfo(sub=str(user.id), name=user.username.title()).filter(
-                    scope
+                    scope, claims
                 )
 
         class OptionalCodeChallenge(CodeChallenge):

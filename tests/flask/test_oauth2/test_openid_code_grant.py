@@ -1,4 +1,5 @@
 import time
+from base64 import urlsafe_b64encode
 from contextlib import nullcontext
 
 import pytest
@@ -18,15 +19,20 @@ from authlib.oauth2.rfc6749.grants import (
     AuthorizationCodeGrant as _AuthorizationCodeGrant,
 )
 from authlib.oauth2.rfc9470 import StepUpAuthentication
+from authlib.oidc.core import ClaimsParameter
 from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core.grants import OpenIDCode as _OpenIDCode
 from authlib.oidc.prompt_create import PromptValues
+from authlib.oidc.unmet_authentication_requirements import (
+    UnmetAuthenticationRequirements,
+)
 from authlib.oidc.unmet_authentication_requirements import (
     UnmetAuthenticationRequirementsError,
 )
 from tests.util import HMAC_SECRET
 from tests.util import read_file_path
 
+from .models import AuthorizationCode
 from .models import AuthorizationSession
 from .models import CodeGrantMixin
 from .models import exists_nonce
@@ -93,7 +99,7 @@ class OpenIDCode(_OpenIDCode):
     def exists_nonce(self, nonce, request):
         return exists_nonce(nonce, request)
 
-    def generate_user_info(self, user, scopes):
+    def generate_user_info(self, user, scopes, claims):
         return user.generate_user_info(scopes)
 
 
@@ -1231,3 +1237,405 @@ def test_acr_amr_without_openid_scope(test_client, server, monkeypatch):
         },
     )
     assert "code" in dict(url_decode(urlparse.urlparse(rv.location).query))
+
+
+class ClaimsOpenIDCode(OpenIDCode):
+    def generate_user_info(self, user, scopes, claims):
+        return user.generate_user_info().filter(scopes, claims)
+
+
+def test_claims_parameter(test_client, server):
+    """The ID token contains the claims of the scope, and the claims that the
+    id_token member of the claims parameter requests."""
+    server.register_extension(ClaimsParameter())
+    register_oidc_code_grant(server, extension=ClaimsOpenIDCode)
+    claims_request = {"id_token": {"email": None}, "userinfo": {"locale": None}}
+    claims = exchange_code_for_id_token(
+        test_client, {"scope": "openid", "claims": json.dumps(claims_request)}
+    )
+    assert claims["sub"] == "1"
+    assert claims["email"] == "janedoe@example.com"
+    assert "locale" not in claims
+    assert "name" not in claims
+
+
+def test_claims_parameter_not_registered(test_client, server):
+    """Without the ClaimsParameter extension, the claims parameter is
+    ignored."""
+    register_oidc_code_grant(server, extension=ClaimsOpenIDCode)
+    claims = exchange_code_for_id_token(
+        test_client,
+        {"scope": "openid", "claims": json.dumps({"id_token": {"email": None}})},
+    )
+    assert "email" not in claims
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "not json",
+        "[]",
+        '{"id_token": null}',
+        '{"userinfo": []}',
+        "[" * 100000 + "]" * 100000,
+    ],
+)
+def test_invalid_claims_parameter(test_client, server, value):
+    """An invalid claims parameter is an invalid_request error, redirected to
+    the client."""
+    server.register_extension(ClaimsParameter())
+    register_oidc_code_grant(server, extension=ClaimsOpenIDCode)
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "code",
+            "client_id": "client-id",
+            "scope": "openid",
+            "redirect_uri": "https://client.test",
+            "state": "bar",
+            "claims": value,
+            "user_id": "1",
+        },
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert params["error"] == "invalid_request"
+    assert params["state"] == "bar"
+
+
+def test_claims_parameter_unknown_members(test_client, server):
+    """The members that OIDC Core does not define are kept as they are."""
+    server.register_extension(ClaimsParameter())
+    register_oidc_code_grant(server, extension=ClaimsOpenIDCode)
+    claims_request = {
+        "id_token": {"verified_claims": {"claims": {"email": None}}},
+        "purpose": "test",
+    }
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "code",
+            "client_id": "client-id",
+            "scope": "openid",
+            "redirect_uri": "https://client.test",
+            "claims": json.dumps(claims_request),
+            "user_id": "1",
+        },
+    )
+    code = dict(url_decode(urlparse.urlparse(rv.location).query))["code"]
+    authorization_code = AuthorizationCode.query.filter_by(code=code).one()
+    assert authorization_code.get_claims_request() == claims_request
+
+
+def test_claims_parameter_without_openid_scope(test_client, server):
+    """Without the openid scope, the claims parameter is ignored."""
+    server.register_extension(ClaimsParameter())
+    register_oidc_code_grant(server, extension=ClaimsOpenIDCode)
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "code",
+            "client_id": "client-id",
+            "scope": "profile",
+            "redirect_uri": "https://client.test",
+            "claims": "not json",
+            "user_id": "1",
+        },
+    )
+    code = dict(url_decode(urlparse.urlparse(rv.location).query))["code"]
+    authorization_code = AuthorizationCode.query.filter_by(code=code).one()
+    assert authorization_code.get_claims_request() is None
+
+
+def test_generate_user_info_without_claims(test_client, server):
+    """A generate_user_info method without a claims argument still works,
+    with a deprecation warning."""
+
+    class LegacyOpenIDCode(OpenIDCode):
+        def generate_user_info(self, user, scopes):
+            return user.generate_user_info(scopes)
+
+    server.register_extension(ClaimsParameter())
+    register_oidc_code_grant(server, extension=LegacyOpenIDCode)
+    with pytest.warns(AuthlibDeprecationWarning, match="'claims' argument"):
+        claims = exchange_code_for_id_token(
+            test_client,
+            {"scope": "openid", "claims": json.dumps({"id_token": {"email": None}})},
+        )
+
+    assert claims["sub"] == "1"
+
+
+def authorize_with_claims(test_client, claims_request):
+    """Send an authorization request with a claims parameter, and return the
+    parameters of the redirection."""
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "code",
+            "client_id": "client-id",
+            "scope": "openid",
+            "redirect_uri": "https://client.test",
+            "state": "bar",
+            "claims": json.dumps(claims_request),
+            "user_id": "1",
+        },
+    )
+    return dict(url_decode(urlparse.urlparse(rv.location).query))
+
+
+@pytest.mark.parametrize(
+    "acr_request",
+    [
+        {"essential": True, "values": ["gold", "platinum"]},
+        {"essential": True, "value": "gold"},
+    ],
+)
+def test_essential_acr_unmet(test_client, server, monkeypatch, acr_request):
+    """An essential acr that the authentication does not satisfy is refused
+    with access_denied, redirected to the client."""
+    monkeypatch.setattr(
+        AuthorizationSession, "get_acr", lambda self, request: "silver", raising=False
+    )
+    server.register_extension(ClaimsParameter())
+    register_oidc_code_grant(server)
+    params = authorize_with_claims(test_client, {"id_token": {"acr": acr_request}})
+    assert params["error"] == "access_denied"
+    assert params["state"] == "bar"
+
+
+@pytest.mark.parametrize(
+    "acr_request",
+    [
+        {"essential": True, "values": ["gold", "platinum"]},
+        {"values": ["platinum"]},
+        {"essential": True},
+    ],
+)
+def test_essential_acr_met_or_voluntary(test_client, server, monkeypatch, acr_request):
+    """A satisfied essential acr, a voluntary acr or an essential acr without
+    values does not refuse the request."""
+    monkeypatch.setattr(
+        AuthorizationSession, "get_acr", lambda self, request: "gold", raising=False
+    )
+    server.register_extension(ClaimsParameter())
+    register_oidc_code_grant(server)
+    params = authorize_with_claims(test_client, {"id_token": {"acr": acr_request}})
+    assert "code" in params
+
+
+@pytest.mark.parametrize(
+    ("acr", "error"),
+    [("silver", "unmet_authentication_requirements"), ("gold", None)],
+)
+def test_essential_acr_unmet_extension(app, test_client, server, acr, error):
+    """With the UnmetAuthenticationRequirements extension, an essential acr
+    that is not met is refused with unmet_authentication_requirements."""
+
+    class AcrAuthorizationSession(AuthorizationSession):
+        def get_acr(self, request):
+            return acr
+
+    app.config["AUTHORIZATION_SESSION"] = AcrAuthorizationSession
+    server.register_extension(ClaimsParameter())
+    server.register_extension(UnmetAuthenticationRequirements())
+    register_oidc_code_grant(server)
+    claims_request = {"id_token": {"acr": {"essential": True, "values": ["gold"]}}}
+    params = authorize_with_claims(test_client, claims_request)
+    assert params.get("error") == error
+    assert params["state"] == "bar"
+
+
+def test_unmet_extension_without_claims_parameter(app, test_client, server):
+    """Without the claims parameter, the extension does not refuse the
+    requested acr_values."""
+
+    class AcrAuthorizationSession(AuthorizationSession):
+        def get_acr(self, request):
+            return "silver"
+
+    app.config["AUTHORIZATION_SESSION"] = AcrAuthorizationSession
+    server.register_extension(UnmetAuthenticationRequirements())
+    register_oidc_code_grant(server)
+    claims = exchange_code_for_id_token(test_client, {"acr_values": "gold"})
+    assert claims["sub"] == "1"
+
+
+def test_unmet_extension_with_plain_acr_mixin(app, test_client, server):
+    """A get_acr inherited from a plain class is checked too."""
+
+    class AcrMixin:
+        def get_acr(self, request):
+            return "silver"
+
+    class AcrAuthorizationSession(AcrMixin, AuthorizationSession):
+        pass
+
+    app.config["AUTHORIZATION_SESSION"] = AcrAuthorizationSession
+    server.register_extension(ClaimsParameter())
+    server.register_extension(UnmetAuthenticationRequirements())
+    register_oidc_code_grant(server)
+    claims_request = {"id_token": {"acr": {"essential": True, "values": ["gold"]}}}
+    params = authorize_with_claims(test_client, claims_request)
+    assert params["error"] == "unmet_authentication_requirements"
+
+
+def create_id_token_hint(sub="1", key=None, **claims):
+    """Return an ID token for the client, to send as id_token_hint."""
+    key = key or OctKey.import_key(HMAC_SECRET)
+    claims = {"iss": "Authlib", "aud": "client-id", "sub": sub, **claims}
+    return jwt.encode({"alg": "HS256"}, claims, key)
+
+
+def create_unsigned_jwt(payload):
+    """Return an unsigned JWT with the given payload."""
+    parts = ({"alg": "none"}, payload)
+    encoded = [urlsafe_b64encode(json.dumps(part).encode()) for part in parts]
+    return ".".join(part.decode().rstrip("=") for part in encoded) + "."
+
+
+def authorize_with_hint(test_client, id_token_hint, method="post", **params):
+    """Send an authorization request with an id_token_hint."""
+    data = {
+        "response_type": "code",
+        "client_id": "client-id",
+        "scope": "openid",
+        "redirect_uri": "https://client.test",
+        "state": "bar",
+        "id_token_hint": id_token_hint,
+        "user_id": "1",
+        **params,
+    }
+    if method == "get":
+        return test_client.get("/oauth/authorize?" + url_encode(data.items()))
+
+    return test_client.post("/oauth/authorize", data=data)
+
+
+@pytest.mark.parametrize(
+    "claims",
+    [{}, {"exp": int(time.time()) - 3600}, {"sub": 1}],
+    ids=["valid", "expired", "integer-sub"],
+)
+def test_id_token_hint_of_the_user(test_client, server, claims):
+    """An id_token_hint of the user, even expired, does not change the
+    request."""
+    register_oidc_code_grant(server)
+    id_token_hint = create_id_token_hint(**claims)
+    rv = authorize_with_hint(test_client, id_token_hint, method="get")
+    assert rv.data == b"ok"
+
+    rv = authorize_with_hint(test_client, id_token_hint)
+    assert "code=" in rv.location
+
+
+def test_id_token_hint_of_another_user(test_client, server):
+    """An id_token_hint of another user asks for a login, and the request is
+    refused with login_required if the user does not change."""
+    register_oidc_code_grant(server)
+    id_token_hint = create_id_token_hint(sub="2")
+    rv = authorize_with_hint(test_client, id_token_hint, method="get")
+    assert rv.data == b"login"
+
+    rv = authorize_with_hint(test_client, id_token_hint)
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert params["error"] == "login_required"
+    assert params["state"] == "bar"
+
+
+def test_id_token_hint_after_login_of_another_user(test_client, server, request_time):
+    """When another user logged in after the request started, the request is
+    refused with login_required instead of asking for a login again."""
+    register_oidc_code_grant(server)
+    id_token_hint = create_id_token_hint(sub="2")
+    rv = authorize_with_hint(
+        test_client, id_token_hint, method="get", auth_time=int(time.time()) - 60
+    )
+    assert rv.data == b"login"
+
+    rv = authorize_with_hint(
+        test_client, id_token_hint, method="get", auth_time=int(time.time())
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert params["error"] == "login_required"
+    assert params["state"] == "bar"
+
+
+def test_id_token_hint_of_another_user_with_prompt_none(test_client, server):
+    """With prompt=none, an id_token_hint of another user gives
+    login_required."""
+    register_oidc_code_grant(server)
+    id_token_hint = create_id_token_hint(sub="2")
+    rv = authorize_with_hint(test_client, id_token_hint, method="get", prompt="none")
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert params["error"] == "login_required"
+
+
+@pytest.mark.parametrize("hint", ["not-a-jwt", "other-key", "no-sub"])
+def test_invalid_id_token_hint(test_client, server, hint):
+    """An id_token_hint that is not an ID token of the server is refused with
+    invalid_request, redirected to the client."""
+    register_oidc_code_grant(server)
+    id_token_hint = {
+        "not-a-jwt": "not-a-jwt",
+        "other-key": create_id_token_hint(key=OctKey.generate_key(256)),
+        "no-sub": create_id_token_hint(sub=None),
+    }[hint]
+    rv = authorize_with_hint(test_client, id_token_hint)
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert params["error"] == "invalid_request"
+    assert params["state"] == "bar"
+
+
+def test_id_token_hint_with_unsigned_id_tokens(test_client, server, client, db):
+    """When the ID tokens of the client are not signed, the sub of the
+    id_token_hint is read without a signature check."""
+    client.set_client_metadata(
+        {**client.client_metadata, "id_token_signed_response_alg": "none"}
+    )
+    db.session.commit()
+    register_oidc_code_grant(server)
+    claims = {"iss": "Authlib", "aud": "client-id", "sub": "1"}
+    rv = authorize_with_hint(test_client, create_unsigned_jwt(claims))
+    assert "code=" in rv.location
+
+    rv = authorize_with_hint(test_client, create_id_token_hint(sub="2"))
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert params["error"] == "login_required"
+
+    for id_token_hint in ("not-a-jwt", create_unsigned_jwt(["1"])):
+        rv = authorize_with_hint(test_client, id_token_hint)
+        params = dict(url_decode(urlparse.urlparse(rv.location).query))
+        assert params["error"] == "invalid_request"
+
+
+def test_id_token_hint_without_openid_scope(test_client, server):
+    """Without the openid scope, the id_token_hint is ignored."""
+    register_oidc_code_grant(server)
+    rv = authorize_with_hint(test_client, "not-a-jwt", scope="profile")
+    assert "code=" in rv.location
+
+
+@pytest.mark.parametrize(("sub", "error"), [("1", None), ("2", "login_required")])
+def test_claims_parameter_sub(test_client, server, sub, error):
+    """A sub requested with the claims parameter must be the sub of the
+    user."""
+    server.register_extension(ClaimsParameter())
+    register_oidc_code_grant(server)
+    params = authorize_with_claims(test_client, {"id_token": {"sub": {"value": sub}}})
+    assert params.get("error") == error
+    assert params["state"] == "bar"
+
+
+def test_claims_parameter_sub_and_id_token_hint(test_client, server):
+    """The sub of the claims parameter and of the id_token_hint must both be
+    the sub of the user."""
+    server.register_extension(ClaimsParameter())
+    register_oidc_code_grant(server)
+    claims_request = {"id_token": {"sub": {"value": "1"}}}
+    rv = authorize_with_hint(
+        test_client,
+        create_id_token_hint(sub="2"),
+        claims=json.dumps(claims_request),
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert params["error"] == "login_required"

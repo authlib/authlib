@@ -127,6 +127,19 @@ def get_max_age(request, redirect_uri, redirect_fragment=False):
     )
 
 
+def get_requested_acr_values(request):
+    """Return the ``acr`` values that the ``acr_values`` parameter requests,
+    in order of preference, or an empty list.
+
+    :param request: the authorization request
+    """
+    acr_values = request.payload.data.get("acr_values")
+    if not isinstance(acr_values, str):
+        return []
+
+    return acr_values.split()
+
+
 def set_authentication_context(grant, redirect_uri):
     """Set ``request.acr`` and ``request.amr`` from the authorization session
     of the grant. An error raised by ``get_acr`` is redirected to the client.

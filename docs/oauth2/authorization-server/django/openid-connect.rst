@@ -154,12 +154,12 @@ First, we need to implement the missing methods for ``OpenIDCode``:
             except AuthorizationCode.DoesNotExist:
                 return False
 
-        def generate_user_info(self, user, scope):
+        def generate_user_info(self, user, scope, claims):
             return UserInfo(
                 sub=str(user.pk),
                 name=user.get_full_name(),
                 email=user.email,
-            ).filter(scope)
+            ).filter(scope, claims)
 
 Second, the ``AuthorizationCode`` data has more values: the ``nonce``
 parameter, and the authentication of the user. ``OpenIDCode`` sets the time,
@@ -247,12 +247,12 @@ example accepts every nonce:
         def exists_nonce(self, nonce, request):
             return False
 
-        def generate_user_info(self, user, scope):
+        def generate_user_info(self, user, scope, claims):
             return UserInfo(
                 sub=str(user.pk),
                 name=user.get_full_name(),
                 email=user.email,
-            ).filter(scope)
+            ).filter(scope, claims)
 
     server.register_grant(OpenIDImplicitGrant)
 
@@ -309,12 +309,12 @@ is ``save_authorization_code``. You can implement it like this:
             except AuthorizationCode.DoesNotExist:
                 return False
 
-        def generate_user_info(self, user, scope):
+        def generate_user_info(self, user, scope, claims):
             return UserInfo(
                 sub=str(user.pk),
                 name=user.get_full_name(),
                 email=user.email,
-            ).filter(scope)
+            ).filter(scope, claims)
 
     # register it to grant endpoint
     server.register_grant(OpenIDHybridGrant)
@@ -323,6 +323,90 @@ All OpenID Connect flows require ``exists_nonce``, ``resolve_client_private_key`
 ``get_client_claims`` and ``generate_user_info`` methods. You can create shared
 functions for ``resolve_client_private_key``, ``get_client_claims`` and
 ``generate_user_info``.
+
+.. _django_oidc_claims_parameter:
+
+Claims Parameter
+----------------
+
+A client can request individual claims with the ``claims`` parameter (OpenID
+Connect Core 1.0 §5.5). Its ``id_token`` member lists claims for the ID token,
+and its ``userinfo`` member lists claims for the UserInfo endpoint. Register
+:class:`~authlib.oidc.core.ClaimsParameter` to support it, and publish
+``"claims_parameter_supported": true`` in the server metadata:
+
+.. code-block:: python
+
+    from authlib.oidc.core import ClaimsParameter
+
+    server.register_extension(ClaimsParameter())
+
+The ``claims`` argument of ``generate_user_info`` contains the requested
+claims. ``UserInfo.filter(scope, claims)`` returns them with the claims of the
+scope. These claims can be outside the scope: show them on the consent page,
+and only return the claims that the user accepts to share.
+
+The parameter is in ``request.claims_request``. Save it with the authorization
+code, and return it from ``get_claims_request``. With the hybrid flow, also
+save it in ``OpenIDHybridGrant.save_authorization_code``:
+
+.. skip: next "redefines the AuthorizationCode model"
+
+.. code-block:: python
+
+    from django.db.models import JSONField
+
+    class AuthorizationCode(Model, AuthorizationCodeMixin):
+        # ... the fields of the authorization code
+        claims_request = JSONField(null=True)
+
+        def get_claims_request(self):
+            return self.claims_request
+
+    class AuthorizationCodeGrant(_AuthorizationCodeGrant):
+        def save_authorization_code(self, code, request):
+            auth_code = AuthorizationCode(
+                # ... the values of the code flow example
+                claims_request=request.claims_request,
+            )
+            auth_code.save()
+            return auth_code
+
+For the UserInfo endpoint, save the parameter with the tokens too, in a
+``claims_request`` field of the ``OAuth2Token`` model. A token issued with a
+code gets the parameter of the code. A token issued by the refresh token grant
+gets the parameter of the previous token:
+
+.. code-block:: python
+
+    def get_claims_request(request):
+        if request.authorization_code:
+            return request.authorization_code.get_claims_request()
+
+        if request.refresh_token:
+            return request.refresh_token.claims_request
+
+        return getattr(request, "claims_request", None)
+
+    from authlib.integrations.django_oauth2 import AuthorizationServer
+
+    class MyAuthorizationServer(AuthorizationServer):
+        def save_token(self, token, request):
+            token = {**token, "claims_request": get_claims_request(request)}
+            return super().save_token(token, request)
+
+Then return it from
+:meth:`~authlib.oidc.core.UserInfoEndpoint.get_token_claims_request`:
+
+.. code-block:: python
+
+    from authlib.oidc.core import UserInfoEndpoint
+
+    class MyUserInfoEndpoint(UserInfoEndpoint):
+        # ... the other methods of the endpoint
+
+        def get_token_claims_request(self, token):
+            return token.claims_request
 
 .. _django_oidc_max_age:
 

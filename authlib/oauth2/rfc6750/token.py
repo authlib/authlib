@@ -1,21 +1,7 @@
-import inspect
-
+from authlib.deprecate import accepts_argument
 from authlib.deprecate import deprecate
 
 from ..rfc6749.errors import InvalidScopeError
-
-
-def _accepts_expires_in(func):
-    """Tell whether the function accepts an expires_in keyword argument."""
-    try:
-        parameters = inspect.signature(func).parameters.values()
-    except (TypeError, ValueError):
-        return False
-
-    return any(
-        parameter.name == "expires_in" or parameter.kind == parameter.VAR_KEYWORD
-        for parameter in parameters
-    )
 
 
 class BearerTokenGenerator:
@@ -64,8 +50,8 @@ class BearerTokenGenerator:
         self.access_token_generator = access_token_generator
         self.refresh_token_generator = refresh_token_generator
         self.expires_generator = expires_generator
-        if access_token_generator is not None and not _accepts_expires_in(
-            access_token_generator
+        if access_token_generator is not None and not accepts_argument(
+            access_token_generator, "expires_in"
         ):
             name = getattr(access_token_generator, "__qualname__", None)
             deprecate(
@@ -134,7 +120,7 @@ class BearerTokenGenerator:
             "user": user,
             "scope": scope,
         }
-        if _accepts_expires_in(self.access_token_generator):
+        if accepts_argument(self.access_token_generator, "expires_in"):
             kwargs["expires_in"] = expires_in
 
         access_token = self.access_token_generator(**kwargs)

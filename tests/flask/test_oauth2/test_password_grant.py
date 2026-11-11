@@ -35,7 +35,7 @@ class IDToken(OpenIDToken):
     def get_client_claims(self, client):
         return {"iss": "Authlib"}
 
-    def generate_user_info(self, user, scopes):
+    def generate_user_info(self, user, scopes, claims):
         return user.generate_user_info(scopes)
 
 

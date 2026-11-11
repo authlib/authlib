@@ -1,24 +1,38 @@
+import functools
 import types
+import warnings
 
 import pytest
 from joserfc.errors import InvalidClaimError
 from joserfc.errors import MissingClaimError
 
 from authlib.deprecate import AuthlibDeprecationWarning
+from authlib.oauth2 import rfc9470
 from authlib.oauth2.rfc6749 import AuthorizationServer
+from authlib.oauth2.rfc6749 import (
+    AuthorizationSessionMixin as OAuth2AuthorizationSessionMixin,
+)
 from authlib.oauth2.rfc6749 import InvalidRequestError
 from authlib.oauth2.rfc6749.grants import AuthorizationEndpointMixin
 from authlib.oauth2.rfc6749.grants import BaseGrant
 from authlib.oauth2.rfc6749.grants import TokenEndpointMixin
+from authlib.oidc.core import AuthorizationCodeMixin
 from authlib.oidc.core import AuthorizationSessionMixin
+from authlib.oidc.core import ClaimsParameter
 from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core import HybridIDToken
 from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core import OpenIDCode
 from authlib.oidc.core import UserInfo
 from authlib.oidc.core import get_claim_cls_by_response_type
+from authlib.oidc.core import get_requested_acr_values
+from authlib.oidc.core import get_requested_sub
 from authlib.oidc.core.errors import LoginRequiredError
+from authlib.oidc.core.grants.util import call_generate_user_info
 from authlib.oidc.core.grants.util import validate_request_prompt
+from authlib.oidc.unmet_authentication_requirements import (
+    UnmetAuthenticationRequirements,
+)
 
 USER = object()
 
@@ -220,6 +234,160 @@ def test_userinfo_validate_locale():
 
     with pytest.raises(ValueError, match="BCP 47"):
         UserInfo({"sub": "1", "locale": "toolongsubtag"}).validate_locale()
+
+
+def test_userinfo_filter_claims():
+    """The filter keeps the claims of the scope, and the requested claims."""
+    user = UserInfo({"sub": "1", "name": "Jane", "email": "j@example.com"})
+    assert user.filter("openid") == {"sub": "1"}
+    assert user.filter("openid", {"email": None, "phone_number": None}) == {
+        "sub": "1",
+        "email": "j@example.com",
+    }
+
+
+def test_claims_parameter_from_request_object():
+    """A request object gives the claims parameter as a JSON object."""
+    claims_request = {"id_token": {"email": None}}
+    payload = types.SimpleNamespace(scope="openid", data={"claims": claims_request})
+    request = types.SimpleNamespace(payload=payload)
+    grant = types.SimpleNamespace(request=request, ERROR_RESPONSE_FRAGMENT=False)
+    ClaimsParameter().validate_claims_parameter(grant, "https://client.test")
+    assert request.claims_request == claims_request
+
+
+def test_empty_claims_parameter():
+    """An empty claims parameter is ignored."""
+    payload = types.SimpleNamespace(scope="openid", data={"claims": ""})
+    grant = types.SimpleNamespace(request=types.SimpleNamespace(payload=payload))
+    ClaimsParameter().validate_claims_parameter(grant, "https://client.test/cb")
+    assert grant.request.claims_request is None
+
+
+def test_authorization_code_without_claims_request():
+    """By default, an authorization code has no claims request."""
+    assert AuthorizationCodeMixin().get_claims_request() is None
+
+
+def test_generate_user_info_warned_once():
+    """The deprecation warning is emitted once per function. A callable that
+    cannot be weakly referenced is warned at each call."""
+
+    def generate_user_info(user, scope):
+        return UserInfo(sub=user)
+
+    class GenerateUserInfo:
+        __slots__ = ()
+
+        def __call__(self, user, scope):
+            return UserInfo(sub=user)
+
+    with pytest.warns(AuthlibDeprecationWarning):
+        call_generate_user_info(generate_user_info, "1", "openid", None)
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        call_generate_user_info(generate_user_info, "1", "openid", None)
+
+    for _ in range(2):
+        with pytest.warns(AuthlibDeprecationWarning):
+            call_generate_user_info(GenerateUserInfo(), "1", "openid", None)
+
+
+def test_generate_user_info_partial_without_claims():
+    """A generate_user_info callable without a name and without a claims
+    argument gets a deprecation warning."""
+
+    def generate_user_info(prefix, user, scope):
+        return UserInfo(sub=prefix + user)
+
+    with pytest.warns(AuthlibDeprecationWarning, match="'claims' argument"):
+        user_info = call_generate_user_info(
+            functools.partial(generate_user_info, "user-"), "1", "openid", None
+        )
+
+    assert user_info == {"sub": "user-1"}
+
+
+def acr_request(data, claims_request=None):
+    """Return a request with the given parameters and claims request."""
+    payload = types.SimpleNamespace(data=data)
+    return types.SimpleNamespace(payload=payload, claims_request=claims_request)
+
+
+def test_get_requested_acr_values():
+    """The acr values of the claims parameter come before acr_values."""
+    assert rfc9470.get_requested_acr_values(acr_request({})) == []
+    request = acr_request({"acr_values": "gold silver"})
+    assert rfc9470.get_requested_acr_values(request) == ["gold", "silver"]
+    assert get_requested_acr_values(request) == ["gold", "silver"]
+
+    claims_request = {"id_token": {"acr": {"values": ["platinum"]}}}
+    request = acr_request({"acr_values": "gold"}, claims_request)
+    assert get_requested_acr_values(request) == ["platinum"]
+
+    claims_request = {"id_token": {"acr": {"value": "platinum"}}}
+    assert get_requested_acr_values(acr_request({}, claims_request)) == ["platinum"]
+
+    for acr in (None, {"values": []}, {"values": [1]}):
+        claims_request = {"id_token": {"acr": acr}}
+        request = acr_request({"acr_values": "gold"}, claims_request)
+        assert get_requested_acr_values(request) == ["gold"]
+
+
+def test_get_requested_sub():
+    """The sub of the claims parameter comes before the sub of the
+    id_token_hint. Invalid sub values are ignored."""
+    request = acr_request({})
+    assert get_requested_sub(request) is None
+
+    request.id_token_hint_sub = "1"
+    assert get_requested_sub(request) == "1"
+
+    request.claims_request = {"id_token": {"sub": {"value": "2"}}}
+    assert get_requested_sub(request) == "2"
+
+    request.claims_request = {"id_token": {"sub": {"value": 3}}}
+    assert get_requested_sub(request) == "3"
+
+    for sub in (None, {"value": None}, {"value": True}, {"value": ["2"]}):
+        request.claims_request = {"id_token": {"sub": sub}}
+        assert get_requested_sub(request) == "1"
+
+
+def test_unmet_extension_with_unhookable_get_acr():
+    """A get_acr that cannot be hooked is left as it is."""
+
+    class AcrMixin:
+        def get_acr(self, request):
+            return "silver"
+
+    class Session(AcrMixin, OAuth2AuthorizationSessionMixin):
+        pass
+
+    session = Session()
+    payload = types.SimpleNamespace(scope="openid")
+    grant = types.SimpleNamespace(
+        authorization_session=session, request=types.SimpleNamespace(payload=payload)
+    )
+    UnmetAuthenticationRequirements().register_session_hooks(grant)
+    assert session.get_acr(None) == "silver"
+
+
+@pytest.mark.parametrize(
+    ("session", "scope"),
+    [(None, "openid"), (AuthorizationSessionMixin(), "profile")],
+    ids=["no-session", "no-openid-scope"],
+)
+def test_unmet_extension_without_hook(session, scope):
+    """Without a session, or without the openid scope, no hook is
+    registered."""
+    payload = types.SimpleNamespace(scope=scope)
+    grant = types.SimpleNamespace(
+        authorization_session=session, request=types.SimpleNamespace(payload=payload)
+    )
+    UnmetAuthenticationRequirements().register_session_hooks(grant)
+    assert not getattr(session, "_hooks", None)
 
 
 def test_openid_code_on_custom_grant(monkeypatch):

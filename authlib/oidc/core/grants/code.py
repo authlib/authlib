@@ -18,14 +18,19 @@ from authlib.oauth2.rfc6749 import OAuth2Response
 from ..models import AuthorizationCodeMixin
 from ._legacy import LegacyMixin
 from .util import OPENID_AUTHORIZATION_PARAMETERS
+from .util import call_generate_user_info
 from .util import create_half_hash
+from .util import get_requested_claims
 from .util import is_openid_scope
+from .util import is_requested_sub_unmet
 from .util import resolve_auth_time
 from .util import resolve_authentication
+from .util import set_id_token_hint_sub
 from .util import set_silent
 from .util import validate_nonce
 from .util import validate_prompt_none
 from .util import validate_request_prompt
+from .util import validate_requested_sub
 
 log = logging.getLogger(__name__)
 
@@ -46,21 +51,26 @@ class OpenIDToken(LegacyMixin):
             claims["amr"] = amr
         return claims
 
-    def generate_user_info(self, user, scope):
+    def generate_user_info(self, user, scope, claims):
         """Provide user information for the given scope. Developers
         MUST implement this method in subclass, e.g.::
 
             from authlib.oidc.core import UserInfo
 
 
-            def generate_user_info(self, user, scope):
-                user_info = UserInfo(sub=user.id, name=user.name)
-                if "email" in scope:
-                    user_info["email"] = user.email
-                return user_info
+            def generate_user_info(self, user, scope, claims):
+                return UserInfo(sub=user.id, name=user.name, email=user.email).filter(
+                    scope, claims
+                )
+
+        It is also called during the authorization request, to read the
+        ``sub`` of the user, when the client asks for a specific user.
 
         :param user: user instance
         :param scope: scope of the token
+        :param claims: the claims that the ``id_token`` member of the
+            ``claims`` parameter requests, or ``None``. See
+            :class:`~authlib.oidc.core.ClaimsParameter`.
         :return: ``authlib.oidc.core.UserInfo`` instance
         """
         raise NotImplementedError()
@@ -70,11 +80,16 @@ class OpenIDToken(LegacyMixin):
         header = self.get_encode_header(request.client)
 
         claims = self.get_compatible_claims(request)
+        claims_request = None
         if request.authorization_code:
             claims.pop("auth_time", None)
             claims.update(
                 self.get_authorization_code_claims(request.authorization_code)
             )
+            get_claims_request = getattr(
+                request.authorization_code, "get_claims_request", None
+            )
+            claims_request = get_claims_request() if get_claims_request else None
 
         access_token = token.get("access_token")
         if access_token:
@@ -82,7 +97,12 @@ class OpenIDToken(LegacyMixin):
             if at_hash is not None:
                 claims["at_hash"] = at_hash.decode("utf-8")
 
-        user_info = self.generate_user_info(request.user, token["scope"])
+        user_info = call_generate_user_info(
+            self.generate_user_info,
+            request.user,
+            token["scope"],
+            get_requested_claims(claims_request, "id_token"),
+        )
         claims.update(user_info)
 
         if alg == "none":
@@ -125,7 +145,7 @@ class OpenIDCode(OpenIDToken):
             def exists_nonce(self, nonce, request):
                 return check_if_nonce_in_cache(request.payload.client_id, nonce)
 
-            def generate_user_info(self, user, scope):
+            def generate_user_info(self, user, scope, claims):
                 return {...}
 
     The register this extension with AuthorizationCodeGrant::
@@ -159,6 +179,7 @@ class OpenIDCode(OpenIDToken):
 
     def validate_openid_authorization_request(self, grant, redirect_uri):
         validate_nonce(grant.request, self.exists_nonce, self.require_nonce)
+        set_id_token_hint_sub(grant.request, self)
 
     def set_request_authentication(self, grant, redirect_uri, grant_user):
         """Set ``request.auth_time``, ``request.acr`` and ``request.amr`` from
@@ -182,16 +203,24 @@ class OpenIDCode(OpenIDToken):
             grant.request.auth_time = resolve_auth_time(grant)
             return
 
+        validate_requested_sub(grant, self, redirect_uri)
         resolve_authentication(grant, redirect_uri)
 
     def validate_openid_prompt(self, grant, redirect_uri):
         """Validate the ``prompt`` and ``max_age`` parameters of the request.
+        The user must also log in when the request asks for another user,
+        with ``id_token_hint`` or with the ``sub`` claim of the ``claims``
+        parameter.
 
         :param grant: the grant that validates the authorization request
         :param redirect_uri: the redirect URI of the authorization request
         """
         grant.redirect_uri = redirect_uri
-        validate_request_prompt(grant, redirect_uri)
+        validate_request_prompt(
+            grant,
+            redirect_uri,
+            other_user=is_requested_sub_unmet(grant.request, self),
+        )
 
     def validate_openid_interactions(self, grant, result):
         """Return an error when ``prompt`` is ``none`` and the user must go

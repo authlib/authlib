@@ -10,6 +10,8 @@ from authlib.oauth2.rfc6749.responses import OAuth2Response
 from authlib.oauth2.rfc6750.errors import InvalidTokenError
 
 from .claims import UserInfo
+from .grants.util import call_generate_user_info
+from .grants.util import get_requested_claims
 
 
 class UserInfoEndpoint:
@@ -22,12 +24,12 @@ class UserInfoEndpoint:
             def get_issuer(self):
                 return "https://auth.example"
 
-            def generate_user_info(self, user, scope):
+            def generate_user_info(self, user, scope, claims):
                 return UserInfo(
                     sub=user.id,
                     name=user.name,
                     ...
-                ).filter(scope)
+                ).filter(scope, claims)
 
             def resolve_private_key(self):
                 return server_private_jwk_set()
@@ -80,7 +82,13 @@ class UserInfoEndpoint:
         if user is None:
             raise InvalidTokenError()
 
-        user_info = self.generate_user_info(user, token.get_scope())
+        claims_request = self.get_token_claims_request(token)
+        user_info = call_generate_user_info(
+            self.generate_user_info,
+            user,
+            token.get_scope(),
+            get_requested_claims(claims_request, "userinfo"),
+        )
 
         if alg := client.client_metadata.get("userinfo_signed_response_alg"):
             # If signed, the UserInfo Response MUST contain the Claims iss
@@ -130,6 +138,19 @@ class UserInfoEndpoint:
         """
         return token.get_user()
 
+    def get_token_claims_request(self, token):
+        """Return the ``claims`` parameter of the authorization request that
+        the access token was issued for, or ``None``. By default, there is
+        none. With :class:`~authlib.oidc.core.ClaimsParameter`, store
+        ``request.claims_request`` with the token, then return it::
+
+            def get_token_claims_request(self, token):
+                return token.claims_request
+
+        :param token: The access token returned by the resource protector.
+        """
+        return None
+
     def get_supported_algorithms(self) -> list[str]:
         """Return the supported algorithms for userinfo signing.
         By default, it uses the recommended algorithms from ``joserfc``.
@@ -140,17 +161,21 @@ class UserInfoEndpoint:
         """
         return JWSRegistry.recommended
 
-    def generate_user_info(self, user, scope: str) -> UserInfo:
+    def generate_user_info(self, user, scope: str, claims: dict | None) -> UserInfo:
         """
         Generate a :class:`~authlib.oidc.core.UserInfo` object for an user::
 
-            def generate_user_info(self, user, scope: str) -> UserInfo:
+            def generate_user_info(self, user, scope, claims):
                 return UserInfo(
                     given_name=user.given_name,
                     family_name=user.last_name,
                     email=user.email,
                     ...
-                ).filter(scope)
+                ).filter(scope, claims)
+
+        ``claims`` are the claims that the ``userinfo`` member of the
+        ``claims`` parameter requests, or ``None``. See
+        :class:`~authlib.oidc.core.ClaimsParameter`.
 
         This method must be implemented by developers.
         """

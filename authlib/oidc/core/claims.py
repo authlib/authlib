@@ -263,14 +263,17 @@ class UserInfo(dict):
         if locale is not None and not is_valid_language_tag(locale):
             raise ValueError('"locale" MUST be a BCP 47 language tag')
 
-    def filter(self, scope: str):
-        """Return a new UserInfo object containing only the claims matching the scope passed in parameter."""
+    def filter(self, scope: str, claims: dict | None = None):
+        """Return a new UserInfo object containing only the claims matching
+        the scope, and the claims that a member of the ``claims`` parameter
+        requests (OIDC Core §5.5)."""
         scope = scope_to_list(scope)
         filtered_claims = [
             claim
             for scope_part in scope
             for claim in self.SCOPES_CLAIMS_MAPPING.get(scope_part, [])
         ]
+        filtered_claims.extend(claims or {})
         filtered_items = {
             key: val for key, val in self.items() if key in filtered_claims
         }
