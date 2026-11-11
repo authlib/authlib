@@ -43,6 +43,8 @@ class OpenIDHybridGrant(OpenIDImplicitGrant):
                     scope=request.scope,
                     nonce=request.payload.data.get("nonce"),
                     auth_time=request.auth_time,
+                    acr=request.acr,
+                    amr=request.amr,
                     user_id=request.user.id,
                 )
                 auth_code.save()

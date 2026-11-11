@@ -9,9 +9,12 @@ A client can ask for a recent authentication of the user with the
 seconds. When the last authentication of the user is older, the user must
 log in again.
 
-Authlib only supports ``max_age`` on the authorization server for now. The
-``acr_values`` parameter, the ``acr`` and ``auth_time`` claims of the access
-tokens, and the challenge of the resource server are not supported yet.
+Authlib only supports ``max_age`` on the authorization server for now. With
+OpenID Connect, the authorization session answers the ``acr_values``
+parameter in the ``acr`` claim of the ID token, see
+:ref:`authorization_session`. The ``acr`` and ``auth_time`` claims of the
+access tokens, and the challenge of the resource server, are not supported
+yet.
 
 Register :class:`~authlib.oauth2.rfc9470.StepUpAuthentication` on the
 authorization server:
@@ -40,5 +43,9 @@ API Reference
 .. module:: authlib.oauth2.rfc9470
 
 .. autoclass:: StepUpAuthentication
+    :member-order: bysource
+    :members:
+
+.. autoclass:: AuthorizationSessionMixin
     :member-order: bysource
     :members:

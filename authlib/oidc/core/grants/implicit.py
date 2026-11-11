@@ -17,7 +17,7 @@ from .util import OPENID_AUTHORIZATION_PARAMETERS
 from .util import create_half_hash
 from .util import has_multiple_response_types
 from .util import is_openid_scope
-from .util import resolve_auth_time
+from .util import resolve_authentication
 from .util import set_silent
 from .util import validate_nonce
 from .util import validate_prompt_none
@@ -113,7 +113,7 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
             raise AccessDeniedError(redirect_uri=redirect_uri, redirect_fragment=True)
 
         self.request.user = grant_user
-        self.request.auth_time = resolve_auth_time(self)
+        resolve_authentication(self, redirect_uri)
         params = self.create_granted_params(grant_user)
         if state := self.request.payload.state:
             params.append(("state", state))
@@ -171,6 +171,12 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
         claims.pop("auth_time", None)
         if self.request.auth_time is not None:
             claims["auth_time"] = self.request.auth_time
+
+        if self.request.acr:
+            claims["acr"] = self.request.acr
+
+        if self.request.amr:
+            claims["amr"] = self.request.amr
 
         nonce = self.request.payload.data.get("nonce")
         if nonce:

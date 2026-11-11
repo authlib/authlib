@@ -1,0 +1,13 @@
+Added
+~~~~~
+
+- The authorization session gives the ``acr`` and ``amr`` of the
+  authentication with ``get_acr(request)`` and ``get_amr()``, from the
+  ``authlib.oauth2.rfc9470.AuthorizationSessionMixin``. The OpenID Connect
+  grants put them in the ID token, now also in the implicit and hybrid flows.
+  For the code flow, they set ``request.acr`` and ``request.amr`` for
+  ``save_authorization_code``. The documentation explains how to answer the
+  ``acr_values`` parameter. :issue:`744`
+- ``UnmetAuthenticationRequirementsError``, from the OpenID Connect Core Error
+  Code unmet_authentication_requirements specification, refuses a request whose
+  authentication requirements cannot be met.

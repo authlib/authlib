@@ -40,6 +40,38 @@ With ``prompt=none``, the server returns an error instead, such as
   is none, it was revoked, or it does not cover the requested scope.
 - ``"create"`` comes from :ref:`specs/prompt_create`.
 
+Authentication Context
+----------------------
+
+The session also tells how the user authenticated, with the methods of
+:class:`~authlib.oauth2.rfc9470.AuthorizationSessionMixin`. ``get_amr()``
+returns the authentication methods, such as ``["pwd", "otp"]``
+(:rfc:`8176`). ``get_acr(request)`` returns the Authentication Context Class
+Reference that the authentication satisfies. For now, only the OpenID Connect
+grants use them: they become the ``amr`` and ``acr`` claims of the ID token.
+The grants also set them in ``request.amr`` and ``request.acr``, so that
+``save_authorization_code`` can store them for the code flow.
+
+.. code-block:: python
+
+    from authlib.oauth2 import AuthorizationSession
+
+    class MyAuthorizationSession(AuthorizationSession):
+        def get_amr(self):
+            return self.session.get("amr")
+
+        def get_acr(self, request):
+            return self.session.get("acr")
+
+A client can ask for ``acr`` values with the ``acr_values`` parameter, in
+order of preference. They are in ``request.payload.data.get("acr_values")``.
+The server does not have to meet them. Per OpenID Connect Core §5.5.1.1, when
+it cannot provide a requested value, it should return the current ``acr`` of
+the session, as in this example. To refuse the request instead, raise
+:class:`~authlib.oidc.unmet_authentication_requirements.UnmetAuthenticationRequirementsError`
+from ``get_acr``. The error is redirected to the client. ``get_acr`` is called
+after the login and the consent, so it cannot ask the user to log in again.
+
 The time of the login comes from ``get_interaction_time(request, "login")``.
 It must come from a real authentication, with a password or another factor.
 Do not update it when the user switches to another account or resumes a

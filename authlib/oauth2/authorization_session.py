@@ -23,9 +23,11 @@ class AuthorizationSession(AuthorizationSessionMixin):
         # Django
         authorization_session = MyAuthorizationSession(user, request.session)
 
-    With OpenID Connect, also implement ``is_account_selection_needed`` if
-    needed. When the session is a signed cookie, read the pitfalls of
-    :ref:`authorization_session`.
+    Also implement ``get_acr`` and ``get_amr`` if needed, see
+    :class:`~authlib.oauth2.rfc9470.AuthorizationSessionMixin`, and
+    ``is_account_selection_needed`` with OpenID Connect, see
+    :class:`~authlib.oidc.core.AuthorizationSessionMixin`. When the session
+    is a signed cookie, read the pitfalls of :ref:`authorization_session`.
 
     :param user: the logged-in user, or ``None``
     :param session: the session of the web framework, as a mapping

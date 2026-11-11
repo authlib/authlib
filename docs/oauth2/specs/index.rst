@@ -26,3 +26,4 @@ Specifications
     rpinitiated
     backchannel
     prompt-create
+    unmet-authentication-requirements

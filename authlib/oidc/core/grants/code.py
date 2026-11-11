@@ -21,6 +21,7 @@ from .util import OPENID_AUTHORIZATION_PARAMETERS
 from .util import create_half_hash
 from .util import is_openid_scope
 from .util import resolve_auth_time
+from .util import resolve_authentication
 from .util import set_silent
 from .util import validate_nonce
 from .util import validate_prompt_none
@@ -159,21 +160,29 @@ class OpenIDCode(OpenIDToken):
     def validate_openid_authorization_request(self, grant, redirect_uri):
         validate_nonce(grant.request, self.exists_nonce, self.require_nonce)
 
-    def set_request_auth_time(self, grant, redirect_uri, grant_user):
-        """Set ``request.auth_time`` with the login time of the authorization
-        session, so that ``save_authorization_code`` can store it. It becomes
-        the ``auth_time`` claim of the ID token.
+    def set_request_authentication(self, grant, redirect_uri, grant_user):
+        """Set ``request.auth_time``, ``request.acr`` and ``request.amr`` from
+        the authorization session, so that ``save_authorization_code`` can
+        store them. They become the ``auth_time``, ``acr`` and ``amr`` claims
+        of the ID token. Without the ``openid`` scope, ``acr`` and ``amr`` are
+        ``None``.
 
         :param grant: the grant that creates the authorization response
         :param redirect_uri: the redirect URI of the authorization request
         :param grant_user: the user who grants the request, or ``None``
         """
+        grant.request.acr = None
+        grant.request.amr = None
         if not grant_user:
             grant.request.auth_time = None
             return
 
         grant.request.user = grant_user
-        grant.request.auth_time = resolve_auth_time(grant)
+        if not is_openid_scope(grant.request.payload.scope):
+            grant.request.auth_time = resolve_auth_time(grant)
+            return
+
+        resolve_authentication(grant, redirect_uri)
 
     def validate_openid_prompt(self, grant, redirect_uri):
         """Validate the ``prompt`` and ``max_age`` parameters of the request.
@@ -196,7 +205,8 @@ class OpenIDCode(OpenIDToken):
     def __call__(self, grant):
         grant.register_hook(self.process_token, after=grant.create_token_response)
         grant.register_hook(
-            self.set_request_auth_time, before=grant.create_authorization_response
+            self.set_request_authentication,
+            before=grant.create_authorization_response,
         )
         if is_openid_scope(grant.request.payload.scope):
             grant.register_authorization_parameters(OPENID_AUTHORIZATION_PARAMETERS)
