@@ -582,6 +582,37 @@ And later, when the client has obtained the access token, we can call:
         return '...'
 
 
+Signed UserInfo Responses
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A provider can return the UserInfo claims as a signed JWT, with the
+``application/jwt`` content type (`OpenID Connect Core §5.3.2`_).
+``userinfo()`` then verifies the signature with the provider JWK set, as for
+the ID token. It also checks that the ``sub``, ``iss`` and ``aud`` claims are
+present, and that ``iss`` and ``aud`` match the issuer and the client ID.
+
+The accepted algorithms come from ``userinfo_signing_alg_values_supported`` in
+the provider metadata. Without this metadata, the default algorithms of
+joserfc are accepted. The keys come from the provider JWK set, so HMAC
+signatures made with the client secret are not supported. A client that registered a
+``userinfo_signed_response_alg`` with the provider can pass it to
+``register``. Only this algorithm is then accepted, and a JSON response is
+refused:
+
+.. code-block:: python
+
+    oauth.register(
+        'example',
+        server_metadata_url='https://example.com/.well-known/openid-configuration',
+        userinfo_signed_response_alg='ES256',
+        client_kwargs={'scope': 'openid profile'},
+    )
+
+Encrypted UserInfo responses are not supported.
+
+.. _`OpenID Connect Core §5.3.2`: https://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse
+
+
 Parsing ``id_token``
 ~~~~~~~~~~~~~~~~~~~~
 

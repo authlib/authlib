@@ -2,6 +2,7 @@ import time
 from unittest import mock
 
 import pytest
+import requests
 from flask import Flask
 from joserfc import jwt
 from joserfc.errors import InvalidClaimError
@@ -12,6 +13,7 @@ from joserfc.jwk import KeySet
 from joserfc.jwk import OctKey
 
 from authlib.integrations.flask_client import OAuth
+from authlib.integrations.flask_client import OAuthError
 from authlib.oidc.core.grants.util import create_half_hash
 
 from ..util import get_bearer_token
@@ -352,3 +354,452 @@ def test_parse_id_token_unknown_kid_refresh_interval():
             with pytest.raises(InvalidKeyIdError):
                 client.parse_id_token({"id_token": id_token}, nonce="n")
             assert len(fetches) == 2
+
+
+def make_signed_userinfo_client(client_id="dev"):
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id=client_id,
+        client_secret="dev",
+        fetch_token=get_bearer_token,
+        jwks={"keys": [secret_key.as_dict()]},
+        issuer="https://provider.test",
+        userinfo_endpoint="https://provider.test/userinfo",
+        userinfo_signing_alg_values_supported=["HS256"],
+    )
+    return app, client
+
+
+def encode_signed_userinfo(claims):
+    return jwt.encode({"alg": "HS256", "kid": "f"}, claims, secret_key)
+
+
+def make_signed_userinfo_response(id_token, content_type="application/jwt"):
+    def fake_send(sess, req, **kwargs):
+        resp = mock.MagicMock(spec=requests.Response)
+        resp.status_code = 200
+        resp.headers = {"Content-Type": content_type}
+        resp.text = id_token
+        return resp
+
+    return fake_send
+
+
+def test_fetch_userinfo_signed_jwt_response():
+    app, client = make_signed_userinfo_client()
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "123",
+        "name": "John Doe",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    id_token = encode_signed_userinfo(claims)
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(id_token),
+        ):
+            user = client.userinfo()
+            assert user.sub == "123"
+            assert user["name"] == "John Doe"
+
+
+def test_fetch_userinfo_signed_jwt_aud_accepts_list():
+    app, client = make_signed_userinfo_client()
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": ["dev", "other-rp"],
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    id_token = encode_signed_userinfo(claims)
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(id_token),
+        ):
+            user = client.userinfo()
+            assert user.sub == "123"
+
+
+def test_fetch_userinfo_signed_jwt_rejects_wrong_issuer():
+    app, client = make_signed_userinfo_client()
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://evil.test",
+        "aud": "dev",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    id_token = encode_signed_userinfo(claims)
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(id_token),
+        ):
+            with pytest.raises(InvalidClaimError):
+                client.userinfo()
+
+
+def test_fetch_userinfo_signed_jwt_rejects_wrong_audience():
+    app, client = make_signed_userinfo_client()
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "another-client",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    id_token = encode_signed_userinfo(claims)
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(id_token),
+        ):
+            with pytest.raises(InvalidClaimError):
+                client.userinfo()
+
+
+def test_fetch_userinfo_signed_jwt_rejects_bad_signature():
+    app, client = make_signed_userinfo_client()
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    attacker_key = OctKey.import_key("attacker-oct-secret", {"kty": "oct", "kid": "f"})
+    id_token = jwt.encode({"alg": "HS256", "kid": "f"}, claims, attacker_key)
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(id_token),
+        ):
+            from joserfc.errors import BadSignatureError
+
+            with pytest.raises(BadSignatureError):
+                client.userinfo()
+
+
+def test_fetch_userinfo_signed_jwt_rejects_missing_sub():
+    app, client = make_signed_userinfo_client()
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "name": "John Doe",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    id_token = encode_signed_userinfo(claims)
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(id_token),
+        ):
+            with pytest.raises(MissingClaimError):
+                client.userinfo()
+
+
+def test_fetch_userinfo_signed_jwt_rejects_missing_iss():
+    app, client = make_signed_userinfo_client()
+
+    now = int(time.time())
+    claims = {
+        "aud": "dev",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    id_token = encode_signed_userinfo(claims)
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(id_token),
+        ):
+            with pytest.raises(MissingClaimError):
+                client.userinfo()
+
+
+def test_fetch_userinfo_signed_jwt_rejects_missing_aud():
+    app, client = make_signed_userinfo_client()
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    id_token = encode_signed_userinfo(claims)
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(id_token),
+        ):
+            with pytest.raises(MissingClaimError):
+                client.userinfo()
+
+
+def test_fetch_userinfo_json_without_sub_still_returns():
+    app, client = make_signed_userinfo_client()
+
+    def fake_send(sess, req, **kwargs):
+        resp = mock.MagicMock(spec=requests.Response)
+        resp.status_code = 200
+        resp.headers = {"Content-Type": "application/json"}
+        resp.json = lambda: {"name": "John Doe"}
+        return resp
+
+    with app.test_request_context():
+        with mock.patch("requests.sessions.Session.send", fake_send):
+            user = client.userinfo()
+            assert user["name"] == "John Doe"
+            assert user.get("sub") is None
+
+
+def test_fetch_userinfo_signed_jwt_requires_aud_without_client_id():
+    app, client = make_signed_userinfo_client(client_id=None)
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    id_token = encode_signed_userinfo(claims)
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(id_token),
+        ):
+            with pytest.raises(MissingClaimError):
+                client.userinfo()
+
+
+def test_fetch_userinfo_content_type_with_charset():
+    app, client = make_signed_userinfo_client()
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    id_token = encode_signed_userinfo(claims)
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(id_token, "application/jwt; charset=utf-8"),
+        ):
+            user = client.userinfo()
+            assert user.sub == "123"
+
+
+def test_fetch_userinfo_json_still_works():
+    app, client = make_signed_userinfo_client()
+
+    def fake_send(sess, req, **kwargs):
+        resp = mock.MagicMock(spec=requests.Response)
+        resp.status_code = 200
+        resp.headers = {"Content-Type": "application/json"}
+        resp.json = lambda: {"sub": "456"}
+        return resp
+
+    with app.test_request_context():
+        with mock.patch("requests.sessions.Session.send", fake_send):
+            user = client.userinfo()
+            assert user.sub == "456"
+
+
+def test_fetch_userinfo_signed_jwt_rejects_unsupported_alg():
+    app, client = make_signed_userinfo_client()
+    # restrict the userinfo signing algs to RS256; the HS256 token must then
+    # be rejected, mirroring id_token_signing_alg_values_supported handling
+    client.server_metadata["userinfo_signing_alg_values_supported"] = ["RS256"]
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "123",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    id_token = encode_signed_userinfo(claims)
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(id_token),
+        ):
+            with pytest.raises(UnsupportedAlgorithmError):
+                client.userinfo()
+
+
+def test_fetch_userinfo_signed_jwt_via_jwks_uri_key_rotation():
+    app, client = make_signed_userinfo_client()
+    # token signed by a key absent from the cached jwks dict; the client must
+    # raise InvalidKeyIdError internally and force a refresh from jwks_uri
+    secret_keys = KeySet.import_key_set(read_key_file("jwks_private.json"))
+
+    client.server_metadata["jwks"] = {"keys": [secret_key.as_dict()]}
+    client.server_metadata["jwks_uri"] = "https://provider.test/jwks"
+    client.server_metadata["userinfo_signing_alg_values_supported"] = ["RS256"]
+
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "123",
+        "name": "John Doe",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    id_token = jwt.encode({"alg": "RS256"}, claims, secret_keys)
+
+    def fake_send(sess, req, **kwargs):
+        if "jwks" in req.url:
+            resp = mock.MagicMock()
+            resp.json = lambda: read_key_file("jwks_public.json")
+            resp.status_code = 200
+            return resp
+        resp = mock.MagicMock(spec=requests.Response)
+        resp.status_code = 200
+        resp.headers = {"Content-Type": "application/jwt"}
+        resp.text = id_token
+        return resp
+
+    with app.test_request_context():
+        with mock.patch("requests.sessions.Session.send", fake_send):
+            user = client.userinfo()
+            assert user.sub == "123"
+            assert user["name"] == "John Doe"
+
+
+def test_fetch_userinfo_signed_jwt_default_algorithms():
+    """Without signing metadata, the default algorithms of joserfc are accepted."""
+    app, client = make_signed_userinfo_client()
+    del client.server_metadata["userinfo_signing_alg_values_supported"]
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "123",
+        "exp": now + 60,
+    }
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(encode_signed_userinfo(claims)),
+        ):
+            assert client.userinfo().sub == "123"
+
+
+def test_fetch_userinfo_registered_signed_response_alg():
+    """A response signed with the registered algorithm is accepted."""
+    app, client = make_signed_userinfo_client()
+    client.server_metadata["userinfo_signed_response_alg"] = "HS256"
+    del client.server_metadata["userinfo_signing_alg_values_supported"]
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "123",
+        "exp": now + 60,
+    }
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(encode_signed_userinfo(claims)),
+        ):
+            assert client.userinfo().sub == "123"
+
+
+def test_fetch_userinfo_json_with_none_signed_response_alg():
+    """A registered none algorithm accepts JSON responses."""
+    app, client = make_signed_userinfo_client()
+    client.server_metadata["userinfo_signed_response_alg"] = "none"
+
+    def fake_send(sess, req, **kwargs):
+        resp = mock.MagicMock(spec=requests.Response)
+        resp.status_code = 200
+        resp.headers = {"Content-Type": "application/json"}
+        resp.json = lambda: {"sub": "123"}
+        return resp
+
+    with app.test_request_context():
+        with mock.patch("requests.sessions.Session.send", fake_send):
+            assert client.userinfo().sub == "123"
+
+
+def test_fetch_userinfo_signed_response_alg():
+    """The registered userinfo_signed_response_alg is the only accepted one."""
+    app, client = make_signed_userinfo_client()
+    client.server_metadata["userinfo_signed_response_alg"] = "RS256"
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "123",
+        "exp": now + 60,
+    }
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(encode_signed_userinfo(claims)),
+        ):
+            with pytest.raises(UnsupportedAlgorithmError):
+                client.userinfo()
+
+
+def test_fetch_userinfo_json_with_signed_response_alg():
+    """A JSON response is refused when userinfo_signed_response_alg is set."""
+    app, client = make_signed_userinfo_client()
+    client.server_metadata["userinfo_signed_response_alg"] = "HS256"
+
+    def fake_send(sess, req, **kwargs):
+        resp = mock.MagicMock(spec=requests.Response)
+        resp.status_code = 200
+        resp.headers = {"Content-Type": "application/json"}
+        resp.json = lambda: {"sub": "123"}
+        return resp
+
+    with app.test_request_context():
+        with mock.patch("requests.sessions.Session.send", fake_send):
+            with pytest.raises(OAuthError, match="not signed"):
+                client.userinfo()
