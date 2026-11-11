@@ -1,10 +1,10 @@
 .. _specs/rfc7523:
 
-RFC7523: JWT Profile for OAuth 2.0 Client Authentication and Authorization Grants
-=================================================================================
+RFC 7523: JWT Profile for OAuth 2.0 Client Authentication and Authorization Grants
+==================================================================================
 
 .. meta::
-    :description: API references on RFC7523 JWT Bearer Grant of Python
+    :description: API references on RFC 7523 JWT Bearer Grant of Python
         implementation, guide on how to create a server that support
         JWT profile for OAuth 2.0 client authentication and authorization
         grants.
@@ -23,7 +23,7 @@ Using JWTs as Authorization Grants
     Please note that all not-implemented methods are changed.
 
 JWT Profile for OAuth 2.0 Authorization Grants works in the same way with
-:ref:`RFC6749 <specs/rfc6749>` built-in grants. Which means it can be
+:ref:`RFC 6749 <specs/rfc6749>` built-in grants. Which means it can be
 registered with :meth:`~authlib.oauth2.rfc6749.AuthorizationServer.register_grant`.
 
 The client signs the JWT itself, and exchanges it for an access token:
@@ -56,22 +56,23 @@ The client signs the JWT itself, and exchanges it for an access token:
 The ``/token`` and ``/api`` paths are examples.
 
 The base class is :class:`JWTBearerGrant`, you need to implement the missing
-methods in order to use it. Here is an example::
+methods in order to use it. Here is an example:
+
+.. code-block:: python
 
     from joserfc.jwk import KeySet
     from authlib.oauth2.rfc7523 import JWTBearerGrant as _JWTBearerGrant
 
     class JWTBearerGrant(_JWTBearerGrant):
         def get_audiences(self):
-            # Per RFC 7523 Section 3, both the token endpoint URL and the
-            # authorization server's issuer identifier are valid audience values.
+            # Per RFC 7523 §3, aud identifies the authorization server.
             return ['https://example.com/oauth/token', 'https://example.com']
 
         def resolve_issuer_client(self, issuer):
             # if using client_id as issuer
             return Client.objects.get(client_id=issuer)
 
-        def resolve_client_key(self, client, headers, payload):
+        def resolve_client_public_key(self, client):
             # if client has `jwks` column
             key_set = KeySet.import_key_set(client.jwks)
             return key_set
@@ -120,7 +121,7 @@ In :ref:`specs/rfc6749`, Authlib provided three built-in client authentication
 methods, which are ``none``, ``client_secret_post`` and ``client_secret_basic``.
 With the power of Assertion Framework, we can add more client authentication
 methods. In this section, Authlib provides two more options:
-``client_secret_jwt`` and ``private_key_jwt``. RFC7523 itself doesn't define
+``client_secret_jwt`` and ``private_key_jwt``. RFC 7523 itself doesn't define
 any names, these two names are defined by OpenID Connect in ClientAuthentication_.
 
 The JWT replaces the client credentials in a token request of any grant
@@ -141,7 +142,7 @@ type. For instance, with the authorization code grant:
             Note over User,AS: Front channel (browser)
             Client-->>User: 302 Found → /authorize
             User->>AS: GET /authorize
-            AS-->>User: 302 Found → redirect_uri?code=…
+            AS-->>User: 303 See Other → redirect_uri?code=…
             User->>Client: GET redirect_uri?code=…
         end
         rect rgba(120, 120, 120, 0.08)
@@ -173,30 +174,30 @@ The :class:`~authlib.oauth2.rfc6749.AuthorizationServer` has provided a method
 to add more client authentication methods.
 
 In Authlib, ``client_secret_jwt`` and ``private_key_jwt`` share the same API,
-using :class:`JWTBearerClientAssertion` to create a new client authentication::
+using :class:`JWTBearerClientAssertion` to create a new client authentication:
+
+.. code-block:: python
+
+    from joserfc.jwk import KeySet
 
     class JWTClientAuth(JWTBearerClientAssertion):
+        CLIENT_AUTH_METHOD = 'private_key_jwt'
+
         def get_audiences(self):
-            # Per RFC 7523 Section 3, both the token endpoint URL and the
-            # authorization server's issuer identifier are valid audience values.
+            # Per RFC 7523 §3, aud identifies the authorization server.
             return ['https://example.com/oauth/token', 'https://example.com']
 
         def validate_jti(self, claims, jti):
-            # validate_jti is required by OpenID Connect
-            # but it is optional by RFC7523
-            # use cache to validate jti value
+            # Per OpenID Connect Core 1.0 §9, jti is REQUIRED.
+            # RFC 7523 §3 makes it optional.
             key = 'jti:{}-{}'.format(claims['sub'], jti)
             if cache.get(key):
                 return False
             cache.set(key, 1, timeout=3600)
             return True
 
-        def resolve_client_public_key(self, client, headers):
-            if headers['alg'] == 'HS256':
-                return client.client_secret
-            if headers['alg'] == 'RS256':
-                return client.public_key
-            # you may support other ``alg`` value
+        def resolve_client_public_key(self, client):
+            return KeySet.import_key_set(client.jwks)
 
     authorization_server.register_client_auth_method(
         JWTClientAuth.CLIENT_AUTH_METHOD,
@@ -204,14 +205,18 @@ using :class:`JWTBearerClientAssertion` to create a new client authentication::
     )
 
 The ``get_audiences`` method returns the list of valid ``aud`` values
-accepted in client assertion JWTs. Per RFC 7523 Section 3,
-both the token endpoint URL and the authorization server's issuer
-identifier are valid audience values.
+accepted in client assertion JWTs. Per :rfc:`RFC 7523 §3 <7523#section-3>`,
+the ``aud`` claim identifies the authorization server, and the token endpoint
+URL MAY be used. The example also accepts the issuer identifier. The list
+must not be empty. Client
+assertions are rejected with ``invalid_client`` if it is empty.
 
 Now we have added this client auth method to authorization server, but no
 grant types support this authentication method, you need to add it to the
 supported grant types too, e.g. we want to support this in authorization
-code grant::
+code grant:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc6749 import grants
 
@@ -222,20 +227,22 @@ code grant::
         ]
         # ...
 
-You may noticed that the value of ``CLIENT_AUTH_METHOD`` is
-``client_assertion_jwt``. It is not ``client_secret_jwt`` or
-``private_key_jwt``, because they have the same logic. In the above
-implementation::
+The key returned by ``resolve_client_public_key`` checks the signature of the
+client assertion. This example returns the public keys of the client, for
+``private_key_jwt``.
 
-    def resolve_client_public_key(self, client, headers):
-        alg = headers['alg']
+The client authenticates only if its ``check_endpoint_auth_method`` accepts
+``CLIENT_AUTH_METHOD``. Its default value is ``client_assertion_jwt``. The
+example sets it to ``private_key_jwt``, the value of the client metadata
+(:rfc:`RFC 7591 §2 <7591#section-2>`). For ``client_secret_jwt``, set ``CLIENT_AUTH_METHOD``
+to ``client_secret_jwt``, and return the client secret as an ``OctKey``:
 
-If this ``alg`` is a MAC SHA like ``HS256``, it is called ``client_secret_jwt``,
-because the key used to sign a JWT is the client's ``client_secret`` value. If
-this ``alg`` is ``RS256`` or something else, it is called ``private_key_jwt``,
-because client will use its private key to sign the JWT. You can set a limitation
-in the implementation of ``resolve_client_public_key`` to accept only ``HS256``
-alg, in this case, you can also alter ``CLIENT_AUTH_METHOD = 'client_secret_jwt'``.
+.. code-block:: python
+
+    from joserfc.jwk import OctKey
+
+    def resolve_client_public_key(self, client):
+        return OctKey.import_key(client.client_secret)
 
 .. _ClientAuthentication: http://openid.net/specs/openid-connect-core-1_0.html#ClientAuthentication
 
@@ -244,12 +251,14 @@ alg, in this case, you can also alter ``CLIENT_AUTH_METHOD = 'client_secret_jwt'
 Using JWTs Client Assertion in OAuth2Session
 --------------------------------------------
 
-Authlib RFC7523 provides two more client authentication methods for :ref:`OAuth 2 Session <oauth_2_session>`:
+Authlib RFC 7523 provides two more client authentication methods for :ref:`OAuth 2 Session <oauth_2_session>`:
 
 1. ``client_secret_jwt``
 2. ``private_key_jwt``
 
-Here is an example of how to register ``client_secret_jwt`` for ``OAuth2Session``::
+Here is an example of how to register ``client_secret_jwt`` for ``OAuth2Session``:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc7523 import ClientSecretJWT
     from authlib.integrations.requests_client import OAuth2Session
@@ -262,7 +271,11 @@ Here is an example of how to register ``client_secret_jwt`` for ``OAuth2Session`
     session.register_client_auth_method(ClientSecretJWT(token_endpoint))
     session.fetch_token(token_endpoint)
 
-How about ``private_key_jwt``? It is the same as ``client_secret_jwt``::
+How about ``private_key_jwt``? It is the same as ``client_secret_jwt``:
+
+.. skip: next "reads a private key file"
+
+.. code-block:: python
 
     from authlib.oauth2.rfc7523 import PrivateKeyJWT
 
@@ -291,3 +304,5 @@ API Reference
 .. autoclass:: ClientSecretJWT
 
 .. autoclass:: PrivateKeyJWT
+
+.. autoclass:: JWTBearerTokenValidator

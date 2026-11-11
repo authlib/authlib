@@ -3,6 +3,7 @@ from joserfc import jwt
 from joserfc.jwk import OctKey
 
 from authlib.deprecate import AuthlibDeprecationWarning
+from authlib.oauth2.rfc7523.assertion import client_secret_jwt_sign
 from authlib.oauth2.rfc7523.assertion import sign_jwt_bearer_assertion
 from tests.util import HMAC_SECRET
 
@@ -65,6 +66,32 @@ def test_claims_with_other_fields_still_gets_jti():
     assert claims["custom_field"] == "value"
 
 
+@pytest.mark.parametrize(
+    "sign",
+    [
+        lambda claims: sign_jwt_bearer_assertion(
+            key=hmac_key,
+            issuer="client1",
+            audience="https://auth.example/token",
+            alg="HS256",
+            claims=claims,
+        ),
+        lambda claims: client_secret_jwt_sign(
+            hmac_key,
+            client_id="client1",
+            token_endpoint="https://auth.example/token",
+            claims=claims,
+        ),
+    ],
+    ids=["jwt_bearer_assertion", "client_secret_jwt"],
+)
+def test_reused_claims_get_a_new_jti_each_call(sign):
+    claims = {"custom_field": "value"}
+    jtis = {decode(sign(claims))["jti"] for _ in range(2)}
+    assert len(jtis) == 2
+    assert claims == {"custom_field": "value"}
+
+
 @pytest.mark.filterwarnings(
     "ignore:Using implicit key type:joserfc.errors.SecurityWarning"
 )
@@ -77,3 +104,17 @@ def test_raw_string_key_is_deprecated():
             alg="HS256",
         )
     assert decode(token)["iss"] == "client1"
+
+
+def test_key_kid_in_header():
+    """The kid of the key is added to the header, unless the header sets one."""
+    key = OctKey.import_key(HMAC_SECRET, {"kid": "key-1"})
+    header = {"typ": "JWT"}
+    token = sign_jwt_bearer_assertion(key, "iss", "aud", header=header, alg="HS256")
+    assert jwt.decode(token, key).header["kid"] == "key-1"
+    assert header == {"typ": "JWT"}
+
+    token = sign_jwt_bearer_assertion(
+        key, "iss", "aud", header={"kid": "other"}, alg="HS256"
+    )
+    assert jwt.decode(token, key).header["kid"] == "other"

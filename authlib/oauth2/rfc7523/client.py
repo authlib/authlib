@@ -10,7 +10,6 @@ from joserfc.util import to_bytes
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.encoding import json_loads
-from authlib.deprecate import deprecate
 
 from ..rfc6749 import InvalidClientError
 
@@ -28,13 +27,7 @@ class JWTBearerClientAssertion:
     #: Name of the client authentication method
     CLIENT_AUTH_METHOD = "client_assertion_jwt"
 
-    def __init__(self, token_url=None, validate_jti=True, leeway=60):
-        if token_url is not None:  # pragma: no cover
-            deprecate(
-                "'token_url' is deprecated. Override 'get_audiences' instead.",
-                version="1.8",
-            )
-        self.token_url = token_url
+    def __init__(self, *, validate_jti=True, leeway=60):
         self._validate_jti = validate_jti
         # A small allowance of time, typically no more than a few minutes,
         # to account for clock skew. The default is 60 seconds.
@@ -45,7 +38,7 @@ class JWTBearerClientAssertion:
         assertion_type = data.get("client_assertion_type")
         assertion = data.get("client_assertion")
         if assertion_type == ASSERTION_TYPE and assertion:
-            headers, claims = self.extract_assertion(assertion)
+            _, claims = self.extract_assertion(assertion)
             # "sub" is read before the signature and the claims are verified,
             # so it cannot be assumed to be present nor to be a string.
             if "sub" not in claims:
@@ -61,14 +54,7 @@ class JWTBearerClientAssertion:
                     description="The client does not exist on this server."
                 )
 
-            try:
-                key = import_any_key(self.resolve_client_public_key(client))
-            except TypeError:
-                key = import_any_key(self.resolve_client_public_key(client, headers))
-                deprecate(
-                    "resolve_client_public_key takes only 'client' parameter.",
-                    version="1.8",
-                )
+            key = import_any_key(self.resolve_client_public_key(client))
 
             request.client = client
             self.process_assertion_claims(assertion, key)
@@ -76,11 +62,17 @@ class JWTBearerClientAssertion:
         log.debug("Authenticate via %r failed", self.CLIENT_AUTH_METHOD)
 
     def verify_claims(self, claims: jwt.Claims):
+        audiences = self.get_audiences()
+        if not audiences:
+            raise InvalidClientError(
+                description="No audience identifiers configured for this authorization server."
+            )
+
         # iss and sub MUST be the client_id
         options = {
             "iss": {"essential": True},
             "sub": {"essential": True},
-            "aud": {"essential": True, "values": self.get_audiences()},
+            "aud": {"essential": True, "values": audiences},
             "exp": {"essential": True},
         }
         claims_requests = jwt.JWTClaimsRegistry(leeway=self.leeway, **options)
@@ -106,15 +98,16 @@ class JWTBearerClientAssertion:
         server. Per RFC 7523 Section 3, the audience identifies the
         authorization server as an intended audience.
 
-        Developers MUST implement this method::
+        Developers MUST implement this method to return a non-empty list::
 
             def get_audiences(self):
                 return ["https://example.com/oauth/token", "https://example.com"]
 
+        If this method returns an empty list, the assertion is rejected with
+        an ``invalid_client`` error.
+
         :return: list of valid audience strings
         """
-        if self.token_url is not None:  # pragma: no cover
-            return [self.token_url]
         raise NotImplementedError()  # pragma: no cover
 
     def process_assertion_claims(self, assertion, resolve_key):

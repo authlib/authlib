@@ -53,9 +53,7 @@ def prepare_grant_uri(
     for k, value in kwargs.items():
         if value is not None:
             if isinstance(value, (list, tuple)):
-                for v in value:
-                    if v is not None:
-                        params.append((to_unicode(k), v))
+                params.extend((to_unicode(k), v) for v in value if v is not None)
             else:
                 params.append((to_unicode(k), value))
 
@@ -75,7 +73,8 @@ def prepare_token_request(grant_type, body="", redirect_uri=None, **kwargs):
     :param redirect_uri: If the "redirect_uri" parameter was included in the
                          authorization request as described in
                          :rfc:`6749#section-4.1.1`, and their values MUST be identical.
-    :param kwargs: Extra arguments to embed in the request body.
+    :param kwargs: Extra arguments to embed in the request body. A list is
+                   sent as a repeated parameter.
 
     An example of an authorization code token request body::
 
@@ -93,9 +92,14 @@ def prepare_token_request(grant_type, body="", redirect_uri=None, **kwargs):
     if grant_type == "authorization_code" and kwargs.get("code") is None:
         raise MissingCodeException()
 
-    for k in kwargs:
-        if kwargs[k]:
-            params.append((to_unicode(k), kwargs[k]))
+    for k, value in kwargs.items():
+        if not value:
+            continue
+
+        if isinstance(value, (list, tuple)):
+            params.extend((to_unicode(k), v) for v in value if v)
+        else:
+            params.append((to_unicode(k), value))
 
     return add_params_to_qs(body, params)
 

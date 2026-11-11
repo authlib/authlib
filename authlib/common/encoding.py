@@ -30,7 +30,11 @@ def to_native(x, encoding="ascii"):
 
 
 def json_loads(s):
-    return json.loads(s)
+    """Decode a JSON document, raising ``ValueError`` when it is too deeply nested."""
+    try:
+        return json.loads(s)
+    except RecursionError as exc:
+        raise ValueError("JSON document is too deeply nested") from exc
 
 
 def json_dumps(data, ensure_ascii=False):

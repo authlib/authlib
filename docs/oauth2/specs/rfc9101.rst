@@ -1,9 +1,9 @@
 .. _specs/rfc9101:
 
-RFC9101: The OAuth 2.0 Authorization Framework: JWT-Secured Authorization Request (JAR)
-=======================================================================================
+RFC 9101: The OAuth 2.0 Authorization Framework: JWT-Secured Authorization Request (JAR)
+========================================================================================
 
-This section contains the generic implementation of :rfc:`RFC9101 <9101>`.
+This section contains the generic implementation of :rfc:`9101`.
 
 This specification describe how to pass the authorization request payload
 in a JWT (called *request object*) instead of directly instead of GET or POST params.
@@ -32,7 +32,7 @@ itself:
         end
         Note over AS: Verifies the request object
         Note over User,AS: The user logs in and approves
-        AS-->>User: 302 Found → redirect_uri?code=…
+        AS-->>User: 303 See Other → redirect_uri?code=…
 
 1. The client signs a JWT that contains the authorization request
    parameters. It redirects the browser to the authorization endpoint.
@@ -74,7 +74,9 @@ Retrieving request objects
 Implement ``validate_request_uri(request_uri, client)`` with an explicit policy
 for the request objects your server can safely retrieve. The default rejects all
 URIs, including URIs present in client metadata. Validation runs before
-``get_request_object()`` is called; rejected URIs return ``invalid_request_uri``::
+``get_request_object()`` is called; rejected URIs return ``invalid_request_uri``:
+
+.. code-block:: python
 
     class JWTAuthenticationRequest(rfc9101.JWTAuthenticationRequest):
         def validate_request_uri(self, request_uri, client):
@@ -104,6 +106,26 @@ deadline and response size limit, and require the response media type
 below includes an example of HTTP response limits. These safeguards apply even
 to registered URIs, whose DNS records can change. JWT signature validation occurs
 after retrieval and cannot prevent SSRF from the retrieval itself.
+
+.. _jar-consent-retention:
+
+Request objects during consent
+------------------------------
+
+The authorization view usually calls ``get_consent_grant`` twice: once to show
+the consent page, and once to handle the answer of the user. With
+``request_uri``, each call fetches the request object again. The client can
+return a different document the second time, for instance with a wider scope.
+Both documents have a valid signature, but the user only approved the first
+one.
+
+Per OpenID Connect Core §6.2, servers may cache the request object. Keep the
+first request object, for instance in the session of the user, and return it
+from ``get_request_object`` when the same ``request_uri`` comes back. Remove
+it when the authorization ends. If it has expired, start a new authorization
+instead of fetching the document again.
+
+Authlib does not keep request objects yet, see :issue:`971`.
 
 API Reference
 -------------

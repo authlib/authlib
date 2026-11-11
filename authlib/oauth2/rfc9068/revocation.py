@@ -1,5 +1,6 @@
 from authlib.common.errors import ContinueIteration
 from authlib.oauth2.rfc6750.errors import InvalidTokenError
+from authlib.oauth2.rfc9068.claims import _is_access_token
 from authlib.oauth2.rfc9068.token_validator import JWTBearerTokenValidator
 
 from ..rfc6749 import UnsupportedTokenTypeError
@@ -12,7 +13,7 @@ class JWTRevocationEndpoint(RevocationEndpoint):
 
     The JWT access tokens cannot be revoked.
     If the submitted token is a JWT access token, then revocation returns
-    a `invalid_token_error`.
+    an ``unsupported_token_type`` error.
 
     :param issuer: The issuer identifier.
 
@@ -45,19 +46,19 @@ class JWTRevocationEndpoint(RevocationEndpoint):
         """"""
         self.check_params(request, client)
 
-        # do not attempt to revoke refresh_tokens
-        if request.form.get("token_type_hint") not in ("access_token", None):
-            raise ContinueIteration()
-
         validator = JWTBearerTokenValidator(issuer=self.issuer, resource_server=None)
         validator.get_jwks = self.get_jwks
 
         try:
-            validator.authenticate_token(request.form["token"])
+            token = validator.authenticate_token(request.form["token"])
 
         # if the token is not a JWT, fall back to the regular flow
         except InvalidTokenError as exc:
             raise ContinueIteration() from exc
+
+        # Per RFC 9068 §2.1, JWT access tokens have an at+jwt typ header.
+        if not _is_access_token(token):
+            raise ContinueIteration()
 
         # JWT access token cannot be revoked
         raise UnsupportedTokenTypeError()

@@ -70,6 +70,10 @@ class OAuth2Session(OAuth2Client, Session):
         authentication token, that the token is considered expired and will
         be refreshed.
     :param default_timeout: If settled, every requests will have a default timeout.
+    :param headers: HTTP headers to send with every request of the session.
+    :param access_token_params: Extra parameters for ``fetch_token``, such as
+        ``audience``. They are also sent when a new token is fetched
+        automatically, but not when a token is refreshed with a refresh token.
     """
 
     client_auth_class = OAuth2ClientAuth
@@ -135,6 +139,14 @@ class OAuth2Session(OAuth2Client, Session):
             kwargs.setdefault("timeout", self.default_timeout)
         if not withhold_token and auth is None:
             if not self.token:
-                raise MissingTokenError()
+                token_endpoint = self.metadata.get("token_endpoint")
+                grant_type = self.metadata.get("grant_type")
+                if grant_type == "client_credentials" and token_endpoint:
+                    self.fetch_token(
+                        token_endpoint,
+                        grant_type="client_credentials",
+                    )
+                else:
+                    raise MissingTokenError()
             auth = self.token_auth
         return super().request(method, url, auth=auth, **kwargs)

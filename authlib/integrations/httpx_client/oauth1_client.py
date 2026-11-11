@@ -1,4 +1,4 @@
-import typing
+from collections.abc import Generator
 
 from authlib.common.encoding import to_unicode
 from authlib.oauth1 import SIGNATURE_HMAC_SHA1
@@ -21,7 +21,7 @@ class OAuth1Auth(Auth, ClientAuth):
 
     requires_request_body = True
 
-    def auth_flow(self, request: Request) -> typing.Generator[Request, Response, None]:
+    def auth_flow(self, request: Request) -> Generator[Request, Response, None]:
         url, headers, body = self.prepare(
             request.method, str(request.url), request.headers, request.content
         )
@@ -49,7 +49,7 @@ class AsyncOAuth1Client(_OAuth1Client, httpx2.AsyncClient):
         **kwargs,
     ):
         _client_kwargs = extract_client_kwargs(kwargs)
-        httpx2.AsyncClient.__init__(self, **_client_kwargs)
+        super(_OAuth1Client, self).__init__(**_client_kwargs)
 
         _OAuth1Client.__init__(
             self,
@@ -117,7 +117,7 @@ class OAuth1Client(_OAuth1Client, httpx2.Client):
         **kwargs,
     ):
         _client_kwargs = extract_client_kwargs(kwargs)
-        httpx2.Client.__init__(self, **_client_kwargs)
+        super(_OAuth1Client, self).__init__(**_client_kwargs)
 
         _OAuth1Client.__init__(
             self,

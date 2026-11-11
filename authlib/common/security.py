@@ -12,8 +12,13 @@ def generate_token(length=30, chars=UNICODE_ASCII_CHARACTER_SET):
     return "".join(rand.choice(chars) for _ in range(length))
 
 
-def is_secure_transport(uri):
-    """Check if the uri is over ssl."""
+def is_secure_transport(uri, allow_loopback=True):
+    """Check if the uri is over ssl.
+
+    :param uri: The URI to check.
+    :param allow_loopback: Accept ``http`` for loopback hosts. Disable it for
+        URIs that the server calls itself.
+    """
     if os.getenv("AUTHLIB_INSECURE_TRANSPORT"):
         return True
 
@@ -28,7 +33,7 @@ def is_secure_transport(uri):
     if parts.scheme == "https":
         return True
 
-    if parts.scheme != "http":
+    if parts.scheme != "http" or not allow_loopback:
         return False
 
     # rfc8252 §7.3: native apps may use http for loopback redirection URIs.

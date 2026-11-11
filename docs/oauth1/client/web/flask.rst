@@ -19,13 +19,17 @@ Flask OAuth client can handle OAuth 1 services. It shares a similar API with
 Flask-OAuthlib, you can transfer your code from Flask-OAuthlib to Authlib with
 ease.
 
-Create a registry with :class:`OAuth` object::
+Create a registry with :class:`OAuth` object:
+
+.. code-block:: python
 
     from authlib.integrations.flask_client import OAuth
 
     oauth = OAuth(app)
 
-You can also initialize it later with :meth:`~OAuth.init_app` method::
+You can also initialize it later with :meth:`~OAuth.init_app` method:
+
+.. code-block:: python
 
     oauth = OAuth()
     oauth.init_app(app)
@@ -81,7 +85,9 @@ temporary credential (request token). However, in this way, there are chances
 your temporary credential will be exposed.
 
 Our ``OAuth`` registry provides a simple way to store temporary credentials in a
-cache system. When initializing ``OAuth``, you can pass an ``cache`` instance::
+cache system. When initializing ``OAuth``, you can pass an ``cache`` instance:
+
+.. code-block:: python
 
     oauth = OAuth(app, cache=cache)
 
@@ -89,7 +95,7 @@ cache system. When initializing ``OAuth``, you can pass an ``cache`` instance::
     oauth = OAuth()
     oauth.init_app(app, cache=cache)
 
-A ``cache`` instance MUST have methods:
+A ``cache`` instance needs these methods:
 
 - ``.delete(key)``
 - ``.get(key)``
@@ -121,7 +127,9 @@ Routes for Authorization
 
 Unlike the examples in :ref:`frameworks_oauth1_clients`, Flask does not pass a
 ``request`` into routes. In this case, the routes for authorization should look
-like::
+like:
+
+.. code-block:: python
 
     from flask import url_for, redirect
 
@@ -144,7 +152,9 @@ Accessing OAuth Resources
 
 There is no ``request`` in accessing OAuth resources either. Just like above,
 we don't need to pass the ``request`` parameter, everything is handled by Authlib
-automatically::
+automatically:
+
+.. code-block:: python
 
     from flask import render_template
 
@@ -155,7 +165,11 @@ automatically::
         tweets = resp.json()
         return render_template('twitter.html', tweets=tweets)
 
-In this case, our ``fetch_token`` could look like::
+In this case, our ``fetch_token`` could look like:
+
+.. skip: next "depends on the application models"
+
+.. code-block:: python
 
     from your_project import current_user
 
@@ -180,3 +194,20 @@ Here are some example projects for you to learn Flask OAuth 1.0 client integrati
 1. `Flask Twitter Login`_.
 
 .. _`Flask Twitter Login`: https://github.com/authlib/demo-oauth-client/tree/master/flask-twitter-tool
+
+.. invisible-code-block: python
+
+    oauth.register(
+        name="twitter",
+        client_id="{{ your-twitter-consumer-key }}",
+        client_secret="{{ your-twitter-consumer-secret }}",
+        request_token_url="https://api.twitter.com/oauth/request_token",
+        access_token_url="https://api.twitter.com/oauth/access_token",
+        authorize_url="https://api.twitter.com/oauth/authenticate",
+        api_base_url="https://api.twitter.com/1.1/",
+    )
+    http = app.test_client()
+    response = http.get("/login")
+    response = http.get(consent(response.location))
+    assert response.status_code == 302, response.data
+    assert response.location == "/"

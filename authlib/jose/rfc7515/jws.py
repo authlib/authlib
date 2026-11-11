@@ -4,6 +4,7 @@ from authlib.common.encoding import to_unicode
 from authlib.common.encoding import urlsafe_b64encode
 from authlib.jose.errors import BadSignatureError
 from authlib.jose.errors import DecodeError
+from authlib.jose.errors import ExceededSizeError
 from authlib.jose.errors import InvalidCritHeaderParameterNameError
 from authlib.jose.errors import InvalidHeaderParameterNameError
 from authlib.jose.errors import MissingAlgorithmError
@@ -90,7 +91,7 @@ class JsonWebSignature:
         :raise: BadSignatureError
         """
         if len(s) > self.MAX_CONTENT_LENGTH:
-            raise ValueError("Serialization is too long.")
+            raise ExceededSizeError(description="Serialization is too long.")
 
         try:
             s = to_bytes(s)

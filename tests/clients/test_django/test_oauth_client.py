@@ -139,6 +139,30 @@ def test_oauth2_authorize_access_denied(factory):
             client.authorize_access_token(request)
 
 
+def test_oauth2_access_denied_with_post(factory):
+    """An error response sent with form_post raises an OAuthError."""
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        access_token_url="https://provider.test/token",
+        authorize_url="https://provider.test/authorize",
+    )
+
+    with mock.patch("requests.sessions.Session.send") as send:
+        request = factory.post(
+            "/", {"error": "access_denied", "error_description": "Not Allowed"}
+        )
+        request.session = factory.session
+        with pytest.raises(OAuthError) as exc_info:
+            client.authorize_access_token(request)
+
+        assert exc_info.value.error == "access_denied"
+        assert exc_info.value.description == "Not Allowed"
+        send.assert_not_called()
+
+
 def test_oauth2_authorize_code_challenge(factory):
     request = factory.get("/login")
     request.session = factory.session
@@ -219,6 +243,7 @@ def test_openid_authorize(factory):
         "dev",
         client_id="dev",
         jwks={"keys": [secret_key.as_dict()]},
+        id_token_signing_alg_values_supported=["HS256"],
         api_base_url="https://resource.test/api",
         access_token_url="https://provider.test/token",
         authorize_url="https://provider.test/authorize",

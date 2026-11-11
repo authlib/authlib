@@ -1,4 +1,7 @@
 from authlib.oauth2.rfc6749 import AuthorizationCodeMixin as _AuthorizationCodeMixin
+from authlib.oauth2.rfc6749 import (
+    AuthorizationSessionMixin as _AuthorizationSessionMixin,
+)
 
 
 class AuthorizationCodeMixin(_AuthorizationCodeMixin):
@@ -27,3 +30,23 @@ class AuthorizationCodeMixin(_AuthorizationCodeMixin):
 
         """
         return None
+
+
+class AuthorizationSessionMixin(_AuthorizationSessionMixin):
+    """The authorization session of OpenID Connect. It adds the account
+    selection to :class:`~authlib.oauth2.rfc6749.AuthorizationSessionMixin`.
+
+    The time of the ``"login"`` interaction becomes the ``auth_time`` claim of
+    the ID token. :meth:`get_interaction_time` also takes
+    ``"select_account"``, the time the user selected their account.
+    """
+
+    def is_account_selection_needed(self, request):
+        """Tell if the user must select an account, for instance because
+        several accounts are logged in. A client can still ask for it with
+        ``prompt=select_account``. Either way, the selection is done when the
+        user selects an account or logs in after the request started.
+
+        :param request: the authorization request, with its ``user``
+        """
+        return False

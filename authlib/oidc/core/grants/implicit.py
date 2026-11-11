@@ -4,36 +4,56 @@ from joserfc import jwt
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.deprecate import deprecate
+from authlib.oauth2.form_post import FormPost
 from authlib.oauth2.rfc6749 import AccessDeniedError
+from authlib.oauth2.rfc6749 import AuthorizationResponse
 from authlib.oauth2.rfc6749 import ImplicitGrant
 from authlib.oauth2.rfc6749 import InvalidScopeError
 from authlib.oauth2.rfc6749 import OAuth2Error
 from authlib.oauth2.rfc6749.errors import InvalidRequestError
-from authlib.oauth2.rfc6749.hooks import hooked
 
 from ._legacy import LegacyMixin
+from .util import OPENID_AUTHORIZATION_PARAMETERS
 from .util import create_half_hash
-from .util import create_response_mode_response
+from .util import has_multiple_response_types
 from .util import is_openid_scope
+from .util import resolve_auth_time
+from .util import set_silent
 from .util import validate_nonce
+from .util import validate_prompt_none
 from .util import validate_request_prompt
+from .util import validate_response_mode
 
 log = logging.getLogger(__name__)
 
 
 class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
     RESPONSE_TYPES = {"id_token token", "id_token"}
+    AUTHORIZATION_PARAMETERS = {
+        **ImplicitGrant.AUTHORIZATION_PARAMETERS,
+        **OPENID_AUTHORIZATION_PARAMETERS,
+    }
+
+    #: Deprecated. Use ``RESPONSE_MODE``.
     DEFAULT_RESPONSE_MODE = "fragment"
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if "DEFAULT_RESPONSE_MODE" in vars(cls) and "RESPONSE_MODE" not in vars(cls):
+            deprecate(
+                "'DEFAULT_RESPONSE_MODE' is deprecated. Use 'RESPONSE_MODE' instead.",
+                version="1.11",
+            )
+            cls.RESPONSE_MODE = cls.DEFAULT_RESPONSE_MODE
+
     def exists_nonce(self, nonce, request):
-        """Check if the given nonce is existing in your database. Developers
-        should implement this method in subclass, e.g.::
+        """Check if the given nonce was already used. Developers should
+        implement this method in subclass. Per OpenID Connect Core §2, the
+        authorization server should not process the nonce, so it can accept
+        every nonce::
 
             def exists_nonce(self, nonce, request):
-                exists = AuthorizationCode.query.filter_by(
-                    client_id=request.payload.client_id, nonce=nonce
-                ).first()
-                return bool(exists)
+                return False
 
         :param nonce: A string of "nonce" parameter in request
         :param request: OAuth2Request instance
@@ -60,15 +80,9 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
         """
         raise NotImplementedError()
 
-    def get_audiences(self, request):
-        """Parse `aud` value for id_token, default value is client id. Developers
-        MAY rewrite this method to provide a customized audience value.
-        """
-        client = request.client
-        return [client.get_client_id()]
-
     def validate_authorization_request(self):
         redirect_uri = super().validate_authorization_request()
+        validate_response_mode(self, redirect_uri)
         if not is_openid_scope(self.request.scope):
             raise InvalidScopeError(
                 "Missing 'openid' scope",
@@ -83,31 +97,39 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
             raise error
         return redirect_uri
 
-    @hooked
     def validate_consent_request(self):
+        set_silent(self)
         redirect_uri = self.validate_authorization_request()
+        self.redirect_uri = redirect_uri
         validate_request_prompt(self, redirect_uri, redirect_fragment=True)
         return redirect_uri
 
-    def create_authorization_response(self, redirect_uri, grant_user):
-        state = self.request.payload.state
-        if grant_user:
-            params = self.create_granted_params(grant_user)
-            if state:
-                params.append(("state", state))
-        else:
-            error = AccessDeniedError()
-            params = error.get_body()
+    def validate_interactions(self):
+        super().validate_interactions()
+        validate_prompt_none(self, redirect_fragment=True)
 
-        # http://openid.net/specs/oauth-v2-multiple-response-types-1_0.html#ResponseModes
+    def create_authorization_response(self, redirect_uri, grant_user):
+        if not grant_user:
+            raise AccessDeniedError(redirect_uri=redirect_uri, redirect_fragment=True)
+
+        self.request.user = grant_user
+        self.request.auth_time = resolve_auth_time(self)
+        params = self.create_granted_params(grant_user)
+        if state := self.request.payload.state:
+            params.append(("state", state))
+
+        if has_multiple_response_types(self.server):
+            response_mode = self.response_mode or self.RESPONSE_MODE
+            return AuthorizationResponse(redirect_uri, params, response_mode)
+
         response_mode = self.request.payload.data.get(
-            "response_mode", self.DEFAULT_RESPONSE_MODE
+            "response_mode", self.RESPONSE_MODE
         )
-        return create_response_mode_response(
-            redirect_uri=redirect_uri,
-            params=params,
-            response_mode=response_mode,
-        )
+        response = AuthorizationResponse(redirect_uri, params, response_mode)
+        if response_mode == "form_post":
+            return FormPost().encode(response)
+
+        return response
 
     def create_granted_params(self, grant_user):
         self.request.user = grant_user
@@ -146,6 +168,10 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
             )
 
         claims = self.get_compatible_claims(self.request)
+        claims.pop("auth_time", None)
+        if self.request.auth_time is not None:
+            claims["auth_time"] = self.request.auth_time
+
         nonce = self.request.payload.data.get("nonce")
         if nonce:
             claims["nonce"] = nonce
@@ -169,16 +195,3 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
         id_token = jwt.encode(header, claims, private_key, [alg])
         token["id_token"] = id_token
         return token
-
-    def _compatible_resolve_jwt_config(self, grant, client):
-        if not hasattr(self, "get_jwt_config"):
-            return {}
-        deprecate(
-            "get_jwt_config(self, client) is deprecated and will be removed in version 1.8. "
-            "Use resolve_client_private_key, get_client_claims, get_client_algorithm instead."
-        )
-        try:
-            config = self.get_jwt_config(client)
-        except TypeError:
-            config = self.get_jwt_config()
-        return config

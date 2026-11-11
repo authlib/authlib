@@ -1,7 +1,5 @@
 .. meta::
-    :description: The ultimate Python library in building OAuth 1.0, OAuth 2.0, OpenID Connect providers and clients,
-         with built-in JSON Web Signature (JWS), JSON Web Encryption (JWE), JSON Web Key (JWK),
-         and JSON Web Token (JWT) support.
+    :description: The ultimate Python library in building OAuth 1.0, OAuth 2.0, OpenID Connect providers and clients.
     :image: https://repository-images.githubusercontent.com/108510280/cab09300-d0ad-11e9-8113-ed9e6ba76927
 
 Authlib: Python Authentication
@@ -13,7 +11,7 @@ The ultimate Python library in building OAuth and OpenID Connect servers and cli
 It is designed from low level specifications implementations to high level
 frameworks integrations, to meet the needs of everyone.
 
-Authlib is compatible with Python3.10+.
+Authlib is compatible with Python3.11+.
 
 .. toctree::
     :maxdepth: 2

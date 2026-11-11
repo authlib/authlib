@@ -10,12 +10,11 @@ JSON Web Signature (JWS) represents content secured with digital
 signatures or Message Authentication Codes (MACs) using JSON-based
 data structures.
 
-.. important::
+.. deprecated:: 1.7
+    ``authlib.jose`` will be removed in Authlib 2.0. Use joserfc_ instead.
+    :ref:`joserfc_upgrade` explains how to migrate.
 
-    We are splitting the ``jose`` module into a separated package. You may be
-    interested in joserfc_.
-
-.. _joserfc: https://jose.authlib.org/en/dev/guide/jws/
+.. _joserfc: https://jose.authlib.org/en/
 
 
 There are two types of JWS Serializations:
@@ -134,6 +133,8 @@ To deserialize a JWS Compact Serialization, use
     keys for different methods.
 
 Load a different ``key`` for symmetric and asymmetric signatures::
+
+    from authlib.jose.errors import UnsupportedAlgorithmError
 
     def load_key(header, payload):
         if header['alg'] == 'RS256':

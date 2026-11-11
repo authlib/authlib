@@ -2,8 +2,11 @@ import time
 from types import SimpleNamespace
 from unittest import mock
 
+import pytest
 from joserfc import jwt
+from joserfc.errors import JoseError
 from joserfc.jwk import ECKey
+from joserfc.jwk import OKPKey
 from joserfc.jwk import RSAKey
 
 from authlib.oauth2.rfc7523 import PrivateKeyJWT
@@ -66,12 +69,26 @@ def test_all_set():
         claims={"foo1a": "bar1a"},
         headers={"foo1b": "bar1b"},
         alg="RS512",
+        expires_in=120,
     )
 
     assert jwt_signer.token_endpoint == "https://provider.test/oauth/access_token"
     assert jwt_signer.claims == {"foo1a": "bar1a"}
     assert jwt_signer.headers == {"foo1b": "bar1b"}
     assert jwt_signer.alg == "RS512"
+    assert jwt_signer.expires_in == 120
+
+
+def test_expires_in_set():
+    jwt_signer = PrivateKeyJWT(expires_in=60)
+
+    assert jwt_signer.expires_in == 60
+
+
+def test_expires_in_not_set():
+    jwt_signer = PrivateKeyJWT()
+
+    assert jwt_signer.expires_in == 3600
 
 
 def sign_and_decode(jwt_signer, client_id, token_endpoint):
@@ -248,6 +265,47 @@ def test_sign_with_ec_key():
     assert decoded.header["alg"] == "ES256"
 
 
+@pytest.mark.parametrize(
+    "key,alg",
+    [
+        (ECKey.generate_key("P-256", private=True), "ES256"),
+        (OKPKey.generate_key("Ed25519", private=True), "Ed25519"),
+    ],
+)
+def test_sign_with_pem_key(key, alg):
+    """A non-RSA private key can be given as a PEM string."""
+    jwt_signer = PrivateKeyJWT(alg=alg)
+    pem = key.as_pem(private=True).decode()
+    auth = SimpleNamespace(client_id="client_id_1", client_secret=pem)
+
+    data = jwt_signer.sign(auth, "https://provider.test/oauth/access_token")
+    decoded = jwt.decode(data, key, algorithms=[alg])
+    assert decoded.claims["iss"] == "client_id_1"
+
+
+def test_sign_with_key_kid():
+    """The kid of the key is added to the header."""
+    key = ECKey.generate_key("P-256", parameters={"kid": "key-1"}, private=True)
+    auth = SimpleNamespace(client_id="client_id_1", client_secret=key)
+
+    data = PrivateKeyJWT(alg="ES256").sign(auth, "https://provider.test/token")
+    assert jwt.decode(data, key).header["kid"] == "key-1"
+
+    jwt_signer = PrivateKeyJWT(alg="ES256", headers={"kid": "other"})
+    data = jwt_signer.sign(auth, "https://provider.test/token")
+    assert jwt.decode(data, key).header["kid"] == "other"
+    assert jwt_signer.headers == {"kid": "other"}
+
+
+@pytest.mark.parametrize("alg", ["ES256", "HS256", "XX256"])
+def test_sign_with_pem_key_of_another_type(alg):
+    """A PEM key that does not match alg is refused."""
+    jwt_signer = PrivateKeyJWT(alg=alg)
+    auth = SimpleNamespace(client_id="client_id_1", client_secret=private_key)
+    with pytest.raises(JoseError):
+        jwt_signer.sign(auth, "https://provider.test/oauth/access_token")
+
+
 def test_sign_with_non_recommended_alg():
     """Signing must work with algorithms outside joserfc's recommended set."""
     jwt_signer = PrivateKeyJWT(alg="RS384")
@@ -260,3 +318,16 @@ def test_sign_with_non_recommended_alg():
     decoded = jwt.decode(data, RSAKey.import_key(public_key), algorithms=["RS384"])
 
     assert decoded.header["alg"] == "RS384"
+
+
+def test_sign_custom_expires_in():
+    jwt_signer = PrivateKeyJWT(expires_in=60)
+
+    decoded, pre_sign_time, iat, exp, jti = sign_and_decode(
+        jwt_signer,
+        "client_id_1",
+        "https://provider.test/oauth/access_token",
+    )
+
+    assert exp >= iat + 60
+    assert exp <= iat + 60 + 2

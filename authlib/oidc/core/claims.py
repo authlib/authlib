@@ -8,6 +8,7 @@ from joserfc.errors import MissingClaimError
 from authlib.common.encoding import to_bytes
 from authlib.common.language import is_valid_language_tag
 from authlib.oauth2.claims import JWTClaims
+from authlib.oauth2.rfc6749.util import normalize_response_type
 from authlib.oauth2.rfc6749.util import scope_to_list
 
 from .util import create_half_hash
@@ -47,11 +48,28 @@ class IDToken(JWTClaims):
                 raise MissingClaimError(k)
 
         super().validate(now, leeway)
+        self.validate_aud()
         self.validate_auth_time()
         self.validate_nonce()
         self.validate_amr()
         self.validate_azp()
         self.validate_at_hash()
+
+    def validate_aud(self):
+        """REQUIRED. Audience(s) that this ID Token is intended for. It MUST
+        contain the OAuth 2.0 client_id of the Relying Party as an audience
+        value. The Client MUST validate that the aud (audience) Claim contains
+        its client_id value registered at the Issuer identified by the iss
+        (issuer) Claim as an audience.
+        """
+        client_id = self.params.get("client_id")
+        if not client_id:
+            return
+
+        aud = self["aud"]
+        audiences = aud if isinstance(aud, list) else [aud]
+        if client_id not in audiences:
+            raise InvalidClaimError("aud")
 
     def validate_auth_time(self):
         """Time when the End-User authentication occurred. Its value is a JSON
@@ -111,13 +129,7 @@ class IDToken(JWTClaims):
         """
         aud = self.get("aud")
         client_id = self.params.get("client_id")
-        required = False
-        if aud and client_id:
-            if isinstance(aud, list) and len(aud) == 1:
-                aud = aud[0]
-            if aud != client_id:
-                required = True
-
+        required = bool(client_id) and isinstance(aud, list) and len(aud) > 1
         azp = self.get("azp")
         if required and not azp:
             raise MissingClaimError("azp")
@@ -303,9 +315,19 @@ class SignedUserInfo(JWTClaims):
 
 
 def get_claim_cls_by_response_type(response_type):
+    """Return the ID Token claims class for a response type.
+
+    Per RFC 6749 §3.1.1, the order of the values does not matter.
+
+    :param response_type: the ``response_type`` of the authorization request
+    :return: a claims class, or ``None`` if no class matches
+    """
+    response_type = normalize_response_type(response_type)
     claims_classes = (CodeIDToken, ImplicitIDToken, HybridIDToken)
     for claims_cls in claims_classes:
-        if response_type in claims_cls.RESPONSE_TYPES:
+        if response_type in {
+            normalize_response_type(rt) for rt in claims_cls.RESPONSE_TYPES
+        }:
             return claims_cls
 
 

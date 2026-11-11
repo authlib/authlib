@@ -1,11 +1,16 @@
+import time
+from contextlib import nullcontext
+
 import pytest
 from flask import json
 from joserfc import jwt
 from joserfc.jwk import OctKey
 
 from authlib.common.urls import url_decode
+from authlib.common.urls import url_encode
 from authlib.common.urls import urlparse
 from authlib.deprecate import AuthlibDeprecationWarning
+from authlib.oauth2.multiple_response_types import MultipleResponseTypes
 from authlib.oauth2.rfc6749.grants import (
     AuthorizationCodeGrant as _AuthorizationCodeGrant,
 )
@@ -15,12 +20,15 @@ from authlib.oidc.core import HybridIDToken
 from authlib.oidc.core.grants import OpenIDCode as _OpenIDCode
 from authlib.oidc.core.grants import OpenIDHybridGrant as _OpenIDHybridGrant
 from tests.util import HMAC_SECRET
+from tests.util import parse_form
 
 from .models import AuthorizationCode
 from .models import CodeGrantMixin
 from .models import exists_nonce
 from .models import save_authorization_code
+from .oauth2_server import SupportedPromptValues
 from .oauth2_server import create_basic_header
+from .oauth2_server import register_form_post
 
 
 class IDTokenConfigMixin:
@@ -29,6 +37,11 @@ class IDTokenConfigMixin:
 
     def get_client_claims(self, client):
         return {"iss": "Authlib", "aud": [client.get_client_id()]}
+
+
+def deprecated_response_mode():
+    """Using response_mode without MultipleResponseTypes is deprecated."""
+    return pytest.warns(AuthlibDeprecationWarning, match="MultipleResponseTypes")
 
 
 @pytest.fixture(autouse=True)
@@ -56,7 +69,6 @@ def server(server):
 
     server.register_grant(OpenIDHybridGrant)
     server.register_grant(AuthorizationCodeGrant, [OpenIDCode()])
-
     return server
 
 
@@ -92,6 +104,85 @@ def create_hybrid_request(client, user):
     request.client = client
     request.user = user
     return request
+
+
+def test_prompt_create(test_client, server):
+    """PromptValues sets the grant prompt to 'create' in the hybrid flow."""
+    server.register_extension(SupportedPromptValues())
+    query = url_encode(
+        [
+            ("response_type", "code id_token"),
+            ("client_id", "client-id"),
+            ("scope", "openid profile"),
+            ("state", "bar"),
+            ("nonce", "abc"),
+            ("redirect_uri", "https://client.test"),
+            ("prompt", "create"),
+        ]
+    )
+    rv = test_client.get("/oauth/authorize?" + query)
+    assert rv.data == b"create"
+
+
+HYBRID_PARAMS = [
+    ("response_type", "code id_token"),
+    ("client_id", "client-id"),
+    ("scope", "openid profile"),
+    ("state", "bar"),
+    ("nonce", "abc"),
+    ("redirect_uri", "https://client.test"),
+    ("user_id", "1"),
+]
+
+
+def test_max_age(test_client):
+    """An authentication older than max_age asks for a login, and errors go
+    in the fragment."""
+    old = str(int(time.time()) - 7200)
+    query = url_encode(HYBRID_PARAMS + [("max_age", "3600"), ("auth_time", old)])
+    rv = test_client.get("/oauth/authorize?" + query)
+    assert rv.data == b"login"
+
+    query = url_encode(
+        HYBRID_PARAMS + [("max_age", "3600"), ("auth_time", old), ("prompt", "none")]
+    )
+    rv = test_client.get("/oauth/authorize?" + query)
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["error"] == "login_required"
+
+
+def test_auth_time_claim(test_client):
+    """The auth_time claim of the front-channel ID token comes from
+    get_auth_time."""
+    rv = test_client.post(
+        "/oauth/authorize", data=dict(HYBRID_PARAMS + [("auth_time", "1000000000")])
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    token = jwt.decode(
+        params["id_token"], OctKey.import_key(HMAC_SECRET), algorithms=["HS256"]
+    )
+    assert token.claims["auth_time"] == 1000000000
+
+
+def test_auth_time_claim_after_code_exchange(test_client):
+    """The ID token of the token endpoint has the auth_time of the
+    authorization request."""
+    rv = test_client.post(
+        "/oauth/authorize", data=dict(HYBRID_PARAMS + [("auth_time", "1000000000")])
+    )
+    code = dict(url_decode(urlparse.urlparse(rv.location).fragment))["code"]
+    rv = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "redirect_uri": "https://client.test",
+            "code": code,
+        },
+        headers=create_basic_header("client-id", "client-secret"),
+    )
+    id_token = json.loads(rv.data)["id_token"]
+    token = jwt.decode(id_token, OctKey.import_key(HMAC_SECRET), algorithms=["HS256"])
+    assert token.claims["auth_time"] == 1000000000
 
 
 def test_invalid_client_id(test_client):
@@ -264,6 +355,7 @@ def test_access_denied(test_client):
         },
     )
     assert "error=access_denied" in rv.location
+    assert "state=bar" in rv.location
 
 
 def test_code_access_token(test_client):
@@ -342,12 +434,26 @@ def test_code_id_token(test_client):
     assert "id_token" in resp
 
 
-def test_code_id_token_access_token(test_client):
+@pytest.mark.parametrize(
+    "response_type", ["code id_token token", "token id_token code"]
+)
+@pytest.mark.parametrize("registered", ["code id_token token", "id_token token code"])
+def test_code_id_token_access_token(test_client, db, client, response_type, registered):
+    """The order of the response_type values does not matter, in the request
+    and in the client metadata."""
+    client.set_client_metadata(
+        {
+            **client.client_metadata,
+            "response_types": ["code id_token", "code token", registered],
+        }
+    )
+    db.session.add(client)
+    db.session.commit()
     rv = test_client.post(
         "/oauth/authorize",
         data={
             "client_id": "client-id",
-            "response_type": "code id_token token",
+            "response_type": response_type,
             "state": "bar",
             "nonce": "abc",
             "scope": "openid profile",
@@ -379,95 +485,179 @@ def test_code_id_token_access_token(test_client):
     assert "id_token" in resp
 
 
-def test_response_mode_query(test_client):
-    rv = test_client.post(
-        "/oauth/authorize",
-        data={
-            "client_id": "client-id",
-            "response_type": "code id_token token",
-            "response_mode": "query",
-            "state": "bar",
-            "nonce": "abc",
-            "scope": "openid profile",
-            "redirect_uri": "https://client.test",
-            "user_id": "1",
-        },
-    )
-    assert "code=" in rv.location
-    assert "id_token=" in rv.location
-    assert "access_token=" in rv.location
+@pytest.mark.parametrize("registered", [True, False])
+@pytest.mark.parametrize("response_mode", ["query", "unknown"])
+@pytest.mark.parametrize("user_id", ["1", None])
+def test_response_mode_unsupported(
+    test_client, server, response_mode, user_id, registered
+):
+    """The query response mode and unknown response modes are refused.
 
-    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    The error is returned in the fragment. Before the login, it is returned
+    without redirection.
+    """
+    data = {
+        "client_id": "client-id",
+        "response_type": "code id_token token",
+        "response_mode": response_mode,
+        "state": "bar",
+        "nonce": "abc",
+        "scope": "openid profile",
+        "redirect_uri": "https://client.test",
+    }
+    if user_id:
+        data["user_id"] = user_id
+
+    if registered:
+        server.register_extension(MultipleResponseTypes())
+
+    with nullcontext() if registered else deprecated_response_mode():
+        rv = test_client.post("/oauth/authorize", data=data)
+
+    if not user_id:
+        assert rv.status_code == 400
+        assert rv.json["error"] == "invalid_request"
+        return
+
+    assert rv.status_code == 303
+    location = urlparse.urlparse(rv.location)
+    assert not location.query
+    params = dict(url_decode(location.fragment))
+    assert params["error"] == "invalid_request"
     assert params["state"] == "bar"
+    assert "code" not in params
 
 
-def test_response_mode_form_post(test_client):
-    rv = test_client.post(
-        "/oauth/authorize",
-        data={
-            "client_id": "client-id",
-            "response_type": "code id_token token",
-            "response_mode": "form_post",
-            "state": "bar",
-            "nonce": "abc",
-            "scope": "openid profile",
-            "redirect_uri": "https://client.test",
-            "user_id": "1",
-        },
-    )
+@pytest.mark.parametrize("registered", [True, False])
+def test_response_mode_form_post(test_client, server, registered):
+    if registered:
+        register_form_post(server)
+
+    with nullcontext() if registered else deprecated_response_mode():
+        rv = test_client.post(
+            "/oauth/authorize",
+            data={
+                "client_id": "client-id",
+                "response_type": "code id_token token",
+                "response_mode": "form_post",
+                "state": "bar",
+                "nonce": "abc",
+                "scope": "openid profile",
+                "redirect_uri": "https://client.test",
+                "user_id": "1",
+            },
+        )
+
     assert b'name="code"' in rv.data
     assert b'name="id_token"' in rv.data
     assert b'name="access_token"' in rv.data
 
 
-def test_deprecated_get_jwt_config(client, user):
-    """Using get_jwt_config(self, client) should emit an AuthlibDeprecationWarning."""
+@pytest.mark.parametrize("user_id", ["1", None])
+@pytest.mark.parametrize("registered", [True, False])
+def test_response_mode_form_post_values(test_client, server, user_id, registered):
+    """The client receives the form_post values unchanged. Without the
+    extension, a denial is sent in the fragment, like the other errors."""
+    if registered:
+        register_form_post(server)
 
-    class DeprecatedHybridGrant(_OpenIDHybridGrant):
-        def get_jwt_config(self, client):
-            return {
-                "key": OctKey.import_key(HMAC_SECRET),
-                "alg": "HS256",
-                "iss": "Authlib",
-                "aud": [client.get_client_id()],
-                "exp": 3600,
-            }
+    state = "a b&c\"<>%'"
+    data = {
+        "client_id": "client-id",
+        "response_type": "code id_token token",
+        "response_mode": "form_post",
+        "state": state,
+        "nonce": "abc",
+        "scope": "openid profile",
+        "redirect_uri": "https://client.test",
+    }
+    if user_id:
+        data["user_id"] = user_id
 
-        def generate_user_info(self, user, scopes):
-            return user.generate_user_info(scopes)
+    with nullcontext() if registered else deprecated_response_mode():
+        rv = test_client.post("/oauth/authorize", data=data)
 
-    request = create_hybrid_request(client, user)
-    grant = DeprecatedHybridGrant(request, None)
-    token = {"scope": "openid profile", "expires_in": 3600}
+    if not registered and not user_id:
+        params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+        assert params["error"] == "access_denied"
+        assert params["state"] == state
+        return
 
-    with pytest.warns(AuthlibDeprecationWarning, match="get_jwt_config.*version 1.8"):
-        token = grant.process_implicit_token(token, code="code")
-    validate_claims(token["id_token"], {"nonce": "abc", "code": "code"})
+    assert rv.headers["Cache-Control"] == "no-store"
+    form = parse_form(rv.data)
+    assert form.action == "https://client.test"
+    assert form.values["state"] == state
+    if not user_id:
+        assert form.values["error_description"] == (
+            "The resource owner or authorization server denied the request"
+        )
 
 
-def test_deprecated_get_audiences(client, user):
-    """Using get_audiences(self, request) should emit an AuthlibDeprecationWarning."""
+@pytest.mark.parametrize(
+    "redirect_uri",
+    [
+        "javascript://client.test/%0Aalert(1)",
+        "JavaScript://client.test/\nalert(1)",
+        "com.example.app://client.test/callback",
+    ],
+)
+@pytest.mark.parametrize("user_id", ["1", None])
+@pytest.mark.parametrize("default_response_mode", [False, True])
+@pytest.mark.parametrize("registered", [False, True])
+def test_response_mode_form_post_non_http_redirect_uri(
+    test_client,
+    server,
+    db,
+    client,
+    monkeypatch,
+    redirect_uri,
+    user_id,
+    default_response_mode,
+    registered,
+):
+    """A form_post response must not target a non-HTTP redirect URI.
 
-    class DeprecatedHybridGrant(_OpenIDHybridGrant):
-        def resolve_client_private_key(self, client):
-            return OctKey.import_key(HMAC_SECRET)
-
-        def get_client_claims(self, client):
-            return {"iss": "Authlib"}
-
-        def get_audiences(self, request):
-            return ["custom-audience"]
-
-        def generate_user_info(self, user, scopes):
-            return user.generate_user_info(scopes)
-
-    request = create_hybrid_request(client, user)
-    grant = DeprecatedHybridGrant(request, None)
-    token = {"scope": "openid profile", "expires_in": 3600}
-
-    with pytest.warns(AuthlibDeprecationWarning, match="get_audiences.*version 1.8"):
-        token = grant.process_implicit_token(token, code="code")
-    id_token = jwt.decode(
-        token["id_token"], OctKey.import_key(HMAC_SECRET), algorithms=["HS256"]
+    The request is refused before any form is rendered, whether the user
+    approves or denies the authorization.
+    """
+    client.set_client_metadata(
+        {
+            "redirect_uris": [redirect_uri],
+            "scope": "openid profile address",
+            "response_types": ["code id_token", "code token", "code id_token token"],
+            "grant_types": ["authorization_code"],
+            "id_token_signed_response_alg": "HS256",
+        }
     )
-    assert id_token.claims["aud"] == ["custom-audience"]
+    db.session.add(client)
+    db.session.commit()
+
+    data = {
+        "client_id": "client-id",
+        "response_type": "code id_token token",
+        "response_mode": "form_post",
+        "state": "bar",
+        "nonce": "abc",
+        "scope": "openid profile",
+        "redirect_uri": redirect_uri,
+    }
+    if user_id:
+        data["user_id"] = user_id
+    if default_response_mode:
+        monkeypatch.setattr(_OpenIDHybridGrant, "RESPONSE_MODE", "form_post")
+        del data["response_mode"]
+
+    if registered:
+        register_form_post(server)
+
+    with (
+        nullcontext()
+        if default_response_mode or registered
+        else deprecated_response_mode()
+    ):
+        rv = test_client.post("/oauth/authorize", data=data)
+
+    assert rv.status_code == 400
+    assert rv.json["error"] == "invalid_request"
+    assert rv.location is None
+    assert b"<form" not in rv.data

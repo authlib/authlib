@@ -22,7 +22,9 @@ Read :ref:`frameworks_oauth1_clients` at first.
 
 The difference between Starlette and Flask/Django integrations is Starlette
 is **async**. We will use ``await`` for the functions we need to call. But
-first, let's create an :class:`OAuth` instance::
+first, let's create an :class:`OAuth` instance:
+
+.. code-block:: python
 
     from authlib.integrations.starlette_client import OAuth
 
@@ -42,7 +44,9 @@ token. This temporary credential is created before redirecting to the provider
 
 With OAuth 1, the Starlette client will save the request token in sessions. To
 enable this, we need to add the ``SessionMiddleware`` middleware to the
-application, which requires the installation of the ``itsdangerous`` package::
+application, which requires the installation of the ``itsdangerous`` package:
+
+.. code-block:: python
 
     from starlette.applications import Starlette
     from starlette.middleware.sessions import SessionMiddleware
@@ -57,22 +61,27 @@ Routes for Authorization
 ------------------------
 
 Just like the examples in :ref:`frameworks_oauth1_clients`, but Starlette is
-**async**, the routes for authorization should look like::
+**async**, the routes for authorization should look like:
 
-    @app.route('/login/twitter')
+.. code-block:: python
+
+    from starlette.responses import RedirectResponse
+
     async def login_via_twitter(request):
         twitter = oauth.create_client('twitter')
         redirect_uri = request.url_for('authorize_twitter')
         return await twitter.authorize_redirect(request, redirect_uri)
 
-    @app.route('/auth/twitter')
     async def authorize_twitter(request):
         twitter = oauth.create_client('twitter')
         token = await twitter.authorize_access_token(request)
-        resp = await twitter.get('account/verify_credentials.json')
+        resp = await twitter.get('account/verify_credentials.json', token=token)
         profile = resp.json()
         # do something with the token and profile
-        return '...'
+        return RedirectResponse('/')
+
+    app.add_route('/login/twitter', login_via_twitter)
+    app.add_route('/auth/twitter', authorize_twitter)
 
 Examples
 --------
@@ -80,3 +89,23 @@ Examples
 We have Starlette demos at https://github.com/authlib/demo-oauth-client
 
 1. OAuth 1.0: `Starlette Twitter login <https://github.com/authlib/demo-oauth-client/tree/master/starlette-twitter-login>`_
+
+.. invisible-code-block: python
+
+    from starlette.testclient import TestClient
+
+    oauth.register(
+        name="twitter",
+        client_id="{{ your-twitter-consumer-key }}",
+        client_secret="{{ your-twitter-consumer-secret }}",
+        request_token_url="https://api.twitter.com/oauth/request_token",
+        access_token_url="https://api.twitter.com/oauth/access_token",
+        authorize_url="https://api.twitter.com/oauth/authenticate",
+        api_base_url="https://api.twitter.com/1.1/",
+    )
+    http = TestClient(app)
+    response = http.get("/login/twitter", follow_redirects=False)
+    callback = consent(response.headers["location"])
+    response = http.get(callback, follow_redirects=False)
+    assert response.status_code == 307, response.text
+    assert response.headers["location"] == "/"

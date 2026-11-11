@@ -1,5 +1,4 @@
 import logging
-import time
 
 from authlib.common.urls import urlparse
 
@@ -81,13 +80,14 @@ class AsyncOAuth2Mixin(OAuth2Base):
                 )
                 resp.raise_for_status()
                 metadata = resp.json()
-                metadata["_loaded_at"] = time.time()
-            self.server_metadata.update(metadata)
+
+            self._update_server_metadata(metadata)
+
         return self.server_metadata
 
     async def request(self, method, url, token=None, **kwargs):
-        metadata = await self.load_server_metadata()
-        async with self._get_oauth_client(**metadata) as session:
+        await self.load_server_metadata()
+        async with self._get_oauth_client() as session:
             return await _http_request(self, session, method, url, token, kwargs)
 
     async def create_authorization_url(self, redirect_uri=None, **kwargs):
@@ -107,8 +107,9 @@ class AsyncOAuth2Mixin(OAuth2Base):
         if self.authorize_params:
             kwargs.update(self.authorize_params)
 
-        async with self._get_oauth_client(**metadata) as client:
-            client.redirect_uri = redirect_uri
+        async with self._get_oauth_client() as client:
+            if redirect_uri is not None:
+                client.redirect_uri = redirect_uri
             return self._create_oauth2_authorization_url(
                 client, authorization_endpoint, **kwargs
             )
@@ -123,15 +124,10 @@ class AsyncOAuth2Mixin(OAuth2Base):
         """
         metadata = await self.load_server_metadata()
         token_endpoint = self.access_token_url or metadata.get("token_endpoint")
-        async with self._get_oauth_client(**metadata) as client:
+        async with self._get_oauth_client() as client:
             if redirect_uri is not None:
                 client.redirect_uri = redirect_uri
-            params = {}
-            if self.access_token_params:
-                params.update(self.access_token_params)
-            params.update(kwargs)
-            token = await client.fetch_token(token_endpoint, **params)
-        return token
+            return await client.fetch_token(token_endpoint, **kwargs)
 
 
 async def _http_request(ctx, session, method, url, token, kwargs):

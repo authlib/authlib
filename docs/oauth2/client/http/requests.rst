@@ -36,7 +36,9 @@ Using ``client_secret_jwt`` in Requests
 
 There are **three default client authentication methods** defined for
 ``OAuth2Session``. But what if you want to use ``client_secret_jwt`` instead?
-``client_secret_jwt`` is defined in RFC7523, use it for Requests::
+``client_secret_jwt`` is defined in RFC 7523, use it for Requests:
+
+.. code-block:: python
 
     from authlib.integrations.requests_client import OAuth2Session
     from authlib.oauth2.rfc7523 import ClientSecretJWT
@@ -54,7 +56,11 @@ Using ``private_key_jwt`` in Requests
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 What if you want to use ``private_key_jwt`` client authentication method,
-here is the way with  ``PrivateKeyJWT`` for Requests::
+here is the way with  ``PrivateKeyJWT`` for Requests:
+
+.. skip: next "reads a private key file"
+
+.. code-block:: python
 
     from authlib.integrations.requests_client import OAuth2Session
     from authlib.oauth2.rfc7523 import PrivateKeyJWT
@@ -77,9 +83,11 @@ OAuth2Auth
 
 Already obtained access token? We can use :class:`OAuth2Auth` directly in
 requests. But this OAuth2Auth can not refresh token automatically for you.
-Here is how to use it in requests::
+Here is how to use it in requests:
 
-    token = {'token_type': 'bearer', 'access_token': '....', ...}
+.. code-block:: python
+
+    token = {'token_type': 'bearer', 'access_token': '....'}
     auth = OAuth2Auth(token)
     requests.get(url, auth=auth)
 
@@ -107,29 +115,32 @@ Checking out an example of Google Service Account with :ref:`assertion_session`.
 Close Session Hint
 ------------------
 
-Developers SHOULD **close** a Requests Session when the jobs are done. You
-can call ``.close()`` manually, or use a ``with`` context to automatically
-close the session::
+Close a Requests Session when the jobs are done. Call ``.close()``, or use a
+``with`` context to close the session automatically:
 
-    session = OAuth2Session(client_id, client_secret)
+.. code-block:: python
+
+    session = OAuth2Session(client_id, client_secret, token=token)
     session.get(url)
     session.close()
 
-    with OAuth2Session(client_id, client_secret) as session:
+    with OAuth2Session(client_id, client_secret, token=token) as session:
         session.get(url)
 
 
-Self-Signed Certificate
------------------------
+Mutual TLS Client Authentication
+--------------------------------
 
-Self-signed certificate mutual-TLS method internet standard is defined in
-:rfc:`8705#section-2.2`.
+With mutual TLS client authentication (:rfc:`RFC 8705 §2 <8705#section-2>`), the client
+proves its identity with a TLS certificate. Authlib does not implement
+:rfc:`8705`. Give the certificate to Requests with the ``cert`` attribute, and
+use the ``none`` method, so that the client sends its ``client_id`` without a
+secret:
 
-You can use the environment variables CURL_CA_BUNDLE and REQUESTS_CA_BUNDLE
-to specify a CA certificate file for validating your self-signed certificate.
+.. code-block:: python
 
-.. code-block:: bash
+    session = OAuth2Session(client_id, token_endpoint_auth_method='none')
+    session.cert = ('/path/to/client-cert.pem', '/path/to/client-key.pem')
 
-    REQUESTS_CA_BUNDLE=/path/to/ca-cert.pem
-
-Please remember to set the env variable only in you development environment.
+If the server certificate is signed by a private CA, set ``session.verify`` to
+the path of the CA bundle.

@@ -1,11 +1,11 @@
 import logging
 
 from ..rfc6749 import BaseGrant
+from ..rfc6749 import JsonResponse
 from ..rfc6749 import TokenEndpointMixin
 from ..rfc6749.errors import AccessDeniedError
 from ..rfc6749.errors import InvalidRequestError
 from ..rfc6749.errors import UnauthorizedClientError
-from ..rfc6749.hooks import hooked
 from .errors import AuthorizationPendingError
 from .errors import ExpiredTokenError
 from .errors import SlowDownError
@@ -112,7 +112,6 @@ class DeviceCodeGrant(BaseGrant, TokenEndpointMixin):
         self.request.client = client
         self.request.credential = credential
 
-    @hooked
     def create_token_response(self):
         """If the access token request is valid and authorized, the
         authorization server issues an access token and optional refresh
@@ -127,7 +126,7 @@ class DeviceCodeGrant(BaseGrant, TokenEndpointMixin):
         )
         log.debug("Issue token %r to %r", token, client)
         self.save_token(token)
-        return 200, token, self.TOKEN_RESPONSE_HEADER
+        return JsonResponse(token, headers=self.TOKEN_RESPONSE_HEADER)
 
     def validate_device_credential(self, credential):
         if credential.is_expired():

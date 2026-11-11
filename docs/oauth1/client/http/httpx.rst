@@ -36,7 +36,11 @@ Async OAuth 1.0
 
 The async version of :class:`AsyncOAuth1Client` works the same as
 :ref:`OAuth 1 Session <oauth_1_session>`, except that we need to add ``await`` when
-required::
+required:
+
+.. skip: next "summary of the async methods"
+
+.. code-block:: python
 
     # fetching request token
     request_token = await client.fetch_request_token(request_token_url)
@@ -49,3 +53,17 @@ required::
     await client.post(...)
     await client.put(...)
     await client.delete(...)
+
+.. invisible-code-block: python
+
+    client = AsyncOAuth1Client(
+        "Your Twitter client key",
+        "Your Twitter client secret",
+        redirect_uri="https://example.com/twitter",
+    )
+    await client.fetch_request_token("https://api.twitter.com/oauth/request_token")
+    url = client.create_authorization_url("https://api.twitter.com/oauth/authenticate")
+    client.parse_authorization_response(consent(url))
+    await client.fetch_access_token("https://api.twitter.com/oauth/access_token")
+    resp = await client.get("https://api.twitter.com/1.1/account/verify_credentials.json")
+    assert resp.status_code == 200, resp.text

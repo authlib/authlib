@@ -1,5 +1,6 @@
 import json
 
+import httpx2
 import pytest
 from httpx2 import ASGITransport
 from starlette.config import Config
@@ -11,6 +12,7 @@ from authlib.common.urls import urlparse
 from authlib.integrations.starlette_client import OAuth
 from authlib.integrations.starlette_client import OAuthError
 
+from ..asgi_helper import AsyncMockDispatch
 from ..asgi_helper import AsyncPathMapDispatch
 from ..util import get_bearer_token
 
@@ -197,6 +199,35 @@ async def test_oauth2_authorize_csrf_with_cache():
         await client.authorize_access_token(victim_req)
 
 
+class _StrictAsyncCache(_FakeAsyncCache):
+    async def delete(self, key):
+        raise ValueError(f"Invalid cache key: {key!r}")
+
+
+@pytest.mark.asyncio
+async def test_oauth2_authorize_unknown_state_with_cache():
+    """An unknown state is refused, and never reaches the cache."""
+    oauth = OAuth(cache=_StrictAsyncCache())
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        access_token_url="https://provider.test/token",
+        authorize_url="https://provider.test/authorize",
+    )
+    req = Request(
+        {
+            "type": "http",
+            "path": "/",
+            "query_string": b"code=a&state=a%20b",
+            "session": {},
+        }
+    )
+
+    with pytest.raises(OAuthError, match="mismatching_state"):
+        await client.authorize_access_token(req)
+
+
 @pytest.mark.asyncio
 async def test_oauth2_authorize_access_denied():
     oauth = OAuth()
@@ -349,6 +380,38 @@ async def test_request_withhold_token():
 
 
 @pytest.mark.asyncio
+async def test_request_with_expired_token_sends_access_token_params():
+    """A new token fetched on expiry is requested with access_token_params."""
+    bodies = []
+
+    async def assert_func(request):
+        bodies.append((await request.body()).decode())
+
+    transport = ASGITransport(
+        AsyncMockDispatch(get_bearer_token(), assert_func=assert_func)
+    )
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        api_base_url="https://resource.test/api",
+        access_token_url="https://provider.test/token",
+        access_token_params={"audience": "api"},
+        client_kwargs={"transport": transport, "grant_type": "client_credentials"},
+    )
+    expired_token = {
+        "token_type": "Bearer",
+        "access_token": "expired",
+        "expires_at": 1566465749,
+    }
+
+    await client.get("/user", token=expired_token)
+
+    assert "audience=api" in bodies[0]
+
+
+@pytest.mark.asyncio
 async def test_oauth2_authorize_no_url():
     oauth = OAuth()
     client = oauth.register(
@@ -433,6 +496,101 @@ async def test_oauth2_authorize_with_metadata():
 
 
 @pytest.mark.asyncio
+async def test_oauth2_metadata_does_not_configure_client():
+    """The fetched server metadata does not change the client settings."""
+    oauth = OAuth()
+    transport = ASGITransport(
+        AsyncPathMapDispatch(
+            {
+                "/.well-known/openid-configuration": {
+                    "body": {
+                        "authorization_endpoint": "https://provider.test/authorize",
+                        "client_id": "other",
+                        "scope": "admin",
+                        "base_url": "https://other.test/",
+                        "event_hooks": {"request": [None]},
+                    }
+                },
+                "/api/user": {"body": {"sub": "123"}},
+            }
+        )
+    )
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        api_base_url="https://resource.test/api/",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+        client_kwargs={"scope": "openid", "transport": transport},
+    )
+    rv = await client.create_authorization_url("https://client.test/callback")
+    resp = await client.get("user", token=get_bearer_token())
+
+    params = dict(url_decode(urlparse.urlparse(rv["url"]).query))
+    assert params["client_id"] == "dev"
+    assert params["scope"] == "openid"
+    assert resp.json() == {"sub": "123"}
+
+
+@pytest.mark.asyncio
+async def test_oauth2_refresh_token_with_metadata_token_endpoint():
+    """An expired token is refreshed at the token endpoint of the metadata."""
+    paths = []
+
+    def record_path(req):
+        paths.append(req.url.path)
+
+    oauth = OAuth()
+    transport = ASGITransport(
+        AsyncPathMapDispatch(
+            path_maps={
+                "/.well-known/openid-configuration": {
+                    "body": {"token_endpoint": "https://provider.test/token"}
+                },
+                "/token": {"body": get_bearer_token()},
+                "/api/user": {"body": {"sub": "123"}},
+            },
+            side_effects={"/token": record_path},
+        )
+    )
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        api_base_url="https://resource.test/api/",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+        client_kwargs={"transport": transport},
+    )
+    expired_token = {
+        "token_type": "Bearer",
+        "access_token": "expired-a",
+        "refresh_token": "expired-b",
+        "expires_at": 1566465749,
+    }
+    resp = await client.get("user", token=expired_token)
+
+    assert resp.json() == {"sub": "123"}
+    assert paths == ["/token"]
+
+
+@pytest.mark.asyncio
+async def test_oauth2_authorize_with_client_kwargs_redirect_uri():
+    """The redirect_uri of client_kwargs is used when none is given."""
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        authorize_url="https://provider.test/authorize",
+        client_kwargs={"redirect_uri": "https://client.test/callback"},
+    )
+    rv = await client.create_authorization_url()
+
+    params = dict(url_decode(urlparse.urlparse(rv["url"]).query))
+    assert params["redirect_uri"] == "https://client.test/callback"
+
+
+@pytest.mark.asyncio
 async def test_oauth2_authorize_form_post_callback():
     """Test that POST callbacks (form_post response mode) work properly."""
     oauth = OAuth()
@@ -475,6 +633,47 @@ async def test_oauth2_authorize_form_post_callback():
 
     token = await client.authorize_access_token(req_post)
     assert token["access_token"] == "a"
+
+
+@pytest.mark.asyncio
+async def test_oauth2_access_denied_with_post():
+    """An error response sent with form_post raises an OAuthError."""
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx2.Response(200, json=get_bearer_token())
+
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        access_token_url="https://provider.test/token",
+        authorize_url="https://provider.test/authorize",
+        client_kwargs={"transport": httpx2.MockTransport(handler)},
+    )
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/callback",
+        "query_string": b"",
+        "headers": [(b"content-type", b"application/x-www-form-urlencoded")],
+        "session": {},
+    }
+
+    async def receive():
+        return {
+            "type": "http.request",
+            "body": b"error=access_denied&error_description=Not+Allowed",
+        }
+
+    with pytest.raises(OAuthError) as exc_info:
+        await client.authorize_access_token(Request(scope, receive=receive))
+
+    assert exc_info.value.error == "access_denied"
+    assert exc_info.value.description == "Not Allowed"
+    assert requests == []
 
 
 @pytest.mark.asyncio

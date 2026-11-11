@@ -9,7 +9,10 @@ from joserfc.jwk import RSAKey
 
 from authlib.common.security import generate_token
 from authlib.common.urls import add_params_to_uri
+from authlib.common.urls import url_decode
 from authlib.common.urls import url_encode
+from authlib.common.urls import urlparse
+from authlib.integrations.base_client import MissingTokenError
 from authlib.integrations.requests_client import OAuth2Session
 from authlib.integrations.requests_client import OAuthError
 from authlib.oauth2.rfc6749 import MismatchingStateException
@@ -91,6 +94,19 @@ def test_add_token_to_header(token):
     sess.get("https://provider.test")
 
 
+def test_session_headers():
+    """The headers given to the session are sent with every request."""
+
+    def verifier(r, **kwargs):
+        assert r.headers["X-Api-Key"] == "secret"
+        assert r.headers["User-Agent"] == requests.utils.default_user_agent()
+        return mock.MagicMock()
+
+    sess = OAuth2Session(client_id="foo", headers={"X-Api-Key": "secret"})
+    sess.send = verifier
+    sess.get("https://provider.test", withhold_token=True)
+
+
 def test_add_token_to_body(token):
     def verifier(r, **kwargs):
         assert token["access_token"] in r.body
@@ -139,6 +155,39 @@ def test_code_challenge():
     auth_url, _ = sess.create_authorization_url(url, code_verifier=generate_token(48))
     assert "code_challenge" in auth_url
     assert "code_challenge_method=S256" in auth_url
+
+
+def test_plain_code_challenge():
+    """With plain, the code_challenge is the code_verifier."""
+    sess = OAuth2Session(client_id="foo", code_challenge_method="plain")
+    code_verifier = generate_token(48)
+    auth_url, _ = sess.create_authorization_url(
+        "https://provider.test/authorize", code_verifier=code_verifier
+    )
+    params = dict(url_decode(urlparse.urlparse(auth_url).query))
+    assert params["code_challenge"] == code_verifier
+    assert params["code_challenge_method"] == "plain"
+
+
+def test_hybrid_code_challenge():
+    """A response_type that contains code gets a code_challenge."""
+    sess = OAuth2Session(client_id="foo", code_challenge_method="S256")
+    auth_url, _ = sess.create_authorization_url(
+        "https://provider.test/authorize",
+        code_verifier=generate_token(48),
+        response_type="code id_token",
+    )
+    params = dict(url_decode(urlparse.urlparse(auth_url).query))
+    assert params["code_challenge_method"] == "S256"
+
+
+def test_unsupported_code_challenge_method():
+    """An unknown code_challenge_method raises an error."""
+    sess = OAuth2Session(client_id="foo", code_challenge_method="s256")
+    with pytest.raises(ValueError, match="s256"):
+        sess.create_authorization_url(
+            "https://provider.test/authorize", code_verifier=generate_token(48)
+        )
 
 
 def test_token_from_fragment(token):
@@ -492,6 +541,88 @@ def test_auto_refresh_token2(token):
     assert update_token.called
 
 
+def test_auto_refresh_token_after_explicit_client_credentials(token):
+    sess = OAuth2Session("foo", token_endpoint="https://provider.test/token")
+    sess.send = mock_json_response(token)
+    sess.fetch_token(grant_type="client_credentials")
+
+    sess.token = dict(access_token="a", token_type="bearer", expires_at=100)
+    sess.get("https://resource.test/user")
+    assert sess.token["access_token"] == token["access_token"]
+
+
+def _recording_send(bodies, token):
+    def fake_send(r, **kwargs):
+        bodies.append(r.body)
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        resp.json = lambda: token
+        return resp
+
+    return fake_send
+
+
+def test_auto_refresh_token_sends_access_token_params(token):
+    """A new token fetched on expiry is requested with access_token_params."""
+    bodies = []
+    sess = OAuth2Session(
+        "foo",
+        token=dict(access_token="a", token_type="bearer", expires_at=100),
+        token_endpoint="https://provider.test/token",
+        grant_type="client_credentials",
+        access_token_params={"audience": "api"},
+    )
+    sess.send = _recording_send(bodies, token)
+    sess.get("https://resource.test/user")
+    assert "audience=api" in bodies[0]
+
+
+def test_initial_token_fetch_sends_access_token_params(token):
+    """The first automatic token fetch is requested with access_token_params."""
+    bodies = []
+    sess = OAuth2Session(
+        "foo",
+        token_endpoint="https://provider.test/token",
+        grant_type="client_credentials",
+        access_token_params={"audience": "api"},
+    )
+    sess.send = _recording_send(bodies, token)
+    sess.get("https://resource.test/user")
+    assert "audience=api" in bodies[0]
+
+
+def test_fetch_token_arguments_override_access_token_params(token):
+    """The arguments of fetch_token take precedence over access_token_params."""
+    bodies = []
+    sess = OAuth2Session("foo", access_token_params={"audience": "api"})
+    sess.send = _recording_send(bodies, token)
+    sess.fetch_token(
+        "https://provider.test/token",
+        grant_type="client_credentials",
+        audience="other",
+    )
+    assert "audience=other" in bodies[0]
+    assert "audience=api" not in bodies[0]
+
+
+def test_access_token_params_grant_type(token):
+    """A grant_type in access_token_params is used when none is given."""
+    bodies = []
+    sess = OAuth2Session("foo", access_token_params={"grant_type": "urn:custom"})
+    sess.send = _recording_send(bodies, token)
+    sess.fetch_token("https://provider.test/token")
+    sess.fetch_token("https://provider.test/token", grant_type="client_credentials")
+    assert "grant_type=urn%3Acustom" in bodies[0]
+    assert "grant_type=client_credentials" in bodies[1]
+
+
+def test_explicit_authorization_code_grant_is_not_remembered(token):
+    sess = OAuth2Session("foo", token_endpoint="https://provider.test/token")
+    sess.send = mock_json_response(token)
+    sess.fetch_token(grant_type="authorization_code", code="c")
+    assert sess.metadata.get("grant_type") is None
+
+
 def test_revoke_token():
     sess = OAuth2Session("a")
     answer = {"status": "ok"}
@@ -665,3 +796,141 @@ def test_override_default_request_timeout(token):
     client.request(
         "GET", "https://provider.test", withhold_token=False, timeout=expected_timeout
     )
+
+
+def test_initial_client_credentials_auto_fetch(token):
+    """Fetch a token before the first protected request."""
+    requests_sent = []
+    token_url = "https://provider.test/token"
+    resource_url = "https://resource.test/user"
+
+    def fake_send(request, **kwargs):
+        requests_sent.append(request.url)
+
+        response = mock.MagicMock()
+        response.status_code = 200
+
+        if request.url == token_url:
+            assert request.method == "POST"
+            assert "grant_type=client_credentials" in request.body
+            response.json.return_value = token
+
+        elif request.url == resource_url:
+            assert request.headers.get("Authorization") == "Bearer a"
+
+        else:
+            raise AssertionError(f"Unexpected request: {request.url}")
+
+        return response
+
+    with OAuth2Session(
+        client_id="foo",
+        client_secret="bar",
+        token_endpoint=token_url,
+        grant_type="client_credentials",
+    ) as client:
+        client.send = fake_send
+        response = client.get(resource_url)
+        assert response.status_code == 200
+
+    assert requests_sent == [token_url, resource_url]
+
+
+def test_initial_client_credentials_missing_endpoint():
+    """Missing endpoint must raise before any HTTP request."""
+    with OAuth2Session(
+        client_id="foo",
+        client_secret="bar",
+        grant_type="client_credentials",
+    ) as client:
+        client.send = mock.Mock()
+
+        with pytest.raises(MissingTokenError):
+            client.get("https://resource.test/user")
+
+        client.send.assert_not_called()
+
+
+def test_repeated_body_parameters(token):
+    """The RFC 8707 resource and RFC 8693 audience parameters keep all their values."""
+    bodies = []
+
+    def fake_send(r, **kwargs):
+        bodies.append(r.body)
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        resp.json = lambda: token
+        return resp
+
+    url = "https://provider.test/token"
+    body = (
+        "resource=https%3A%2F%2Fa.test%2F&resource=https%3A%2F%2Fb.test%2F"
+        "&audience=c&audience=d"
+    )
+    sess = OAuth2Session("foo", "bar", token=token)
+    sess.send = fake_send
+    sess.fetch_token(url, body=body, grant_type="client_credentials")
+    sess.refresh_token(url, refresh_token="b", body=body)
+    sess.revoke_token(url, "hi", body=body)
+    sess.introspect_token(url, "hi", body=body)
+
+    assert len(bodies) == 4
+    for sent in bodies:
+        params = url_decode(sent)
+        assert [value for key, value in params if key == "resource"] == [
+            "https://a.test/",
+            "https://b.test/",
+        ]
+        assert [value for key, value in params if key == "audience"] == ["c", "d"]
+        keys = [key for key, _ in params]
+        assert len(set(keys)) == len(keys) - 2
+
+
+def test_duplicate_body_parameters(token):
+    """Other body parameters given twice are sent once, with the last value."""
+    bodies = []
+
+    def fake_send(r, **kwargs):
+        bodies.append(r.body)
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        resp.json = lambda: token
+        return resp
+
+    sess = OAuth2Session("foo", scope="openid")
+    sess.send = fake_send
+    sess.fetch_token(
+        "https://provider.test/token",
+        body="grant_type=client_credentials&scope=profile",
+    )
+
+    params = url_decode(bodies[0])
+    assert [value for key, value in params if key == "grant_type"] == [
+        "client_credentials"
+    ]
+    assert [value for key, value in params if key == "scope"] == ["openid"]
+
+
+def test_list_parameters(token):
+    """The resource and audience parameters accept a list of values."""
+    bodies = []
+
+    def fake_send(r, **kwargs):
+        bodies.append(r.body)
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        resp.json = lambda: token
+        return resp
+
+    url = "https://provider.test/token"
+    sess = OAuth2Session("foo", token=token)
+    sess.send = fake_send
+    sess.fetch_token(
+        url, grant_type="client_credentials", resource=["a", "b"], audience=["c"]
+    )
+    sess.refresh_token(url, refresh_token="r", resource=["a", "b"], audience=["c"])
+
+    for sent in bodies:
+        params = url_decode(sent)
+        assert [value for key, value in params if key == "resource"] == ["a", "b"]
+        assert [value for key, value in params if key == "audience"] == ["c"]

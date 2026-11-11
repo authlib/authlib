@@ -1,3 +1,4 @@
+from authlib.common.encoding import to_unicode
 from authlib.common.security import generate_token
 from authlib.common.urls import url_decode
 
@@ -10,6 +11,12 @@ from .rfc6749.parameters import prepare_grant_uri
 from .rfc6749.parameters import prepare_token_request
 from .rfc7009 import prepare_revoke_token_request
 from .rfc7636 import create_s256_code_challenge
+
+# Per RFC 7636 §4.2, with "plain" the code_challenge is the code_verifier.
+_CODE_CHALLENGE_METHODS = {
+    "S256": create_s256_code_challenge,
+    "plain": lambda code_verifier: code_verifier,
+}
 
 DEFAULT_HEADERS = {
     "Accept": "application/json",
@@ -39,6 +46,26 @@ def _load_token_response(resp):
     return token
 
 
+# Per RFC 8707 §2 and RFC 8693 §2.1, these parameters can be repeated.
+_REPEATABLE_PARAMETERS = {"resource", "audience"}
+
+
+def _form_data(body):
+    """Decode a form body into a dict for requests and httpx.
+
+    Repeatable parameters keep all their values. For other parameters, the
+    last value wins.
+    """
+    data = {}
+    for key, value in url_decode(body):
+        if key in _REPEATABLE_PARAMETERS:
+            data.setdefault(key, []).append(value)
+        else:
+            data[key] = value
+
+    return data
+
+
 class OAuth2Client:
     """Construct a new OAuth 2 protocol client.
 
@@ -53,7 +80,7 @@ class OAuth2Client:
     :param scope: Scope that you needed to access user resources.
     :param state: Shared secret to prevent CSRF attack.
     :param redirect_uri: Redirect URI you registered as callback.
-    :param code_challenge_method: PKCE method name, only S256 is supported.
+    :param code_challenge_method: PKCE method, ``S256`` or ``plain``.
     :param token: A dict of token attributes such as ``access_token``,
         ``token_type`` and ``expires_at``.
     :param token_placement: The place to put token in HTTP request. Available
@@ -63,6 +90,10 @@ class OAuth2Client:
     :param leeway: Time window in seconds before the actual expiration of the
         authentication token, that the token is considered expired and will
         be refreshed.
+    :param access_token_params: Extra parameters for ``fetch_token``, such as
+        ``audience``. They are also sent when a new token is fetched
+        automatically, but not when a token is refreshed with a refresh token.
+        The keyword arguments of ``fetch_token`` take precedence.
     """
 
     client_auth_class = ClientAuth
@@ -87,6 +118,7 @@ class OAuth2Client:
         token_placement="header",
         update_token=None,
         leeway=60,
+        access_token_params=None,
         **metadata,
     ):
         self.session = session
@@ -113,6 +145,7 @@ class OAuth2Client:
         self.scope = scope
         self.redirect_uri = redirect_uri
         self.code_challenge_method = code_challenge_method
+        self.access_token_params = dict(access_token_params or {})
 
         self.token_auth = self.token_auth_class(token, token_placement, self)
         self.update_token = update_token
@@ -156,6 +189,14 @@ class OAuth2Client:
         )
 
     @property
+    def redirect_uri(self):
+        return self._redirect_uri
+
+    @redirect_uri.setter
+    def redirect_uri(self, uri):
+        self._redirect_uri = to_unicode(uri)
+
+    @property
     def token(self):
         return self.token_auth.token
 
@@ -173,23 +214,27 @@ class OAuth2Client:
         :param kwargs: Extra parameters to include.
         :return: authorization_url, state
         """
+        url = to_unicode(url)
         if state is None:
             state = generate_token()
 
         response_type = self.metadata.get("response_type", "code")
         response_type = kwargs.pop("response_type", response_type)
-        if "redirect_uri" not in kwargs:
+        if "redirect_uri" in kwargs:
+            kwargs["redirect_uri"] = to_unicode(kwargs["redirect_uri"])
+        else:
             kwargs["redirect_uri"] = self.redirect_uri
+
         if "scope" not in kwargs:
             kwargs["scope"] = self.scope
 
-        if (
-            code_verifier
-            and response_type == "code"
-            and self.code_challenge_method == "S256"
-        ):
-            kwargs["code_challenge"] = create_s256_code_challenge(code_verifier)
-            kwargs["code_challenge_method"] = self.code_challenge_method
+        method = self.code_challenge_method
+        if method and method not in _CODE_CHALLENGE_METHODS:
+            raise ValueError(f"Unsupported code_challenge_method {method!r}.")
+
+        if code_verifier and method and "code" in response_type.split():
+            kwargs["code_challenge"] = _CODE_CHALLENGE_METHODS[method](code_verifier)
+            kwargs["code_challenge_method"] = method
 
         for k in self.EXTRA_AUTHORIZE_PARAMS:
             if k not in kwargs and k in self.metadata:
@@ -229,11 +274,20 @@ class OAuth2Client:
         :param auth: An auth tuple or method as accepted by requests.
         :param grant_type: Use specified grant_type to fetch token.
         :param state: Optional "state" value to fetch token.
+        :param kwargs: Extra parameters for the token request. ``scope`` can be
+                       a list. ``resource`` and ``audience`` can be a list,
+                       sent as a repeated parameter.
         :return: A :class:`OAuth2Token` object (a dict too).
         """
         state = state or self.state
+        kwargs = {**self.access_token_params, **kwargs}
+        default_grant_type = kwargs.pop("grant_type", None)
+        grant_type = grant_type or default_grant_type
         # implicit  grant_type
-        authorization_response = kwargs.pop("authorization_response", None)
+        authorization_response = to_unicode(kwargs.pop("authorization_response", None))
+        if "redirect_uri" in kwargs:
+            kwargs["redirect_uri"] = to_unicode(kwargs["redirect_uri"])
+
         if authorization_response and "#" in authorization_response:
             return self.token_from_fragment(authorization_response, state)
 
@@ -253,6 +307,8 @@ class OAuth2Client:
         if grant_type is None:
             grant_type = _guess_grant_type(kwargs)
             self.metadata["grant_type"] = grant_type
+        elif grant_type == "client_credentials":
+            self.metadata["grant_type"] = grant_type
 
         body = self._prepare_token_endpoint_body(body, grant_type, **kwargs)
 
@@ -266,7 +322,12 @@ class OAuth2Client:
             url = self.metadata.get("token_endpoint")
 
         return self._fetch_token(
-            url, body=body, auth=auth, method=method, headers=headers, **session_kwargs
+            to_unicode(url),
+            body=body,
+            auth=auth,
+            method=method,
+            headers=headers,
+            **session_kwargs,
         )
 
     def token_from_fragment(self, authorization_response, state=None):
@@ -289,6 +350,9 @@ class OAuth2Client:
                      include in the token request. Prefer kwargs over body.
         :param auth: An auth tuple or method as accepted by requests.
         :param headers: Dict to default request headers with.
+        :param kwargs: Extra parameters for the token request. ``scope`` can be
+                       a list. ``resource`` and ``audience`` can be a list,
+                       sent as a repeated parameter.
         :return: A :class:`OAuth2Token` object (a dict too).
         """
         session_kwargs = self._extract_session_request_params(kwargs)
@@ -305,6 +369,7 @@ class OAuth2Client:
         if url is None:
             url = self.metadata.get("token_endpoint")
 
+        url = to_unicode(url)
         for hook in self.compliance_hook["refresh_token_request"]:
             url, headers, body = hook(url, headers, body)
 
@@ -443,7 +508,7 @@ class OAuth2Client:
     ):
         if method.upper() == "POST":
             resp = self.session.post(
-                url, data=dict(url_decode(body)), headers=headers, auth=auth, **kwargs
+                url, data=_form_data(body), headers=headers, auth=auth, **kwargs
             )
         else:
             if "?" in url:
@@ -487,6 +552,7 @@ class OAuth2Client:
         headers=None,
         **kwargs,
     ):
+        url = to_unicode(url)
         if token is None and self.token:
             token = self.token.get("refresh_token") or self.token.get("access_token")
 
@@ -526,7 +592,7 @@ class OAuth2Client:
 
     def _http_post(self, url, body=None, auth=None, headers=None, **kwargs):
         return self.session.post(
-            url, data=dict(url_decode(body)), headers=headers, auth=auth, **kwargs
+            url, data=_form_data(body), headers=headers, auth=auth, **kwargs
         )
 
     def __del__(self):

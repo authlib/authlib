@@ -4,12 +4,23 @@ Contribution
 Thanks for reading this section, you have a good intention. Since you are
 interested in contributing to Authlib, there are few things you need to know:
 
-1. **All contributions are welcome**, as long as everyone involved is treated
+1. **Contributions are welcome**, as long as everyone involved is treated
    with respect.
 2. Your contribution may be rejected, but don't despair. It's just that this
    certain pull request doesn't fit Authlib. Be brave for a next contribution.
 3. Some issues will be labeled as **good first issue**, if you're new to
    Authlib, you may find these issues are a good start for contribution.
+
+AI-Assisted Contributions
+-------------------------
+
+You may use AI tools to help you contribute. You are responsible for what you
+submit. You must understand it and answer review questions yourself.
+
+Autonomous agents must not interact with the project. A human must review
+every issue, pull request, comment and security report before it is submitted.
+Maintainers may close contributions from autonomous agents without review or
+reply, and block the accounts that submit them.
 
 Bug Reports
 -----------
@@ -18,7 +29,7 @@ It's welcome for everyone to submit a bug report. However, before you submit a
 report on GitHub issues, please check the old issues both open and closed, to
 ensure that you are not submitting a duplicate issue.
 
-Please don't ask for help on GitHub issues. Ask them on :ref:`stackoverflow`.
+Please don't ask for help on GitHub issues. Ask them on :ref:`discussions`.
 
 Documentation Contributions
 ---------------------------
@@ -34,6 +45,11 @@ documentation.
 We keep a soft limit of 79 characters wide in text files. Yet, if you have to
 exceed this limit, it's OK, but no more than 110 characters.
 
+The Python examples of some pages run as tests with
+`Sybil <https://sybil.readthedocs.io>`_. ``docs/conftest.py`` lists these
+pages. Run them with ``uv run --all-groups pytest docs``. With ``-n``, add
+``--dist loadfile``, so that the examples of a page run in the same worker.
+
 Make a Pull Request
 -------------------
 
@@ -41,10 +57,15 @@ Thank you. Now that you have a fix for Authlib, please describe it clearly in
 your pull request. There are some requirements for a pull request to be
 accepted:
 
-* You can use ruff to check your code style.
-* Tests for the code changes are required.
+* Run ``prek run --all-files``. It runs ruff, codespell and zizmor.
+* Tests for the code changes are required. Run them with
+  ``uv run --all-groups pytest tests docs``.
+* Commit messages follow `Conventional Commits <https://www.conventionalcommits.org>`_.
+  The scope is optional. Allowed scopes are ``jose``, ``oauth``, ``oidc`` and
+  ``client``.
 * Please add documentation for it, if it requires.
-* Add a changelog fragment if the change is visible to users.
+* Add a changelog fragment if the change is visible to users. The CI fails
+  without a fragment, unless a maintainer adds the ``skip changelog`` label.
 
 Add a Changelog Fragment
 ------------------------
@@ -53,7 +74,9 @@ Authlib uses `scriv <https://scriv.readthedocs.io>`_ to build the changelog.
 Each pull request adds a fragment file in the ``changelog.d`` directory. The
 fragments are collected into :doc:`../upgrades/changelog` at release time.
 
-1. Create a fragment::
+1. Create a fragment:
+
+   .. code-block:: console
 
        uv run scriv create
 
@@ -61,7 +84,9 @@ fragments are collected into :doc:`../upgrades/changelog` at release time.
    change: ``Breaking changes``, ``Added``, ``Changed``, ``Deprecated``,
    ``Fixed`` or ``Security``.
 3. Replace the example bullet with a short description of what users get.
-   Add the issue and pull request references::
+   Add the issue and pull request references:
+
+   .. code-block:: rst
 
        Fixed
        ~~~~~

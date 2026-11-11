@@ -1,0 +1,6 @@
+Added
+~~~~~
+
+- The requests and httpx OAuth 1 and OAuth 2 clients accept URL objects, such
+  as ``httpx.URL``, for the endpoints, the redirect URI and the authorization
+  response. :issue:`931`

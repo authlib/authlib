@@ -46,6 +46,7 @@ class OAuth2Error(AuthlibHTTPError):
         self.state = state
         self.redirect_uri = redirect_uri
         self.redirect_fragment = redirect_fragment
+        self.response_mode = None
 
     def get_body(self):
         """Get a list of body."""
@@ -58,5 +59,5 @@ class OAuth2Error(AuthlibHTTPError):
         if self.redirect_uri:
             params = self.get_body()
             loc = add_params_to_uri(self.redirect_uri, params, self.redirect_fragment)
-            return 302, "", [("Location", loc)]
+            return 303, "", [("Location", loc)]
         return super().__call__(uri=uri)

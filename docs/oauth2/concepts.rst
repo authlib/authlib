@@ -68,7 +68,7 @@ Grant Types
 .. module:: authlib.oauth2.rfc6749.grants
     :noindex:
 
-Authorization server MAY supports several **grant types** during the **authorization**,
+An authorization server can support several **grant types** during the **authorization**,
 step 1 and 2. A grant type defines a way of how the authorization server will verify
 the request and issue the token.
 
@@ -79,7 +79,7 @@ There are lots of built-in grant types in Authlib, including:
 - :class:`ResourceOwnerPasswordCredentialsGrant`
 - :class:`ClientCredentialsGrant`
 - :class:`RefreshTokenGrant`
-- :class:`JWTBearerGrant`
+- :class:`~authlib.oauth2.rfc7523.JWTBearerGrant`
 
 Take ``authorization_code`` as an example, in step 2, when the resource owner granted
 the access, **Authorization Server** will return a ``code`` to the client. The client
@@ -101,7 +101,7 @@ Client Authentication Methods
 -----------------------------
 
 In the above code, there is an ``Authorization`` header; it contains the
-information of the client. A client MUST provide its client information to obtain
+information of the client. A client provides its client information to obtain
 an access token. There are several ways to provide this data, for instance:
 
 - ``none``: The client is a public client which means it has no client_secret
@@ -150,7 +150,7 @@ Token Scopes
 Scope is a very important concept in OAuth 2.0. An access token is usually issued
 with limited scopes.
 
-For instance, your "source code analyzer" application MAY only have access to the
+For instance, your "source code analyzer" application can only access the
 public repositories of a GitHub user.
 
 Endpoints

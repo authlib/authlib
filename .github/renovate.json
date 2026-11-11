@@ -1,0 +1,10 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["local>authlib/renovate-config"],
+  "pep621": {
+    "enabled": false
+  },
+  "poetry": {
+    "enabled": false
+  }
+}

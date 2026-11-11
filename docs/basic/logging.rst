@@ -1,7 +1,9 @@
 Logging
 =======
 
-You can always enable debug logging when you run into issues in your code::
+You can always enable debug logging when you run into issues in your code:
+
+.. code-block:: python
 
   import logging
   import sys
@@ -9,4 +11,7 @@ You can always enable debug logging when you run into issues in your code::
   log.addHandler(logging.StreamHandler(sys.stdout))
   log.setLevel(logging.DEBUG)
 
-We are still designing the logging system. (TBD)
+.. warning::
+
+    At the ``DEBUG`` level, Authlib logs secrets, such as the issued tokens
+    and the PKCE code verifiers. Do not enable it in production.

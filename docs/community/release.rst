@@ -11,7 +11,9 @@ a changelog entry to a pull request, see :doc:`contribute`.
 
        version = "1.9.1"
 
-2. Collect the changelog fragments::
+2. Collect the changelog fragments:
+
+   .. code-block:: console
 
        uv run scriv collect
 
@@ -23,12 +25,16 @@ a changelog entry to a pull request, see :doc:`contribute`.
 3. Review the new entry in ``docs/upgrades/changelog.rst``, and edit it if
    needed.
 
-4. Commit the version, the changelog and the deleted fragments::
+4. Commit the version, the changelog and the deleted fragments:
+
+   .. code-block:: console
 
        git add authlib/consts.py docs/upgrades/changelog.rst changelog.d
        git commit -m "chore: release 1.9.1"
 
-5. Tag the commit and push both to ``authlib/authlib``::
+5. Tag the commit and push both to ``authlib/authlib``:
+
+   .. code-block:: console
 
        git tag v1.9.1
        git push <remote> main v1.9.1

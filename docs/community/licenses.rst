@@ -14,7 +14,7 @@ https://authlib.org/support.
 Open Source License
 -------------------
 
-Copyright (c) 2019, Hsiaoming Yang
+Copyright (c) 2017, Hsiaoming Yang
 
 All rights reserved.
 

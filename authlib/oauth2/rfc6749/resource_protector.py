@@ -4,8 +4,9 @@
 Implementation of Accessing Protected Resources per :rfc:`6749#section-7`.
 """
 
+from authlib.common.hooks import Hookable
+
 from .errors import MissingAuthorizationError
-from .errors import UnsupportedTokenTypeError
 from .util import scope_to_list
 
 
@@ -81,11 +82,23 @@ class TokenValidator:
         raise NotImplementedError()
 
 
-class ResourceProtector:
+class ResourceProtector(Hookable):
     def __init__(self):
+        super().__init__()
         self._token_validators = {}
         self._default_realm = None
         self._default_auth_type = None
+        self._extensions = []
+
+    def register_extension(self, extension):
+        """Register an extension that can configure this protector.
+
+        An extension is a callable that receives the protector instance::
+
+            resource_protector.register_extension(my_extension)
+        """
+        extension(self)
+        self._extensions.append(extension)
 
     def register_token_validator(self, validator: TokenValidator):
         """Register a token validator for a given Authorization type.
@@ -102,7 +115,9 @@ class ResourceProtector:
         """Get token validator from registry for the given token type."""
         validator = self._token_validators.get(token_type.lower())
         if not validator:
-            raise UnsupportedTokenTypeError(
+            # Per RFC 6750 §3.1, an unsupported authentication method is
+            # handled like a request without authentication information.
+            raise MissingAuthorizationError(
                 self._default_auth_type, self._default_realm
             )
         return validator
@@ -118,7 +133,6 @@ class ResourceProtector:
 
         :return: validator, token_string
         :raise: MissingAuthorizationError
-        :raise: UnsupportedTokenTypeError
         """
         auth = request.headers.get("Authorization")
         if not auth:
@@ -129,7 +143,7 @@ class ResourceProtector:
         # https://tools.ietf.org/html/rfc6749#section-7.1
         token_parts = auth.split(None, 1)
         if len(token_parts) != 2:
-            raise UnsupportedTokenTypeError(
+            raise MissingAuthorizationError(
                 self._default_auth_type, self._default_realm
             )
 

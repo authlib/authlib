@@ -12,9 +12,9 @@ It includes:
 4. JSON Web Algorithm (JWA)
 5. JSON Web Token (JWT)
 
-.. versionchanged:: 1.7
-    We are deprecating ``authlib.jose`` module in favor of joserfc_.
-    It will be removed in Authlib 1.8.
+.. deprecated:: 1.7
+    ``authlib.jose`` will be removed in Authlib 2.0. Use joserfc_ instead.
+    :ref:`joserfc_upgrade` explains how to migrate.
 
 .. _joserfc: https://jose.authlib.org/en/
 

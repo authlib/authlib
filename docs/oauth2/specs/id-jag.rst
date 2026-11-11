@@ -103,7 +103,9 @@ protection) than the RFC 7523 two-party model.
 
 Register it with
 :meth:`~authlib.oauth2.rfc6749.AuthorizationServer.register_grant`,
-after subclassing it to implement all required hooks::
+after subclassing it to implement all required hooks:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc6749 import InvalidGrantError
     from authlib.oauth2.drafts import IDJAGGrant as _IDJAGGrant
@@ -125,16 +127,19 @@ after subclassing it to implement all required hooks::
                 raise InvalidGrantError(description="Untrusted issuer")
             return KeySet.import_key_set(idp.get_jwks())
 
-        def authenticate_user(self, subject):
-            return User.query.filter_by(sub=subject).first()
+        def resolve_user(self, claims):
+            return User.query.filter_by(
+                issuer=claims["iss"], sub=claims["sub"]
+            ).first()
 
         def check_jti(self, claims, jti):
-            if UsedJTI.query.filter_by(jti=jti).first():
+            if UsedJTI.query.filter_by(issuer=claims["iss"], jti=jti).first():
                 return False
-            UsedJTI.create(jti=jti, exp=claims["exp"])
+
+            UsedJTI.create(issuer=claims["iss"], jti=jti, exp=claims["exp"])
             return True
 
-        def check_id_jag_permission(self, client, user, scopes):
+        def check_id_jag_permission(self, client, user, scopes, claims):
             return AccessPolicy.is_allowed(client, user, scopes)
 
     # Register the grant
@@ -161,7 +166,9 @@ not record the assertion's ``jti`` as used.
 
 To support another client authentication method, override
 ``TOKEN_ENDPOINT_AUTH_METHODS`` and configure the client registration to use that
-method. For example, to also support ``client_secret_post``::
+method. For example, to also support ``client_secret_post``:
+
+.. code-block:: python
 
     from authlib.oauth2.drafts import IDJAGGrant as _IDJAGGrant
 
@@ -172,11 +179,43 @@ Custom methods, such as ``private_key_jwt``, must also be registered with the
 authorization server. The draft recommends confidential clients; ``none`` is
 not enabled by default.
 
+Users
+~~~~~
+
+The ``sub`` claim is only unique within the IdP that issued the ID-JAG
+(ID-JAG draft -06 §3.1). When the Resource Authorization Server trusts
+several IdPs, resolve the user with the ``iss`` and ``sub`` claims (§4.1).
+Otherwise, an IdP can get access tokens for the users of another IdP.
+:meth:`IDJAGGrant.resolve_user` receives the verified claims of the ID-JAG,
+as in the example above.
+
+For a multi-tenant IdP, also check the ``tenant`` claim, and resolve the user
+within that tenant (§4.4.1). Return ``None`` to reject the ID-JAG. A
+``tenant`` claim that is not a string is rejected with ``invalid_grant``.
+
+Scope
+~~~~~
+
+The ``scope`` claim of the ID-JAG holds the scopes granted by the IdP. When
+the claim is present:
+
+* Without a ``scope`` request parameter, the access token gets the scopes of
+  the claim.
+* The client can request fewer scopes than the claim. A request for a scope
+  that is not in the claim is rejected with ``invalid_scope``.
+* A ``scope`` claim that is not a string is rejected with ``invalid_grant``.
+
+Without a ``scope`` claim, the requested scope is used.
+``check_id_jag_permission()`` receives the resulting scopes. The token
+generator still limits them to the scopes allowed for the client.
+
 Creating ID-JAG Assertions
 ---------------------------
 
 Use :meth:`IDJAGGrant.sign` to create signed ID-JAG JWTs for testing or
-client implementations::
+client implementations:
+
+.. code-block:: python
 
     assertion = IDJAGGrant.sign(
         key=private_key,
@@ -197,7 +236,11 @@ Redeeming an ID-JAG
 
 Present the assertion along with the client's registered credentials. For a
 client using ``client_secret_basic``, an HTTP client can send the request as
-follows::
+follows:
+
+.. skip: next "calls a remote server"
+
+.. code-block:: python
 
     import requests
 
@@ -233,14 +276,15 @@ Required Hooks
    * - ``resolve_issuer_key(issuer, headers)``
      - Fetch the IdP's public key(s) by issuer identifier.  ``headers``
        contains the JWT headers (including ``kid``) for key selection.
-   * - ``authenticate_user(subject)``
-     - Look up the user by the ``sub`` claim value.
+   * - ``resolve_user(claims)``
+     - Look up the user by the ``iss`` and ``sub`` claims (see `Users`_).
+       Return ``None`` to reject the ID-JAG.
    * - ``check_jti(claims, jti)``
      - Return ``True`` if the ``jti`` is acceptable (first use), ``False``
        if it is a replay.
-   * - ``check_id_jag_permission(client, user, scopes)``
+   * - ``check_id_jag_permission(client, user, scopes, claims)``
      - Return ``True`` if the client may act on behalf of the user for the
-       given scopes.
+       scopes of the access token (see `Scope`_).
 
 
 Registration Constraint

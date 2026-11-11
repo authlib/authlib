@@ -127,6 +127,19 @@ def test_nonascii(generate_nonce, generate_timestamp):
     auth.post("https://provider.test?cjk=%E5%95%A6%E5%95%A6")
 
 
+def test_session_headers():
+    """The headers given to the session are sent with every request."""
+
+    def verifier(r, **kwargs):
+        assert r.headers["X-Api-Key"] == "secret"
+        assert "OAuth " in to_unicode(r.headers["Authorization"])
+        return mock.MagicMock()
+
+    sess = OAuth1Session("foo", headers={"X-Api-Key": "secret"})
+    sess.send = verifier
+    sess.get("https://provider.test")
+
+
 def test_redirect_uri():
     sess = OAuth1Session("foo")
     assert sess.redirect_uri is None
@@ -253,6 +266,13 @@ def test_fetch_token_invalid_response():
         auth.send = mock_text_response("valid=response", code)
         with pytest.raises(OAuthError, match="fetch_token_denied"):
             auth.fetch_request_token("https://provider.test/token")
+
+
+def test_fetch_token_deeply_nested_response():
+    auth = OAuth1Session("foo")
+    auth.send = mock_text_response('{"a":' + "[" * 1000000 + "]" * 1000000 + "}")
+    with pytest.raises(ValueError, match="Unable to decode token"):
+        auth.fetch_request_token("https://provider.test/token")
 
 
 def test_fetch_access_token_missing_verifier():

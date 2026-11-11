@@ -8,7 +8,14 @@ Protect users resources, so that only the authorized clients with the
 authorized access token can access the given scope resources.
 
 A resource server can be a different server other than the authorization
-server. Here is the way to protect your users' resources::
+server. Here is the way to protect your users' resources:
+
+.. invisible-code-block: python
+
+    def query_token(client_id, oauth_token):
+        return None
+
+.. code-block:: python
 
     from flask import jsonify
     from authlib.integrations.flask_oauth1 import ResourceProtector, current_credential
@@ -47,24 +54,32 @@ To initialize ``ResourceProtector``, we need three functions:
 2. query_token
 3. exists_nonce
 
-If using SQLAlchemy, the ``query_client`` could be::
+If using SQLAlchemy, the ``query_client`` could be:
+
+.. code-block:: python
 
     def query_client(client_id):
         # assuming ``Client`` is the model
         return Client.query.filter_by(client_id=client_id).first()
 
-And ``query_token`` would be::
+And ``query_token`` would be:
+
+.. code-block:: python
 
     def query_token(client_id, oauth_token):
         return TokenCredential.query.filter_by(client_id=client_id, oauth_token=oauth_token).first()
 
 For ``exists_nonce``, if you are using cache now (as in authorization server), Authlib
-has a built-in tool function::
+has a built-in tool function:
+
+.. code-block:: python
 
     from authlib.integrations.flask_oauth1 import create_exists_nonce_func
     exists_nonce = create_exists_nonce_func(cache)
 
-If using database, with SQLAlchemy it would look like::
+If using database, with SQLAlchemy it would look like:
+
+.. code-block:: python
 
     def exists_nonce(nonce, timestamp, client_id, oauth_token):
         q = db.session.query(TimestampNonce.nonce).filter_by(
@@ -92,7 +107,11 @@ MethodView & Flask-Restful
 --------------------------
 
 You can also use the ``require_oauth`` decorator in ``flask.views.MethodView``
-and ``flask_restful.Resource``::
+and ``flask_restful.Resource``:
+
+.. skip: next "requires Flask-RESTful"
+
+.. code-block:: python
 
     from flask.views import MethodView
 

@@ -107,7 +107,8 @@ def test_assertion_includes_default_jti(token):
     assert len(claims["jti"]) == 36
 
 
-def test_assertion_jti_is_unique_per_refresh(token):
+@pytest.mark.parametrize("claims", [None, {"test_mode": "true"}])
+def test_assertion_jti_is_unique_per_refresh(token, claims):
     """Verify that each token refresh generates a new unique jti."""
     assertions = []
 
@@ -131,6 +132,7 @@ def test_assertion_jti_is_unique_per_refresh(token):
         audience="foo",
         alg="HS256",
         key=hmac_key,
+        claims=claims,
     )
     sess.send = verifier
     sess.get("https://provider.test")
@@ -193,3 +195,40 @@ def test_refresh_token_non_json_error_response():
     sess.send = fake_send
     with pytest.raises(requests.HTTPError):
         sess.refresh_token()
+
+
+def test_access_token_params(token):
+    """access_token_params are added to the token request."""
+    bodies = []
+
+    def verifier(r, **kwargs):
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        if r.url == "https://provider.test/token":
+            bodies.append(r.body)
+            resp.json = lambda: token
+        return resp
+
+    sess = AssertionSession(
+        "https://provider.test/token",
+        issuer="foo",
+        subject="foo",
+        audience="foo",
+        alg="HS256",
+        key=hmac_key,
+        access_token_params={
+            "resource": ["https://a.test/", "https://b.test/"],
+            "grant_type": "ignored",
+        },
+    )
+    sess.send = verifier
+    sess.get("https://provider.test")
+
+    params = urllib.parse.parse_qsl(bodies[0])
+    assert [v for k, v in params if k == "resource"] == [
+        "https://a.test/",
+        "https://b.test/",
+    ]
+    assert [v for k, v in params if k == "grant_type"] == [
+        "urn:ietf:params:oauth:grant-type:jwt-bearer"
+    ]

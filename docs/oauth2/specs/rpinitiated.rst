@@ -38,7 +38,7 @@ only redirects back to the RP under some conditions:
         Note over OP: end_session()
         alt Valid post_logout_redirect_uri
             autonumber 5
-            OP-->>User: 302 Found → post_logout_redirect_uri?state=…
+            OP-->>User: 303 See Other → post_logout_redirect_uri?state=…
             User->>RP: GET post_logout_redirect_uri?state=…
             Note over RP: validate_logout_response()
         else Otherwise
@@ -70,7 +70,9 @@ End Session Endpoint
 --------------------
 
 To add RP-Initiated Logout support, create a subclass of :class:`EndSessionEndpoint`
-and implement the required methods::
+and implement the required methods:
+
+.. code-block:: python
 
     from authlib.oidc.rpinitiated import EndSessionEndpoint
 
@@ -86,7 +88,9 @@ and implement the required methods::
 
 Then create a logout route. You have two options:
 
-**Non-interactive mode** (simple, no confirmation page)::
+**Non-interactive mode** (simple, no confirmation page):
+
+.. code-block:: python
 
     @app.route('/logout', methods=['GET', 'POST'])
     def logout():
@@ -95,7 +99,9 @@ Then create a logout route. You have two options:
             or render_template('logged_out.html')
         )
 
-**Interactive mode** (with confirmation page)::
+**Interactive mode** (with confirmation page):
+
+.. code-block:: python
 
     @app.route('/logout', methods=['GET', 'POST'])
     def logout():
@@ -137,7 +143,7 @@ The endpoint accepts the following parameters (via GET or POST):
 Confirmation Flow
 ~~~~~~~~~~~~~~~~~
 
-Per the specification, logout requests without a valid ``id_token_hint`` are a
+Per RP-Initiated Logout §6, logout requests without a valid ``id_token_hint`` are a
 potential means of denial of service. The :attr:`EndSessionRequest.needs_confirmation`
 property indicates when user confirmation is recommended.
 
@@ -161,7 +167,11 @@ If all conditions are met, ``EndSessionRequest.redirect_uri`` contains the
 validated URI (with ``state`` appended if provided).
 
 If conditions are not met, ``create_endpoint_response`` returns ``None`` and
-you should provide a default logout page::
+you should provide a default logout page:
+
+.. skip: next "fragment of the logout view"
+
+.. code-block:: python
 
     server.create_endpoint_response("end_session", req) or render_template('logged_out.html')
 
@@ -172,8 +182,10 @@ When an ``id_token_hint`` is provided, the ``id_token_claims`` attribute of
 :class:`EndSessionRequest` contains all claims from the ID Token, including
 ``sid`` (session ID) if present.
 
-Per the specification, you SHOULD verify that the ``sid`` matches the current
-session to detect potentially suspect logout requests::
+Per RP-Initiated Logout §2, if the ``sid`` claim does not match the current
+session, the OP SHOULD treat the logout request as suspect:
+
+.. code-block:: python
 
     def end_session(self, end_session_request):
         if end_session_request.id_token_claims:
@@ -187,27 +199,32 @@ Client Registration
 -------------------
 
 Relying Parties can register their ``post_logout_redirect_uris`` through
-:ref:`RFC7591: OAuth 2.0 Dynamic Client Registration Protocol <specs/rfc7591>`.
+:ref:`RFC 7591: OAuth 2.0 Dynamic Client Registration Protocol <specs/rfc7591>`.
 
 To support RP-Initiated Logout client metadata, add the claims class to your
-registration and configuration endpoints::
+registration and configuration endpoints.
+``MyClientRegistrationEndpoint`` is your subclass of
+:class:`~authlib.oauth2.rfc7591.ClientRegistrationEndpoint`:
 
-    from authlib import oidc
+.. code-block:: python
+
     from authlib.oauth2 import rfc7591
+    from authlib.oidc import registration
+    from authlib.oidc import rpinitiated
 
     authorization_server.register_endpoint(
-        ClientRegistrationEndpoint(
+        MyClientRegistrationEndpoint(
             claims_classes=[
                 rfc7591.ClientMetadataClaims,
-                oidc.registration.ClientMetadataClaims,
-                oidc.rpinitiated.ClientMetadataClaims,
+                registration.ClientMetadataClaims,
+                rpinitiated.ClientMetadataClaims,
             ]
         )
     )
 
 The ``post_logout_redirect_uris`` parameter is an array of URLs to which the
-End-User's User Agent may be redirected after logout. These URLs SHOULD use
-the ``https`` scheme.
+End-User's User Agent may be redirected after logout. Per RP-Initiated Logout §3.1,
+these URLs SHOULD use the ``https`` scheme.
 
 API Reference
 -------------

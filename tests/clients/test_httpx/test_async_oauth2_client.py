@@ -3,11 +3,13 @@ import time
 from copy import deepcopy
 from unittest import mock
 
+import httpx2
 import pytest
 from httpx2 import ASGITransport
 from httpx2 import AsyncClient
 
 from authlib.common.security import generate_token
+from authlib.common.urls import url_decode
 from authlib.common.urls import url_encode
 from authlib.integrations.httpx_client import AsyncOAuth2Client
 from authlib.integrations.httpx_client import OAuthError
@@ -374,6 +376,45 @@ async def test_auto_refresh_token2():
 
 
 @pytest.mark.asyncio
+async def test_auto_refresh_token_after_explicit_client_credentials():
+    transport = ASGITransport(AsyncMockDispatch(default_token))
+
+    async with AsyncOAuth2Client(
+        "foo",
+        token_endpoint="https://provider.test/token",
+        transport=transport,
+    ) as client:
+        await client.fetch_token(grant_type="client_credentials")
+
+        client.token = dict(access_token="a", token_type="bearer", expires_at=100)
+        await client.get("https://resource.test/user")
+        assert client.token["access_token"] == default_token["access_token"]
+
+
+@pytest.mark.asyncio
+async def test_auto_refresh_token_sends_access_token_params():
+    """A new token fetched on expiry is requested with access_token_params."""
+    bodies = []
+
+    async def assert_func(request):
+        bodies.append((await request.body()).decode())
+
+    transport = ASGITransport(AsyncMockDispatch(default_token, assert_func=assert_func))
+
+    async with AsyncOAuth2Client(
+        "foo",
+        token=dict(access_token="a", token_type="bearer", expires_at=100),
+        token_endpoint="https://provider.test/token",
+        grant_type="client_credentials",
+        access_token_params={"audience": "api"},
+        transport=transport,
+    ) as client:
+        await client.get("https://resource.test/user")
+
+    assert "audience=api" in bodies[0]
+
+
+@pytest.mark.asyncio
 async def test_auto_refresh_token3():
     async def _update_token(token, refresh_token=None, access_token=None):
         assert access_token == "a"
@@ -395,6 +436,73 @@ async def test_auto_refresh_token3():
     ) as client:
         await client.post("https://resource.test/user", json={"foo": "bar"})
         assert update_token.called is True
+
+
+@pytest.mark.asyncio
+async def test_ensure_active_token_uses_live_token_after_lock():
+    refresh_bodies = []
+
+    async def assert_func(request):
+        content = (await request.body()).decode()
+        if "grant_type=refresh_token" in content:
+            refresh_bodies.append(content)
+
+    live = dict(
+        access_token="live",
+        refresh_token="live-rt",
+        token_type="bearer",
+        expires_at=100,
+    )
+    stale = dict(
+        access_token="stale",
+        refresh_token="stale-rt",
+        token_type="bearer",
+        expires_at=100,
+    )
+    transport = ASGITransport(AsyncMockDispatch(default_token, assert_func=assert_func))
+    async with AsyncOAuth2Client(
+        "foo",
+        token=live,
+        token_endpoint="https://provider.test/token",
+        transport=transport,
+    ) as client:
+        await client.ensure_active_token(stale)
+
+    assert refresh_bodies, "expected a refresh_token grant"
+    assert any("refresh_token=live-rt" in body for body in refresh_bodies), (
+        refresh_bodies
+    )
+    assert all("stale-rt" not in body for body in refresh_bodies), refresh_bodies
+
+
+@pytest.mark.asyncio
+async def test_ensure_active_token_accepts_token_none():
+    refresh_bodies = []
+
+    async def assert_func(request):
+        content = (await request.body()).decode()
+        if "grant_type=refresh_token" in content:
+            refresh_bodies.append(content)
+
+    live = dict(
+        access_token="live",
+        refresh_token="live-rt",
+        token_type="bearer",
+        expires_at=100,
+    )
+    transport = ASGITransport(AsyncMockDispatch(default_token, assert_func=assert_func))
+    async with AsyncOAuth2Client(
+        "foo",
+        token=live,
+        token_endpoint="https://provider.test/token",
+        transport=transport,
+    ) as client:
+        await client.ensure_active_token()
+
+    assert refresh_bodies, "expected a refresh_token grant"
+    assert any("refresh_token=live-rt" in body for body in refresh_bodies), (
+        refresh_bodies
+    )
 
 
 @pytest.mark.asyncio
@@ -445,3 +553,166 @@ async def test_request_without_token():
     async with AsyncOAuth2Client("a", transport=transport) as client:
         with pytest.raises(OAuthError):
             await client.get("https://provider.test/token")
+
+
+@pytest.mark.asyncio
+async def test_concurrent_initial_token_fetch_once():
+    """Concurrent first requests must fetch the token only once."""
+    token_requests = 0
+
+    async def mock_handler(request):
+        nonlocal token_requests
+        if request.url.path == "/oauth/token":
+            token_requests += 1
+            # Allow other requests to run while the token is fetched.
+            await asyncio.sleep(0.01)
+            return httpx2.Response(
+                200,
+                json={
+                    "access_token": "concurrent-token",
+                    "token_type": "Bearer",
+                    "expires_in": 3600,
+                },
+            )
+        if request.url.path == "/api/data":
+            assert request.headers.get("Authorization") == "Bearer concurrent-token"
+            return httpx2.Response(
+                200,
+                json={"message": "Success"},
+            )
+        return httpx2.Response(404)
+
+    transport = httpx2.MockTransport(mock_handler)
+    async with AsyncOAuth2Client(
+        client_id="test-client",
+        client_secret="test-secret",
+        token_endpoint="https://example.com/oauth/token",
+        grant_type="client_credentials",
+        transport=transport,
+    ) as client:
+        responses = await asyncio.gather(
+            *[client.get("https://example.com/api/data") for _ in range(5)]
+        )
+    assert all(response.status_code == 200 for response in responses)
+    assert token_requests == 1
+
+
+@pytest.mark.asyncio
+async def test_async_automatic_initial_token_fetch():
+    """Async client should fetch an initial token."""
+    requests_received = []
+
+    def mock_handler(request):
+        requests_received.append(str(request.url))
+        if request.url.path == "/oauth/token":
+            return httpx2.Response(
+                200,
+                json={
+                    "access_token": "async-token",
+                    "token_type": "Bearer",
+                    "expires_in": 3600,
+                },
+            )
+        if request.url.path == "/api/data":
+            auth_header = request.headers.get("Authorization")
+            if auth_header == "Bearer async-token":
+                return httpx2.Response(
+                    200,
+                    json={"message": "Async success"},
+                )
+            return httpx2.Response(401)
+        return httpx2.Response(404)
+
+    transport = httpx2.MockTransport(mock_handler)
+    async with AsyncOAuth2Client(
+        client_id="test-client",
+        client_secret="test-secret",
+        token_endpoint="https://example.com/oauth/token",
+        grant_type="client_credentials",
+        transport=transport,
+    ) as client:
+        response = await client.get("https://example.com/api/data")
+        assert response.status_code == 200
+        assert response.json()["message"] == "Async success"
+    assert requests_received == [
+        "https://example.com/oauth/token",
+        "https://example.com/api/data",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_async_stream_automatically_fetches_initial_token():
+    """Async streaming should fetch an initial access token."""
+    requests_received = []
+
+    def mock_handler(request):
+        requests_received.append(str(request.url))
+        if request.url.path == "/oauth/token":
+            return httpx2.Response(
+                200,
+                json={
+                    "access_token": "async-stream-token",
+                    "token_type": "Bearer",
+                    "expires_in": 3600,
+                },
+            )
+        if request.url.path == "/api/data":
+            auth_header = request.headers.get("Authorization")
+            if auth_header == "Bearer async-stream-token":
+                return httpx2.Response(
+                    200,
+                    json={"message": "Async stream success"},
+                )
+            return httpx2.Response(401)
+        return httpx2.Response(404)
+
+    transport = httpx2.MockTransport(mock_handler)
+    async with AsyncOAuth2Client(
+        client_id="test-client",
+        client_secret="test-secret",
+        token_endpoint="https://example.com/oauth/token",
+        grant_type="client_credentials",
+        transport=transport,
+    ) as client:
+        async with client.stream("GET", "https://example.com/api/data") as response:
+            assert response.status_code == 200
+            assert (await response.aread()) is not None
+    assert requests_received == [
+        "https://example.com/oauth/token",
+        "https://example.com/api/data",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_repeated_body_parameters():
+    """The RFC 8707 resource and RFC 8693 audience parameters keep all their values."""
+    bodies = []
+
+    async def mock_handler(request):
+        bodies.append((await request.aread()).decode())
+        return httpx2.Response(200, json=default_token)
+
+    url = "https://provider.test/token"
+    body = (
+        "resource=https%3A%2F%2Fa.test%2F&resource=https%3A%2F%2Fb.test%2F"
+        "&audience=c&audience=d"
+    )
+    transport = httpx2.MockTransport(mock_handler)
+    async with AsyncOAuth2Client(
+        "foo", "bar", token=default_token, transport=transport
+    ) as client:
+        await client.fetch_token(url, body=body, grant_type="client_credentials")
+        await client.refresh_token(url, refresh_token="b", body=body)
+        await client.revoke_token(url, "hi", body=body)
+        await client.introspect_token(url, "hi", body=body)
+
+    assert len(bodies) == 4
+    for sent in bodies:
+        params = url_decode(sent)
+        assert [value for key, value in params if key == "resource"] == [
+            "https://a.test/",
+            "https://b.test/",
+        ]
+        assert [value for key, value in params if key == "audience"] == ["c", "d"]
+        keys = [key for key, _ in params]
+        assert len(set(keys)) == len(keys) - 2

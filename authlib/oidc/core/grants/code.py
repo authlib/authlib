@@ -13,12 +13,17 @@ from joserfc import jwt
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.oauth2.rfc6749 import OAuth2Request
+from authlib.oauth2.rfc6749 import OAuth2Response
 
 from ..models import AuthorizationCodeMixin
 from ._legacy import LegacyMixin
+from .util import OPENID_AUTHORIZATION_PARAMETERS
 from .util import create_half_hash
 from .util import is_openid_scope
+from .util import resolve_auth_time
+from .util import set_silent
 from .util import validate_nonce
+from .util import validate_prompt_none
 from .util import validate_request_prompt
 
 log = logging.getLogger(__name__)
@@ -30,7 +35,7 @@ class OpenIDToken(LegacyMixin):
         if nonce := authorization_code.get_nonce():
             claims["nonce"] = nonce
 
-        if auth_time := authorization_code.get_auth_time():
+        if (auth_time := authorization_code.get_auth_time()) is not None:
             claims["auth_time"] = auth_time
 
         if acr := authorization_code.get_acr():
@@ -65,6 +70,7 @@ class OpenIDToken(LegacyMixin):
 
         claims = self.get_compatible_claims(request)
         if request.authorization_code:
+            claims.pop("auth_time", None)
             claims.update(
                 self.get_authorization_code_claims(request.authorization_code)
             )
@@ -87,7 +93,10 @@ class OpenIDToken(LegacyMixin):
         return jwt.encode(header, claims, private_key, [alg])
 
     def process_token(self, grant, response):
-        _, token, _ = response
+        if isinstance(response, OAuth2Response):
+            token = response.body
+        else:
+            _, token, _ = response
         scope = token.get("scope")
         if not scope or not is_openid_scope(scope):
             # standard authorization code flow
@@ -99,7 +108,7 @@ class OpenIDToken(LegacyMixin):
         return token
 
     def __call__(self, grant):
-        grant.register_hook("after_create_token_response", self.process_token)
+        grant.register_hook(self.process_token, after=grant.create_token_response)
 
 
 class OpenIDCode(OpenIDToken):
@@ -123,6 +132,9 @@ class OpenIDCode(OpenIDToken):
         authorization_server.register_grant(
             AuthorizationCodeGrant, extensions=[MyOpenIDCode()]
         )
+
+    Also pass an :class:`~authlib.oauth2.rfc6749.AuthorizationSessionMixin`
+    to ``get_consent_grant``. It gives the time of the user authentication.
     """
 
     def __init__(self, require_nonce=False):
@@ -147,13 +159,57 @@ class OpenIDCode(OpenIDToken):
     def validate_openid_authorization_request(self, grant, redirect_uri):
         validate_nonce(grant.request, self.exists_nonce, self.require_nonce)
 
+    def set_request_auth_time(self, grant, redirect_uri, grant_user):
+        """Set ``request.auth_time`` with the login time of the authorization
+        session, so that ``save_authorization_code`` can store it. It becomes
+        the ``auth_time`` claim of the ID token.
+
+        :param grant: the grant that creates the authorization response
+        :param redirect_uri: the redirect URI of the authorization request
+        :param grant_user: the user who grants the request, or ``None``
+        """
+        if not grant_user:
+            grant.request.auth_time = None
+            return
+
+        grant.request.user = grant_user
+        grant.request.auth_time = resolve_auth_time(grant)
+
+    def validate_openid_prompt(self, grant, redirect_uri):
+        """Validate the ``prompt`` and ``max_age`` parameters of the request.
+
+        :param grant: the grant that validates the authorization request
+        :param redirect_uri: the redirect URI of the authorization request
+        """
+        grant.redirect_uri = redirect_uri
+        validate_request_prompt(grant, redirect_uri)
+
+    def validate_openid_interactions(self, grant, result):
+        """Return an error when ``prompt`` is ``none`` and the user must go
+        through an interaction.
+
+        :param grant: the grant that validates the authorization request
+        :param result: the result of ``validate_interactions``
+        """
+        validate_prompt_none(grant)
+
     def __call__(self, grant):
-        grant.register_hook("after_create_token_response", self.process_token)
+        grant.register_hook(self.process_token, after=grant.create_token_response)
+        grant.register_hook(
+            self.set_request_auth_time, before=grant.create_authorization_response
+        )
         if is_openid_scope(grant.request.payload.scope):
+            grant.register_authorization_parameters(OPENID_AUTHORIZATION_PARAMETERS)
             grant.register_hook(
-                "after_validate_authorization_request_payload",
                 self.validate_openid_authorization_request,
+                after=grant.validate_authorization_request_payload,
+            )
+            grant.register_hook(set_silent, before=grant.validate_consent_request)
+            grant.register_hook(
+                self.validate_openid_prompt,
+                after=grant.validate_consent_request,
             )
             grant.register_hook(
-                "after_validate_consent_request", validate_request_prompt
+                self.validate_openid_interactions,
+                after=grant.validate_interactions,
             )

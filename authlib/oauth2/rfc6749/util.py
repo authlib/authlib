@@ -23,6 +23,21 @@ def scope_to_list(scope):
     return scope.strip().split()
 
 
+def normalize_response_type(response_type):
+    """Sort the values of a response type, so it can be compared as a string.
+
+    Per RFC 6749 §3.1.1, the values are separated by spaces and their order
+    does not matter. Repeated values are kept, so ``code code`` does not match
+    ``code``.
+
+    :param response_type: a space separated ``response_type`` value
+    :return: the sorted values, or the input unchanged if it is empty
+    """
+    if not response_type:
+        return response_type
+    return " ".join(sorted(value for value in response_type.split(" ") if value))
+
+
 def extract_basic_authorization(headers):
     auth = headers.get("Authorization")
     if not auth or " " not in auth:
@@ -34,7 +49,7 @@ def extract_basic_authorization(headers):
 
     try:
         query = to_unicode(base64.b64decode(auth_token))
-    except (binascii.Error, TypeError):
+    except (binascii.Error, TypeError, UnicodeDecodeError):
         return None, None
     if ":" in query:
         username, password = query.split(":", 1)

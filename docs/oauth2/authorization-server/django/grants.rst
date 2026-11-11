@@ -9,7 +9,7 @@ Register Grants
 .. module:: authlib.oauth2.rfc6749.grants
     :noindex:
 
-There are four grant types defined by RFC6749, you can also create your own
+There are four grant types defined by RFC 6749, you can also create your own
 extended grant. Register the supported grant types to the authorization server.
 
 .. _django_oauth2_code_grant:
@@ -21,7 +21,9 @@ Authorization Code Grant is a very common grant type, it is supported by almost
 every OAuth 2 providers. It uses an authorization code to exchange access
 token. In this case, we need a place to store the authorization code. It can be
 kept in a database or a cache like redis. Here is an example of database
-**AuthorizationCode**::
+**AuthorizationCode**:
+
+.. code-block:: python
 
     from django.db.models import ForeignKey, CASCADE
     from django.contrib.auth.models import User
@@ -37,10 +39,10 @@ kept in a database or a cache like redis. Here is an example of database
         redirect_uri = TextField(default='', null=True)
         response_type = TextField(default='')
         scope = TextField(default='', null=True)
-        auth_time = IntegerField(null=False, default=now_timestamp)
+        issued_at = IntegerField(null=False, default=now_timestamp)
 
         def is_expired(self):
-            return self.auth_time + 300 < time.time()
+            return self.issued_at + 300 < time.time()
 
         def get_redirect_uri(self):
             return self.redirect_uri
@@ -48,14 +50,13 @@ kept in a database or a cache like redis. Here is an example of database
         def get_scope(self):
             return self.scope or ''
 
-        def get_auth_time(self):
-            return self.auth_time
-
-Note here, you **MUST** implement the missing methods of
-:class:`~authlib.oauth2.rfc6749.AuthorizationCodeMixin` API interface.
+Implement the missing methods of
+:class:`~authlib.oauth2.rfc6749.AuthorizationCodeMixin`.
 
 Later, you can use this ``AuthorizationCode`` database model to handle ``authorization_code``
-grant type. Here is how::
+grant type. Here is how:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc6749 import grants
     from authlib.common.security import generate_token
@@ -66,7 +67,7 @@ grant type. Here is how::
             auth_code = AuthorizationCode(
                 code=code,
                 client_id=client.client_id,
-                redirect_uri=request.redirect_uri,
+                redirect_uri=request.payload.redirect_uri,
                 response_type=request.payload.response_type,
                 scope=request.scope,
                 user=request.user,
@@ -98,14 +99,18 @@ Default allowed :ref:`client_auth_methods` are:
 
 1. client_secret_basic
 2. client_secret_post
-3. none
 
-You can change it in the subclass, e.g. remove the ``none`` authentication method::
+Public clients, such as mobile or browser applications, use ``none``. To
+accept them, add ``none`` in the subclass, and register the ``CodeChallenge``
+extension of :ref:`specs/rfc7636`. This extension requires PKCE for public
+clients:
+
+.. code-block:: python
 
     class AuthorizationCodeGrant(grants.AuthorizationCodeGrant):
-        TOKEN_ENDPOINT_AUTH_METHODS = ['client_secret_basic', 'client_secret_post']
+        TOKEN_ENDPOINT_AUTH_METHODS = ['client_secret_basic', 'client_secret_post', 'none']
 
-.. note:: This is important when you want to support OpenID Connect.
+        # ... the methods of the previous example
 
 Implicit Grant
 --------------
@@ -113,22 +118,26 @@ Implicit Grant
 The implicit grant type is usually used in a browser, when resource
 owner granted the access, access token is issued in the redirect URI,
 there is no missing implementation, which means it can be easily registered
-with::
+with:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc6749 import grants
 
     # register it to grant endpoint
     server.register_grant(grants.ImplicitGrant)
 
-Implicit Grant is used by **public** client which has no **client_secret**.
-Only allowed :ref:`client_auth_methods`: ``none``.
+The client does not authenticate, because the implicit flow does not use the
+token endpoint. Its ``token_endpoint_auth_method`` does not matter.
 
 Resource Owner Password Credentials Grant
 -----------------------------------------
 
 Resource owner uses their username and password to exchange an access token,
 this grant type should be used only when the client is trustworthy, implement
-it with a subclass of :class:`ResourceOwnerPasswordCredentialsGrant`::
+it with a subclass of :class:`ResourceOwnerPasswordCredentialsGrant`:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc6749 import grants
     from django.contrib.auth.models import User
@@ -146,7 +155,9 @@ it with a subclass of :class:`ResourceOwnerPasswordCredentialsGrant`::
     server.register_grant(PasswordGrant)
 
 Default allowed :ref:`client_auth_methods`: ``client_secret_basic``.
-You can add more in the subclass::
+You can add more in the subclass:
+
+.. code-block:: python
 
     class PasswordGrant(grants.ResourceOwnerPasswordCredentialsGrant):
         TOKEN_ENDPOINT_AUTH_METHODS = [
@@ -157,7 +168,9 @@ Client Credentials Grant
 ------------------------
 
 Client credentials grant type can access public resources and the
-client's creator's resources. It can be easily registered with::
+client's creator's resources. It can be easily registered with:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc6749 import grants
 
@@ -165,7 +178,9 @@ client's creator's resources. It can be easily registered with::
     server.register_grant(grants.ClientCredentialsGrant)
 
 Default allowed :ref:`client_auth_methods`: ``client_secret_basic``.
-You can add more in the subclass::
+You can add more in the subclass:
+
+.. code-block:: python
 
     class ClientCredentialsGrant(grants.ClientCredentialsGrant):
         TOKEN_ENDPOINT_AUTH_METHODS = [
@@ -177,7 +192,10 @@ Refresh Token Grant
 
 Many OAuth 2 providers haven't implemented refresh token endpoint. Authlib
 provides it as a grant type, implement it with a subclass of
-:class:`RefreshTokenGrant`::
+:class:`RefreshTokenGrant`. The server issues refresh tokens only when
+``refresh_token_generator`` is set in ``AUTHLIB_OAUTH2_PROVIDER``:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc6749 import grants
 
@@ -185,10 +203,12 @@ provides it as a grant type, implement it with a subclass of
         def authenticate_refresh_token(self, refresh_token):
             try:
                 item = OAuth2Token.objects.get(refresh_token=refresh_token)
-                if item.is_refresh_token_active():
-                    return item
             except OAuth2Token.DoesNotExist:
                 return None
+
+            # if refresh tokens expire, also check the expiration here
+            if not item.is_revoked():
+                return item
 
         def authenticate_user(self, credential):
             return credential.user
@@ -201,7 +221,9 @@ provides it as a grant type, implement it with a subclass of
     server.register_grant(RefreshTokenGrant)
 
 Default allowed :ref:`client_auth_methods`: ``client_secret_basic``.
-You can add more in the subclass::
+You can add more in the subclass:
+
+.. code-block:: python
 
     class RefreshTokenGrant(grants.RefreshTokenGrant):
         TOKEN_ENDPOINT_AUTH_METHODS = [
@@ -209,7 +231,9 @@ You can add more in the subclass::
         ]
 
 By default, RefreshTokenGrant will not issue a ``refresh_token`` in the token
-response. Developers can change this behavior with::
+response. Developers can change this behavior with:
+
+.. code-block:: python
 
     class RefreshTokenGrant(grants.RefreshTokenGrant):
         INCLUDE_NEW_REFRESH_TOKEN = True
@@ -223,7 +247,9 @@ supports two endpoints:
 1. Authorization Endpoint: which can handle requests with ``response_type``.
 2. Token Endpoint: which is the endpoint to issue tokens.
 
-Creating a custom grant type with **BaseGrant**::
+Creating a custom grant type with **BaseGrant**:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc6749.grants import (
         BaseGrant, AuthorizationEndpointMixin, TokenEndpointMixin
@@ -234,15 +260,21 @@ Creating a custom grant type with **BaseGrant**::
 
         def validate_authorization_request(self):
             # only needed if using AuthorizationEndpointMixin
+            ...
 
-        def create_authorization_response(self, grant_user):
+        def create_authorization_response(self, redirect_uri, grant_user):
             # only needed if using AuthorizationEndpointMixin
+            # return an AuthorizationResponse(redirect_uri, params)
+            ...
 
         def validate_token_request(self):
             # only needed if using TokenEndpointMixin
+            ...
 
         def create_token_response(self):
             # only needed if using TokenEndpointMixin
+            # return a JsonResponse(token)
+            ...
 
 For a better understanding, you can read the source code of the built-in
 grant types. And there are extended grant types defined by other specs:
@@ -254,12 +286,58 @@ Grant Extensions
 ----------------
 
 Grant can accept extensions. Developers can pass extensions when registering
-grant::
+grant. For instance, there is ``CodeChallenge`` extension in Authlib:
 
-    server.register_grant(AuthorizationCodeGrant, [extension])
+.. code-block:: python
 
-For instance, there is ``CodeChallenge`` extension in Authlib::
-
-    server.register_grant(AuthorizationCodeGrant, [CodeChallenge(required=False)])
+    server.register_grant(AuthorizationCodeGrant, [CodeChallenge()])
 
 Learn more about ``CodeChallenge`` at :ref:`specs/rfc7636`.
+
+An extension that adds parameters to the authorization request declares them,
+with their JSON types. The server rejects a request that repeats one of them:
+
+.. code-block:: python
+
+    class MyExtension:
+        def __call__(self, grant):
+            grant.register_authorization_parameters({"my_parameter": str})
+
+.. invisible-code-block: python
+
+    import base64
+    from urllib.parse import urlencode
+
+    create_tables()
+    user = User.objects.create_user(username="alice", password="secret")
+    OAuth2Client.objects.create(
+        user=user,
+        client_id="client-id",
+        client_secret="client-secret",
+        grant_type="password refresh_token",
+        scope="profile",
+        token_endpoint_auth_method="client_secret_basic",
+    )
+    authorization = "Basic " + base64.b64encode(b"client-id:client-secret").decode()
+
+    def token_request(data):
+        request = request_factory.post(
+            "/oauth/token",
+            data=urlencode(data),
+            content_type="application/x-www-form-urlencoded",
+            HTTP_AUTHORIZATION=authorization,
+        )
+        response = server.create_token_response(request)
+        return response.status_code, json.loads(response.content)
+
+    status, token = token_request(
+        {"grant_type": "password", "username": "alice", "password": "secret"}
+    )
+    assert status == 200, token
+
+    data = {"grant_type": "refresh_token", "refresh_token": token["refresh_token"]}
+    status, body = token_request(data)
+    assert status == 200, body
+
+    status, body = token_request(data)
+    assert status == 400, "the old refresh token is still accepted"

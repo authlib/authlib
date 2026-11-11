@@ -1,0 +1,7 @@
+Fixed
+~~~~~
+
+- ``JsonWebEncryption`` rejects a JWE whose ``crit`` header lists a header
+  parameter it does not understand, or whose ``crit`` header is not in the
+  protected header, as ``JsonWebSignature`` already does. Add the private
+  header parameters listed in ``crit`` to ``private_headers``.

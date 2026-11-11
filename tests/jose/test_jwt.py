@@ -3,6 +3,10 @@ import hashlib
 import hmac
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.primitives.asymmetric import ed25519
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 from authlib.common.encoding import json_b64encode
 from authlib.common.encoding import urlsafe_b64encode
@@ -13,6 +17,7 @@ from authlib.jose import OctKey
 from authlib.jose import errors
 from authlib.jose import jwt
 from authlib.jose.errors import UnsupportedAlgorithmError
+from authlib.jose.rfc7518.oct_key import _SSH_PUBLIC_PREFIXES
 from tests.util import read_file_path
 
 
@@ -49,6 +54,106 @@ def test_reject_pem_key_as_hmac_secret(prefix, key_format):
 
     with pytest.raises(ValueError, match="This key may not be safe to import"):
         jwt.decode(forged, key)
+
+
+def _ssh_certificate(private_key):
+    """Return an OpenSSH certificate for the public key."""
+    ca = ed25519.Ed25519PrivateKey.generate()
+    now = int(datetime.datetime.now(datetime.UTC).timestamp())
+    certificate = (
+        serialization.SSHCertificateBuilder()
+        .public_key(private_key.public_key())
+        .serial(1)
+        .type(serialization.SSHCertificateType.USER)
+        .key_id(b"alice")
+        .valid_principals([b"alice"])
+        .valid_after(now - 60)
+        .valid_before(now + 3600)
+        .sign(ca)
+    )
+    return certificate.public_bytes()
+
+
+@pytest.fixture(scope="module", params=["rsa", "ec", "ed25519"])
+def ssh_key_pair(request):
+    """Return a private key, its JWS algorithm and its SSH key type."""
+    if request.param == "rsa":
+        return rsa.generate_private_key(65537, 2048), "RS256", b"ssh-rsa"
+
+    if request.param == "ec":
+        return ec.generate_private_key(ec.SECP256R1()), "ES256", b"ecdsa-sha2-nistp256"
+
+    return ed25519.Ed25519PrivateKey.generate(), "EdDSA", b"ssh-ed25519"
+
+
+@pytest.mark.parametrize("key_form", ["tab", "tab-space", "certificate"])
+@pytest.mark.parametrize("key_format", ["raw", "jwk", "key"])
+def test_reject_ssh_key_as_hmac_secret(ssh_key_pair, key_form, key_format):
+    """An SSH public key or certificate that verifies tokens is refused as an
+    HMAC secret."""
+    private_key, alg, ssh_type = ssh_key_pair
+    public_key = private_key.public_key().public_bytes(
+        serialization.Encoding.OpenSSH, serialization.PublicFormat.OpenSSH
+    )
+    if key_form == "tab":
+        public_key = public_key.replace(ssh_type + b" ", ssh_type + b"\t", 1)
+    elif key_form == "tab-space":
+        public_key = public_key.replace(ssh_type + b" ", ssh_type + b"\t ", 1)
+    else:
+        public_key = _ssh_certificate(private_key)
+
+    pem = private_key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    signed = jwt.encode({"alg": alg}, {"sub": "alice"}, pem)
+    assert jwt.decode(signed, public_key)["sub"] == "alice"
+
+    signing_input = (
+        json_b64encode({"alg": "HS256"}) + b"." + json_b64encode({"sub": "attacker"})
+    )
+    signature = hmac.new(public_key, signing_input, hashlib.sha256).digest()
+    forged = signing_input + b"." + urlsafe_b64encode(signature)
+
+    key = public_key
+    if key_format != "raw":
+        key = {"kty": "oct", "k": urlsafe_b64encode(public_key).decode()}
+        if key_format == "key":
+            key = OctKey.import_key(key)
+
+    with pytest.raises(ValueError, match="This key may not be safe to import"):
+        jwt.decode(forged, key)
+
+
+@pytest.mark.parametrize(
+    "key_class",
+    [
+        cls
+        for cls in JsonWebKey.JWK_KEY_CLS.values()
+        if getattr(cls, "SSH_PUBLIC_PREFIX", None)
+    ],
+    ids=lambda cls: cls.kty,
+)
+def test_ssh_prefixes_are_checked(key_class):
+    """Every SSH key type loaded by an asymmetric key class is checked before
+    a key is accepted as an HMAC secret."""
+    assert key_class.SSH_PUBLIC_PREFIX in _SSH_PUBLIC_PREFIXES
+
+
+@pytest.mark.parametrize(
+    "secret",
+    [
+        b"ssh-rsa-signing-secret-0123456789",
+        b"ssh-rsa-deploy key for prod 0123456789",
+        b"ssh-ed25519_rotation\tsecret_0123456789",
+        b"ssh-ed25519\tsecret_value_0123456789",
+    ],
+)
+def test_accept_secret_starting_like_ssh_key_type(secret):
+    """A secret that only starts like an SSH key type is still accepted."""
+    token = jwt.encode({"alg": "HS256"}, {"sub": "alice"}, secret)
+    assert jwt.decode(token, secret)["sub"] == "alice"
 
 
 @pytest.mark.parametrize("alg", ["HS256", "HS384", "HS512"])
@@ -96,7 +201,7 @@ def test_encode_sensitive_data():
 
 
 def test_encode_datetime():
-    now = datetime.datetime.now(tz=datetime.timezone.utc)
+    now = datetime.datetime.now(tz=datetime.UTC)
     id_token = jwt.encode({"alg": "HS256"}, {"exp": now}, "k")
     claims = jwt.decode(id_token, "k")
     assert isinstance(claims.exp, int)
@@ -185,9 +290,7 @@ def test_validate_nbf():
 
 
 def test_validate_iat_issued_in_future():
-    in_future = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(
-        seconds=10
-    )
+    in_future = datetime.datetime.now(tz=datetime.UTC) + datetime.timedelta(seconds=10)
     id_token = jwt.encode({"alg": "HS256"}, {"iat": in_future}, "k")
     claims = jwt.decode(id_token, "k")
     with pytest.raises(
@@ -198,9 +301,7 @@ def test_validate_iat_issued_in_future():
 
 
 def test_validate_iat_issued_in_future_with_insufficient_leeway():
-    in_future = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(
-        seconds=10
-    )
+    in_future = datetime.datetime.now(tz=datetime.UTC) + datetime.timedelta(seconds=10)
     id_token = jwt.encode({"alg": "HS256"}, {"iat": in_future}, "k")
     claims = jwt.decode(id_token, "k")
     with pytest.raises(
@@ -211,18 +312,14 @@ def test_validate_iat_issued_in_future_with_insufficient_leeway():
 
 
 def test_validate_iat_issued_in_future_with_sufficient_leeway():
-    in_future = datetime.datetime.now(tz=datetime.timezone.utc) + datetime.timedelta(
-        seconds=10
-    )
+    in_future = datetime.datetime.now(tz=datetime.UTC) + datetime.timedelta(seconds=10)
     id_token = jwt.encode({"alg": "HS256"}, {"iat": in_future}, "k")
     claims = jwt.decode(id_token, "k")
     claims.validate(leeway=20)
 
 
 def test_validate_iat_issued_in_past():
-    in_future = datetime.datetime.now(tz=datetime.timezone.utc) - datetime.timedelta(
-        seconds=10
-    )
+    in_future = datetime.datetime.now(tz=datetime.UTC) - datetime.timedelta(seconds=10)
     id_token = jwt.encode({"alg": "HS256"}, {"iat": in_future}, "k")
     claims = jwt.decode(id_token, "k")
     claims.validate()

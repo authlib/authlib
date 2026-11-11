@@ -250,6 +250,88 @@ def test_aes_gcm_jwe_invalid_key():
         jwe.serialize_compact(protected, b"hello", b"invalid-key")
 
 
+def test_crit_header_with_serialize_compact():
+    jwe = JsonWebEncryption()
+    public_key = read_file_path("rsa_public.pem")
+    protected = {"alg": "RSA-OAEP", "enc": "A256GCM", "kid": "1", "crit": ["kid"]}
+    jwe.serialize_compact(protected, b"hello", public_key)
+
+    protected = {"alg": "RSA-OAEP", "enc": "A256GCM", "x": "1", "crit": ["x"]}
+    with pytest.raises(errors.InvalidCritHeaderParameterNameError):
+        jwe.serialize_compact(protected, b"hello", public_key)
+
+    protected = {"alg": "RSA-OAEP", "enc": "A256GCM", "crit": "kid"}
+    with pytest.raises(errors.InvalidHeaderParameterNameError):
+        jwe.serialize_compact(protected, b"hello", public_key)
+
+
+def test_crit_header_with_deserialize_compact():
+    protected = {"alg": "RSA-OAEP", "enc": "A256GCM", "x": "1", "crit": ["x"]}
+    s = JsonWebEncryption(private_headers=["x"]).serialize_compact(
+        protected, b"hello", read_file_path("rsa_public.pem")
+    )
+    private_key = read_file_path("rsa_private.pem")
+
+    data = JsonWebEncryption(private_headers=["x"]).deserialize_compact(s, private_key)
+    assert data["payload"] == b"hello"
+
+    with pytest.raises(errors.InvalidCritHeaderParameterNameError):
+        JsonWebEncryption().deserialize_compact(s, private_key)
+
+
+def test_crit_header_with_algorithm_header():
+    jwe = JsonWebEncryption()
+    key = OKPKey.generate_key("X25519", is_private=True)
+    protected = {"alg": "ECDH-ES", "enc": "A256GCM", "apu": "QWxpY2U", "crit": ["apu"]}
+    s = jwe.serialize_compact(protected, b"hello", key)
+    assert jwe.deserialize_compact(s, key)["payload"] == b"hello"
+
+
+def test_crit_header_with_serialize_json():
+    jwe = JsonWebEncryption()
+    key = OKPKey.generate_key("X25519", is_private=True)
+    protected = {"alg": "ECDH-ES+A128KW", "enc": "A128GCM", "kid": "1"}
+
+    header_obj = {"protected": protected, "unprotected": {"crit": ["kid"]}}
+    with pytest.raises(errors.InvalidHeaderParameterNameError):
+        jwe.serialize_json(header_obj, b"hello", key)
+
+    header_obj = {"protected": protected, "recipients": [{"header": {"crit": ["kid"]}}]}
+    with pytest.raises(errors.InvalidHeaderParameterNameError):
+        jwe.serialize_json(header_obj, b"hello", key)
+
+    header_obj = {"protected": {**protected, "x": "1", "crit": ["x"]}}
+    with pytest.raises(errors.InvalidCritHeaderParameterNameError):
+        jwe.serialize_json(header_obj, b"hello", key)
+
+    header_obj = {"protected": {**protected, "crit": ["kid"]}}
+    data = jwe.serialize_json(header_obj, b"hello", key)
+    assert jwe.deserialize_json(data, key)["payload"] == b"hello"
+
+
+def test_crit_header_with_deserialize_json():
+    jwe = JsonWebEncryption()
+    key = OKPKey.generate_key("X25519", is_private=True)
+    protected = {"alg": "ECDH-ES+A128KW", "enc": "A128GCM", "kid": "1"}
+    data = jwe.serialize_json({"protected": protected}, b"hello", key)
+
+    tampered = {**data, "unprotected": {"crit": ["kid"]}}
+    with pytest.raises(errors.InvalidHeaderParameterNameError):
+        jwe.deserialize_json(tampered, key)
+
+    recipients = [{**data["recipients"][0], "header": {"crit": ["kid"]}}]
+    tampered = {**data, "recipients": recipients}
+    with pytest.raises(errors.InvalidHeaderParameterNameError):
+        jwe.deserialize_json(tampered, key)
+
+    header_obj = {"protected": {**protected, "x": "1", "crit": ["x"]}}
+    data = JsonWebEncryption(private_headers=["x"]).serialize_json(
+        header_obj, b"hello", key
+    )
+    with pytest.raises(errors.InvalidCritHeaderParameterNameError):
+        jwe.deserialize_json(data, key)
+
+
 def test_serialize_compact_fails_if_header_contains_unknown_field_while_private_fields_restricted():
     jwe = JsonWebEncryption(private_headers=set())
     key = OKPKey.generate_key("X25519", is_private=True)
@@ -1487,7 +1569,7 @@ def test_decryption_fails_if_ciphertext_is_invalid():
             }
         ],
         "iv": "AAECAwQFBgcICQoLDA0ODw",
-        "ciphertext": "Az2IWsISEMDJvyc5XRL-3-d-RgNBOGolCsxFFoUXFY",  # invalid ciphertext
+        "ciphertext": "Az2IWsISEMDJvyc5XRL-3-d-RgNBOGolCsxFFoUXFQ",  # invalid ciphertext
         "tag": "HLb4fTlm8spGmij3RyOs2gJ4DpHM4hhVRwdF_hGb3WQ",
     }
 

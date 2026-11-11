@@ -9,20 +9,19 @@ JSON Web Encryption (JWE)
 JSON Web Encryption (JWE) represents encrypted content using
 JSON-based data structures.
 
-.. important::
+.. deprecated:: 1.7
+    ``authlib.jose`` will be removed in Authlib 2.0. Use joserfc_ instead.
+    :ref:`joserfc_upgrade` explains how to migrate.
 
-    We are splitting the ``jose`` module into a separated package. You may be
-    interested in joserfc_.
-
-.. _joserfc: https://jose.authlib.org/en/dev/guide/jwe/
+.. _joserfc: https://jose.authlib.org/en/
 
 There are two types of JWE Serializations:
 
 1. JWE Compact Serialization
 2. JWE JSON Serialization
 
-Authlib has only implemented the **Compact Serialization**. This feature
-is not mature yet, use at your own risk.
+Authlib implements both serializations, with ``serialize_compact`` and
+``serialize_json``. This guide covers the Compact Serialization.
 
 The JWE Compact Serialization represents encrypted content as a compact,
 URL-safe string. This string is:
@@ -77,13 +76,13 @@ The available ``alg`` list:
 1. RSA1_5, RSA-OAEP, RSA-OAEP-256
 2. A128KW, A192KW, A256KW
 3. A128GCMKW, A192GCMKW, A256GCMKW
+4. ECDH-ES, ECDH-ES+A128KW, ECDH-ES+A192KW, ECDH-ES+A256KW
+5. dir
 
 The available ``enc`` list:
 
 1. A128CBC-HS256, A192CBC-HS384, A256CBC-HS512
 2. A128GCM, A192GCM, A256GCM
-
-More ``alg`` and ``enc`` will be added in the future.
 
 It is also available to compress the payload with ``zip`` header::
 

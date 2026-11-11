@@ -10,6 +10,7 @@ from authlib.common.encoding import json_loads
 from authlib.common.encoding import to_bytes
 from authlib.oauth2.rfc6749 import ClientMixin
 from authlib.oauth2.rfc6749 import list_to_scope
+from authlib.oauth2.rfc6749 import normalize_response_type
 from authlib.oauth2.rfc6749 import scope_to_list
 
 
@@ -113,6 +114,10 @@ class OAuth2ClientMixin(ClientMixin):
     def id_token_signed_response_alg(self):
         return self.client_metadata.get("id_token_signed_response_alg")
 
+    @property
+    def default_max_age(self):
+        return self.client_metadata.get("default_max_age")
+
     def get_client_id(self):
         return self.client_id
 
@@ -142,7 +147,9 @@ class OAuth2ClientMixin(ClientMixin):
         return True
 
     def check_response_type(self, response_type):
-        return response_type in self.response_types
+        return normalize_response_type(response_type) in [
+            normalize_response_type(allowed) for allowed in self.response_types
+        ]
 
     def check_grant_type(self, grant_type):
         return grant_type in self.grant_types

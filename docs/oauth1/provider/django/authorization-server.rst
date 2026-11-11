@@ -11,20 +11,16 @@ you don't have to handle temporary credentials, timestamp and nonce yourself,
 they are all built-in.
 
 To create an authorization server, only **Client** and **Token** models are
-required::
-
-    from your_project.models import Client, Token
-    from authlib.integrations.django_oauth1 import CacheAuthorizationServer
-
-    authorization_server = CacheAuthorizationServer(Client, Token)
-
+required.
 
 Resource Owner
 --------------
 
 Resource Owner is the user who is using your service. A resource owner can
 log in your website with username/email and password, or other methods. In
-Django, we can use the built in contrib user::
+Django, we can use the built in contrib user:
+
+.. code-block:: python
 
     from django.contrib.auth.models import User
 
@@ -40,14 +36,16 @@ information:
 - Client RSA Public Key (if RSA-SHA1 signature method supported)
 
 Authlib has no implementation for client model in Django. You need to implement
-it yourself::
+it yourself:
+
+.. code-block:: python
 
     from django.db import models
     from django.contrib.auth.models import User
     from authlib.oauth1 import ClientMixin
 
     class Client(models.Model, ClientMixin):
-        user = models.ForeignKey(User, on_delete=CASCADE)
+        user = models.ForeignKey(User, on_delete=models.CASCADE)
         client_id = models.CharField(max_length=48, unique=True, db_index=True)
         client_secret = models.CharField(max_length=48, blank=True)
         default_redirect_uri = models.TextField(blank=False, default='')
@@ -71,14 +69,16 @@ A token credential is used to access resource owners' resources. Unlike
 OAuth 2, the token credential will not expire in OAuth 1. This token credentials
 are supposed to be saved into a persist database rather than a cache.
 
-Here is an example of how it looks in Django::
+Here is an example of how it looks in Django:
+
+.. code-block:: python
 
     from django.db import models
     from django.contrib.auth.models import User
     from authlib.oauth1 import TokenCredentialMixin
 
     class Token(models.Model, TokenCredentialMixin):
-        user = models.ForeignKey(User, on_delete=CASCADE)
+        user = models.ForeignKey(User, on_delete=models.CASCADE)
         client_id = models.CharField(max_length=48, db_index=True)
         oauth_token = models.CharField(max_length=84, unique=True, db_index=True)
         oauth_token_secret = models.CharField(max_length=84)
@@ -92,19 +92,31 @@ Here is an example of how it looks in Django::
 Server Implementation
 ---------------------
 
+Create the authorization server with the two models:
+
+.. code-block:: python
+
+    from authlib.integrations.django_oauth1 import CacheAuthorizationServer
+
+    authorization_server = CacheAuthorizationServer(Client, Token)
+
 It is ready to create the endpoints for authorization and issuing tokens.
 Let's start with the temporary credentials endpoint, which is used for clients
-to fetch a temporary credential::
+to fetch a temporary credential:
+
+.. code-block:: python
 
     from django.views.decorators.http import require_http_methods
 
     @require_http_methods(["POST"])
     def initiate_temporary_credential(request):
-        return server.create_temporary_credential_response(request)
+        return authorization_server.create_temporary_credentials_response(request)
 
 The endpoint for resource owner authorization. OAuth 1 Client will redirect
 user to this authorization page, so that resource owner can grant or deny this
-request::
+request:
+
+.. code-block:: python
 
     from django.shortcuts import render
 
@@ -112,7 +124,7 @@ request::
         # make sure that user is logged in for yourself
         if request.method == 'GET':
             try:
-                req = server.check_authorization_request(request)
+                req = authorization_server.check_authorization_request(request)
                 context = {'req': req}
                 return render(request, 'authorize.html', context)
             except OAuth1Error as error:
@@ -126,19 +138,21 @@ request::
             grant_user = None
 
         try:
-            return server.create_authorization_response(request, grant_user)
+            return authorization_server.create_authorization_response(request, grant_user)
         except OAuth1Error as error:
             context = {'error': error}
             return render(request, 'error.html', context)
 
 Then the final token endpoint. OAuth 1 Client will use the given temporary
 credential and the ``oauth_verifier`` authorized by resource owner to exchange
-the token credential::
+the token credential:
+
+.. code-block:: python
 
     from django.views.decorators.http import require_http_methods
 
     @require_http_methods(["POST"])
     def issue_token(request):
-        return server.create_token_response(request)
+        return authorization_server.create_token_response(request)
 
 At last, you need to register these views into url patterns.

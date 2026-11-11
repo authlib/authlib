@@ -27,6 +27,23 @@ class ClientMetadataClaims(BaseClaims):
         "software_id",
         "software_version",
     ]
+    CLAIM_TYPES = {
+        "redirect_uris": [str],
+        "token_endpoint_auth_method": str,
+        "grant_types": [str],
+        "response_types": [str],
+        "client_name": str,
+        "client_uri": str,
+        "logo_uri": str,
+        "scope": str,
+        "contacts": [str],
+        "tos_uri": str,
+        "policy_uri": str,
+        "jwks_uri": str,
+        "jwks": dict,
+        "software_id": str,
+        "software_version": str,
+    }
 
     def validate(self, now=None, leeway=0):
         super().validate(now, leeway)
@@ -121,8 +138,6 @@ class ClientMetadataClaims(BaseClaims):
         support requests for the client.  See Section 6 for information on
         Privacy Considerations.
         """
-        if "contacts" in self and not isinstance(self["contacts"], list):
-            raise InvalidClaimError("contacts")
 
     def validate_tos_uri(self):
         """URL string that points to a human-readable terms of service
@@ -171,16 +186,22 @@ class ClientMetadataClaims(BaseClaims):
         public URLs.  The "jwks_uri" and "jwks" parameters MUST NOT both
         be present in the same request or response.
         """
-        if "jwks" in self:
-            if "jwks_uri" in self:
-                #  The "jwks_uri" and "jwks" parameters MUST NOT both  be present
-                raise InvalidClaimError("jwks")
+        if "jwks" not in self:
+            return
 
-            jwks = self["jwks"]
-            try:
-                KeySet.import_key_set(jwks)
-            except (JoseError, ValueError) as exc:
-                raise InvalidClaimError("jwks") from exc
+        if "jwks_uri" in self:
+            #  The "jwks_uri" and "jwks" parameters MUST NOT both  be present
+            raise InvalidClaimError("jwks")
+
+        try:
+            key_set = KeySet.import_key_set(self["jwks"])
+        except (JoseError, ValueError, KeyError, TypeError) as exc:
+            raise InvalidClaimError("jwks") from exc
+
+        # Per RFC 7591 §2, jwks contains the public keys of the client.
+        # Symmetric keys are private keys.
+        if any(key.is_private for key in key_set):
+            raise InvalidClaimError("jwks")
 
     def validate_software_id(self):
         """A unique identifier string (e.g., a Universally Unique Identifier

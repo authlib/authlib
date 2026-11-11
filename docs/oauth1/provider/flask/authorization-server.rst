@@ -16,7 +16,9 @@ Resource Owner
 Resource Owner is the user who is using your service. A resource owner can
 log in your website with username/email and password, or other methods.
 
-A resource owner MUST implement ``get_user_id()`` method::
+Implement the ``get_user_id()`` method on the resource owner model:
+
+.. code-block:: python
 
     class User(db.Model):
         id = db.Column(db.Integer, primary_key=True)
@@ -35,8 +37,10 @@ information:
 - Client Password, usually called **client_secret**
 - Client RSA Public Key (if RSA-SHA1 signature method supported)
 
-Developers MUST implement the missing methods of ``authlib.oauth1.ClientMixin``, take an
-example of Flask-SQAlchemy::
+Implement the missing methods of ``authlib.oauth1.ClientMixin``. Here is an
+example with Flask-SQLAlchemy:
+
+.. code-block:: python
 
     from authlib.oauth1 import ClientMixin
 
@@ -75,7 +79,9 @@ methods:
 - ``.delete(key)``
 
 A cache can be a memcache, redis or something else. If cache is not available,
-developers can also implement it with database. For example, using SQLAlchemy::
+developers can also implement it with database. For example, using SQLAlchemy:
+
+.. code-block:: python
 
     from authlib.oauth1 import TemporaryCredentialMixin
 
@@ -114,8 +120,10 @@ A token credential is used to access resource owners' resources. Unlike
 OAuth 2, the token credential will not expire in OAuth 1. This token credentials
 are supposed to be saved into a persist database rather than a cache.
 
-Developers MUST implement :class:`~authlib.oauth1.rfc5849.TokenCredentialMixin`
-missing methods. Here is an example of SQLAlchemy integration::
+Implement the missing methods of :class:`~authlib.oauth1.rfc5849.TokenCredentialMixin`.
+Here is an example with SQLAlchemy:
+
+.. code-block:: python
 
     from authlib.oauth1 import TokenCredentialMixin
 
@@ -139,12 +147,14 @@ missing methods. Here is an example of SQLAlchemy integration::
 Timestamp and Nonce
 -------------------
 
-The nonce value MUST be unique across all requests with the same timestamp,
-client credentials, and token combinations. Authlib Flask integration has a
+Per RFC 5849 §3.3, the nonce value MUST be unique across all requests with
+the same timestamp, client credentials, and token combinations. Authlib Flask integration has a
 built-in validation with cache.
 
 If cache is not available, developers can use a database, here is an example of
-using SQLAlchemy::
+using SQLAlchemy:
+
+.. code-block:: python
 
     class TimestampNonce(db.Model):
         __table_args__ = (
@@ -165,7 +175,9 @@ Define A Server
 
 Authlib provides a ready to use
 :class:`~authlib.integrations.flask_oauth1.AuthorizationServer`
-which has built-in tools to handle requests and responses::
+which has built-in tools to handle requests and responses:
+
+.. code-block:: python
 
     from authlib.integrations.flask_oauth1 import AuthorizationServer
 
@@ -174,7 +186,9 @@ which has built-in tools to handle requests and responses::
 
     server = AuthorizationServer(app, query_client=query_client)
 
-It can also be initialized lazily with init_app::
+It can also be initialized lazily with init_app:
+
+.. code-block:: python
 
     server = AuthorizationServer()
     server.init_app(app, query_client=query_client)
@@ -200,7 +214,9 @@ OAUTH1_TOKEN_SECRET_LENGTH         A random function will generate the given
 ================================== ===============================================
 
 These configurations are used to create the ``token_generator`` function. But
-you can pass the ``token_generator`` when initializing the AuthorizationServer::
+you can pass the ``token_generator`` when initializing the AuthorizationServer:
+
+.. code-block:: python
 
     def token_generator():
         return {
@@ -219,7 +235,9 @@ Server Hooks
 
 There are missing hooks that should be ``register_hook`` to AuthorizationServer.
 There are helper functions for registering hooks. If cache is available, you
-can take the advantage with::
+can take the advantage with:
+
+.. code-block:: python
 
     from authlib.integrations.flask_oauth1.cache import (
         register_nonce_hooks,
@@ -229,8 +247,9 @@ can take the advantage with::
     register_nonce_hooks(server, cache)
     register_temporary_credential_hooks(server, cache)
 
-If cache is not available, developers MUST register the hooks with the database we
-defined above::
+Without a cache, register the hooks with the database models:
+
+.. code-block:: python
 
     # check if nonce exists
 
@@ -290,8 +309,10 @@ defined above::
     server.register_hook('delete_temporary_credential', delete_temporary_credential)
     server.register_hook('create_authorization_verifier', create_authorization_verifier)
 
-For both cache and database temporary credential, Developers MUST register a
-``create_token_credential`` hook::
+With both cache and database temporary credentials, register a
+``create_token_credential`` hook:
+
+.. code-block:: python
 
     def create_token_credential(token, temporary_credential):
         credential = TokenCredential(
@@ -312,7 +333,9 @@ Server Implementation
 
 It is ready to create the endpoints for authorization and issuing tokens.
 Let's start with the temporary credentials endpoint, which is used for clients
-to fetch a temporary credential::
+to fetch a temporary credential:
+
+.. code-block:: python
 
     @app.route('/initiate', methods=['POST'])
     def initiate_temporary_credential():
@@ -320,7 +343,9 @@ to fetch a temporary credential::
 
 The endpoint for resource owner authorization. OAuth 1 Client will redirect
 user to this authorization page, so that resource owner can grant or deny this
-request::
+request:
+
+.. code-block:: python
 
     @app.route('/authorize', methods=['GET', 'POST'])
     def authorize():
@@ -345,7 +370,9 @@ request::
 
 Then the final token endpoint. OAuth 1 Client will use the given temporary
 credential and the ``oauth_verifier`` authorized by resource owner to exchange
-the token credential::
+the token credential:
+
+.. code-block:: python
 
     @app.route('/token', methods=['POST'])
     def issue_token():

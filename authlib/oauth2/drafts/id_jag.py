@@ -17,6 +17,7 @@ force ID-JAG to carry several RFC 7523 hooks
 three-party model.
 """
 
+import inspect
 import logging
 
 from joserfc import jwk
@@ -28,10 +29,13 @@ from joserfc.util import to_bytes
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.encoding import json_loads
 from authlib.common.security import generate_token
+from authlib.deprecate import deprecate
 
 from ..rfc6749 import BaseGrant
 from ..rfc6749 import InvalidGrantError
 from ..rfc6749 import InvalidRequestError
+from ..rfc6749 import InvalidScopeError
+from ..rfc6749 import JsonResponse
 from ..rfc6749 import TokenEndpointMixin
 from ..rfc6749 import UnauthorizedClientError
 from ..rfc6749 import scope_to_list
@@ -58,7 +62,7 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
 
     - :meth:`get_audiences`
     - :meth:`resolve_issuer_key`
-    - :meth:`authenticate_user`
+    - :meth:`resolve_user`
     - :meth:`check_jti`
     - :meth:`check_id_jag_permission`
     """
@@ -84,6 +88,36 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
 
     #: Clock-skew allowance, in seconds.
     LEEWAY = 60
+
+    _legacy_check_id_jag_permission = False
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if (
+            cls.authenticate_user is not IDJAGGrant.authenticate_user
+            and cls.resolve_user is IDJAGGrant.resolve_user
+        ):
+            deprecate(
+                "'IDJAGGrant.authenticate_user' is deprecated. Implement "
+                "'resolve_user(claims)' instead, and resolve the user with the "
+                "'iss' and 'sub' claims.",
+                version="1.11",
+            )
+
+        if cls.check_id_jag_permission is not IDJAGGrant.check_id_jag_permission:
+            signature = inspect.signature(cls.check_id_jag_permission)
+            try:
+                signature.bind(None, None, None, None, None)
+                cls._legacy_check_id_jag_permission = False
+            except TypeError:
+                cls._legacy_check_id_jag_permission = True
+
+            if cls._legacy_check_id_jag_permission:
+                deprecate(
+                    "'IDJAGGrant.check_id_jag_permission' without a 'claims' "
+                    "argument is deprecated.",
+                    version="1.11",
+                )
 
     # ------------------------------------------------------------------
     # Static helper for producing assertions (for tests and clients)
@@ -160,6 +194,7 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
             raise InvalidRequestError("Missing 'assertion' in request")
 
         claims = self._process_assertion_claims(assertion)
+        self.request.id_jag_claims = claims
 
         client_id_claim = claims["client_id"]
         if client.get_client_id() != client_id_claim:
@@ -182,15 +217,19 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
         self.request.client = client
         log.debug("Validate token request of %s", client)
         self.validate_requested_scope()
+        self.request.scope = self._resolve_scope(claims)
 
-        # Authenticate user from sub claim (required by ID-JAG).
-        user = self.authenticate_user(claims["sub"])
+        user = self.resolve_user(claims)
         if not user:
             raise InvalidGrantError(description="Invalid 'sub' value in assertion")
 
-        # Application policy check.
-        scopes = scope_to_list(self.request.payload.scope) or []
-        if not self.check_id_jag_permission(client, user, scopes):
+        scopes = scope_to_list(self.request.scope) or []
+        if self._legacy_check_id_jag_permission:
+            allowed = self.check_id_jag_permission(client, user, scopes)
+        else:
+            allowed = self.check_id_jag_permission(client, user, scopes, claims)
+
+        if not allowed:
             raise InvalidGrantError(
                 description=(
                     "Permission denied: client is not authorized "
@@ -203,13 +242,13 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
     def create_token_response(self):
         """Issue an access token (no refresh token per the ID-JAG draft)."""
         token = self.generate_token(
-            scope=self.request.payload.scope,
+            scope=self.request.scope,
             user=self.request.user,
             include_refresh_token=False,
         )
         log.debug("Issue token %r to %r", token, self.request.client)
         self.save_token(token)
-        return 200, token, self.TOKEN_RESPONSE_HEADER
+        return JsonResponse(token, headers=self.TOKEN_RESPONSE_HEADER)
 
     # ------------------------------------------------------------------
     # JWT processing (internal)
@@ -226,6 +265,9 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
                 description="Missing required 'iss' claim in assertion"
             )
 
+        if not isinstance(issuer, str):
+            raise InvalidGrantError(description="Invalid 'iss' claim in assertion")
+
         key = import_any_key(self.resolve_issuer_key(issuer, headers))
 
         try:
@@ -241,6 +283,31 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
 
         return token.claims
 
+    def _resolve_scope(self, claims):
+        """Return the scope of the access token.
+
+        The scope is bounded by the scope claim of the assertion, and
+        defaults to it. Without that claim, the requested scope is used.
+        """
+        requested = self.request.payload.scope
+        if "scope" not in claims:
+            return requested
+
+        granted = claims["scope"]
+        if not isinstance(granted, str):
+            raise InvalidGrantError(description="Invalid 'scope' claim in assertion")
+
+        if not requested:
+            return granted
+
+        # RFC 7521 §4.1: "the requested scope MUST be equal to or less than
+        # the scope originally granted to the authorized accessor."
+        if not set(scope_to_list(requested)).issubset(scope_to_list(granted)):
+            raise InvalidScopeError(
+                description="The requested scope exceeds the 'scope' claim in assertion"
+            )
+        return requested
+
     def _extract_assertion(self, assertion: str):
         try:
             obj = jws.extract_compact(to_bytes(assertion))
@@ -251,6 +318,10 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
             claims = json_loads(obj.payload)
         except ValueError:
             raise InvalidGrantError(description="Invalid JWT payload.") from None
+
+        if not isinstance(claims, dict):
+            raise InvalidGrantError(description="Invalid JWT payload.")
+
         return obj.headers(), claims
 
     def _validate_typ_header(self, headers):
@@ -264,7 +335,12 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
 
     def _verify_claims(self, claims: jwt.Claims):
         options = dict(self.CLAIMS_OPTIONS)
-        options["aud"] = {"essential": True, "values": self.get_audiences()}
+        audiences = self.get_audiences()
+        if not audiences:
+            raise InvalidGrantError(
+                description="No audience identifiers configured for this authorization server."
+            )
+        options["aud"] = {"essential": True, "values": audiences}
 
         claims_requests = jwt.JWTClaimsRegistry(leeway=self.LEEWAY, **options)
         try:
@@ -272,6 +348,9 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
         except JoseError as e:
             log.debug("Assertion Error: %r", e)
             raise InvalidGrantError(description=e.description) from e
+
+        if "tenant" in claims and not isinstance(claims["tenant"], str):
+            raise InvalidGrantError(description="Invalid 'tenant' claim in assertion")
 
     # ------------------------------------------------------------------
     # Application hooks
@@ -288,7 +367,8 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
 
         Per the ID-JAG draft, ``aud`` is the issuer identifier of the
         Resource Authorization Server. The returned list must be non-empty; ``aud`` validation is
-        mandatory for ID-JAG assertions.
+        mandatory for ID-JAG assertions. If the list is empty, the assertion is
+        rejected with an ``invalid_grant`` error.
         """
         raise NotImplementedError()
 
@@ -300,8 +380,34 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
         """
         raise NotImplementedError()
 
+    def resolve_user(self, claims):
+        """Return the user of the ID-JAG, or *None* to reject it.
+
+        Per the ID-JAG draft -06 §3.1, ``sub`` is only unique within its issuer,
+        and within its ``tenant`` for a multi-tenant issuer. When the server
+        trusts several IdPs, resolve the user with the issuer too (§4.1)::
+
+            def resolve_user(self, claims):
+                return User.query.filter_by(
+                    issuer=claims["iss"], sub=claims["sub"]
+                ).first()
+
+        For a multi-tenant issuer, also resolve the user within the ``tenant``
+        claim (§4.4.1).
+
+        :param claims: the verified claims of the ID-JAG
+        :return: a user, or *None*
+        """
+        if type(self).authenticate_user is IDJAGGrant.authenticate_user:
+            raise NotImplementedError()
+
+        return self.authenticate_user(claims["sub"])
+
     def authenticate_user(self, subject):
-        """Return the user identified by the ``sub`` claim, or *None*."""
+        """Deprecated. Implement :meth:`resolve_user` instead.
+
+        :param subject: the ``sub`` claim of the ID-JAG
+        """
         raise NotImplementedError()
 
     def check_jti(self, claims, jti) -> bool:
@@ -309,7 +415,14 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
         protection), *False* otherwise."""
         raise NotImplementedError()
 
-    def check_id_jag_permission(self, client, user, scopes) -> bool:
+    def check_id_jag_permission(self, client, user, scopes, claims) -> bool:
         """Application policy: return *True* if *client* may act on
-        behalf of *user* for *scopes*."""
+        behalf of *user* for *scopes*.
+
+        :param client: the authenticated client
+        :param user: the user returned by :meth:`resolve_user`
+        :param scopes: the scopes of the access token
+        :param claims: the verified claims of the ID-JAG, for a policy that
+            depends on the issuer or the tenant
+        """
         raise NotImplementedError()

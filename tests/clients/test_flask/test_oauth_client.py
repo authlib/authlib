@@ -14,6 +14,7 @@ from authlib.integrations.flask_client import FlaskOAuth2App
 from authlib.integrations.flask_client import OAuth
 from authlib.integrations.flask_client import OAuthError
 from authlib.oauth2.rfc6749.errors import MissingCodeException
+from authlib.oauth2.rfc7636 import create_s256_code_challenge
 from authlib.oidc.core.grants.util import create_half_hash
 from tests.util import HMAC_SECRET
 
@@ -105,6 +106,94 @@ def test_create_client():
     assert oauth.create_client("dev") is None
     oauth.register("dev", client_id="dev")
     assert oauth.create_client("dev") is not None
+
+
+def test_register_again():
+    """Registering a name again replaces the remote application."""
+    app = Flask(__name__)
+    oauth = OAuth(app)
+    oauth.register("dev", client_id="dev-1")
+    assert oauth.dev.client_id == "dev-1"
+
+    client = oauth.register("dev", client_id="dev-2")
+    assert client.client_id == "dev-2"
+    assert oauth.dev.client_id == "dev-2"
+    assert oauth.create_client("dev").client_id == "dev-2"
+
+
+def test_register_again_before_init_app():
+    """Registering a name again before init_app replaces the remote application."""
+    oauth = OAuth()
+    oauth.register("dev", client_id="dev-1")
+    remote = oauth.register("dev", client_id="dev-2")
+    oauth.init_app(Flask(__name__))
+    assert remote.client_id == "dev-2"
+
+
+def test_remove_client():
+    """A removed remote application is no longer available."""
+    app = Flask(__name__)
+    oauth = OAuth(app)
+    oauth.register("dev", client_id="dev")
+    assert oauth.dev.client_id == "dev"
+
+    oauth.remove_client("dev")
+    assert oauth.create_client("dev") is None
+    with pytest.raises(AttributeError):
+        oauth.dev  # noqa:B018
+
+    with pytest.raises(KeyError):
+        oauth.remove_client("dev")
+
+
+def test_remove_client_before_init_app():
+    """A remote application can be removed before it is created."""
+    oauth = OAuth()
+    oauth.register("dev", client_id="dev")
+    oauth.remove_client("dev")
+    oauth.init_app(Flask(__name__))
+    assert oauth.create_client("dev") is None
+
+
+def test_custom_client_config_is_not_shared():
+    """Registering a custom client class does not change its OAUTH_APP_CONFIG."""
+
+    class CustomRemoteApp(FlaskOAuth2App):
+        OAUTH_APP_CONFIG = {"authorize_url": "https://provider.test/custom"}
+
+    app = Flask(__name__)
+    oauth = OAuth(app)
+    oauth.register("dev-1", client_id="dev-1", client_cls=CustomRemoteApp)
+    oauth.register("dev-2", client_id="dev-2", client_cls=CustomRemoteApp)
+    assert CustomRemoteApp.OAUTH_APP_CONFIG == {
+        "authorize_url": "https://provider.test/custom"
+    }
+    assert oauth.create_client("dev-1").client_id == "dev-1"
+
+    client = oauth.register("dev-1", client_id="dev-3", client_cls=CustomRemoteApp)
+    assert isinstance(client, CustomRemoteApp)
+    assert client.client_id == "dev-3"
+
+
+def test_overwrite_does_not_change_registered_dicts():
+    """Framework config does not change the dicts given to register."""
+
+    class CustomRemoteApp(FlaskOAuth2App):
+        OAUTH_APP_CONFIG = {"authorize_params": {"foo": "class"}}
+
+    app = Flask(__name__)
+    app.config["DEV_AUTHORIZE_PARAMS"] = {"foo": "config"}
+    oauth = OAuth(app)
+    access_token_params = {"foo": "register"}
+    oauth.register(
+        "dev",
+        overwrite=True,
+        client_cls=CustomRemoteApp,
+        access_token_params=access_token_params,
+    )
+    assert oauth.dev.authorize_params == {"foo": "config"}
+    assert CustomRemoteApp.OAUTH_APP_CONFIG["authorize_params"] == {"foo": "class"}
+    assert access_token_params == {"foo": "register"}
 
 
 def test_register_oauth1_remote_app():
@@ -251,6 +340,29 @@ def test_oauth2_authorize_cache():
         assert client.token is None
 
 
+class StrictCache(SimpleCache):
+    def delete(self, key):
+        raise ValueError(f"Invalid cache key: {key!r}")
+
+
+def test_oauth2_authorize_unknown_state_with_cache():
+    """An unknown state is refused, and never reaches the cache."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app, cache=StrictCache())
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        access_token_url="https://provider.test/token",
+        authorize_url="https://provider.test/authorize",
+    )
+
+    with app.test_request_context(path="/?code=a&state=a%20b"):
+        with pytest.raises(OAuthError, match="mismatching_state"):
+            client.authorize_access_token()
+
+
 def test_oauth2_authorize_session():
     app = Flask(__name__)
     app.secret_key = "!"
@@ -367,6 +479,45 @@ def test_oauth2_fetch_metadata():
         assert send.call_count == 2
 
 
+def test_oauth2_client_kwargs_headers():
+    """The client_kwargs headers are sent with the server metadata, JWKS and
+    token requests."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+        client_kwargs={"headers": {"X-Api-Key": "secret"}},
+    )
+    sent = []
+
+    def fake_send(sess, req, **kwargs):
+        sent.append(req)
+        if req.url.endswith("/openid-configuration"):
+            return mock_send_value(
+                {
+                    "token_endpoint": "https://provider.test/token",
+                    "jwks_uri": "https://provider.test/jwks",
+                }
+            )
+
+        if req.url.endswith("/jwks"):
+            return mock_send_value({"keys": []})
+
+        return mock_send_value(get_bearer_token())
+
+    with mock.patch("requests.sessions.Session.send", fake_send):
+        client.fetch_jwk_set()
+        client.fetch_access_token(code="a")
+
+    assert len(sent) == 3
+    assert all(req.headers["X-Api-Key"] == "secret" for req in sent)
+    assert all(req.headers["User-Agent"] == client._user_agent for req in sent)
+
+
 def test_oauth2_authorize_with_metadata():
     app = Flask(__name__)
     app.secret_key = "!"
@@ -399,7 +550,85 @@ def test_oauth2_authorize_with_metadata():
             assert resp.status_code == 302
 
 
-def test_oauth2_authorize_code_challenge():
+def test_oauth2_metadata_does_not_configure_client():
+    """The fetched server metadata does not change the client settings."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        api_base_url="https://resource.test/api",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+        client_kwargs={"scope": "openid", "verify": "/ca.pem"},
+    )
+    metadata = {
+        "authorization_endpoint": "https://provider.test/authorize",
+        "client_id": "other",
+        "scope": "admin",
+        "hooks": {"key": True},
+        "verify": False,
+    }
+
+    def fake_send(sess, req, **kwargs):
+        if req.url == "https://provider.test/.well-known/openid-configuration":
+            return mock_send_value(metadata)
+
+        assert kwargs["verify"] == "/ca.pem"
+        return mock_send_value({"sub": "123"})
+
+    with app.test_request_context():
+        with mock.patch("requests.sessions.Session.send", fake_send):
+            rv = client.create_authorization_url("https://client.test/callback")
+            resp = client.get("user", token=get_bearer_token())
+
+    params = dict(url_decode(urlparse.urlparse(rv["url"]).query))
+    assert params["client_id"] == "dev"
+    assert params["scope"] == "openid"
+    assert resp.json() == {"sub": "123"}
+    assert client.server_metadata["scope"] == "admin"
+
+
+def test_oauth2_refresh_token_with_metadata_token_endpoint():
+    """An expired token is refreshed at the token endpoint of the metadata."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        api_base_url="https://resource.test/api",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+    expired_token = {
+        "token_type": "Bearer",
+        "access_token": "expired-a",
+        "refresh_token": "expired-b",
+        "expires_at": 1566465749,
+    }
+    urls = []
+
+    def fake_send(sess, req, **kwargs):
+        urls.append(req.url)
+        if req.url == "https://provider.test/.well-known/openid-configuration":
+            return mock_send_value({"token_endpoint": "https://provider.test/token"})
+
+        if req.url == "https://provider.test/token":
+            return mock_send_value(get_bearer_token())
+
+        return mock_send_value({"sub": "123"})
+
+    with app.test_request_context():
+        with mock.patch("requests.sessions.Session.send", fake_send):
+            client.get("user", token=expired_token)
+
+    assert urls[1] == "https://provider.test/token"
+
+
+@pytest.mark.parametrize("method", ["S256", "plain"])
+def test_oauth2_authorize_code_challenge(method):
     app = Flask(__name__)
     app.secret_key = "!"
     oauth = OAuth(app)
@@ -409,22 +638,26 @@ def test_oauth2_authorize_code_challenge():
         api_base_url="https://resource.test/api",
         access_token_url="https://provider.test/token",
         authorize_url="https://provider.test/authorize",
-        client_kwargs={"code_challenge_method": "S256"},
+        client_kwargs={"code_challenge_method": method},
     )
 
     with app.test_request_context():
         resp = client.authorize_redirect("https://client.test/callback")
         assert resp.status_code == 302
         url = resp.headers.get("Location")
-        assert "code_challenge=" in url
-        assert "code_challenge_method=S256" in url
+        params = dict(url_decode(urlparse.urlparse(url).query))
+        assert params["code_challenge_method"] == method
 
-        state = dict(url_decode(urlparse.urlparse(url).query))["state"]
+        state = params["state"]
         assert state is not None
         data = session[f"_state_dev_{state}"]
 
         verifier = data["data"]["code_verifier"]
         assert verifier is not None
+        if method == "plain":
+            assert params["code_challenge"] == verifier
+        else:
+            assert params["code_challenge"] == create_s256_code_challenge(verifier)
 
     def fake_send(sess, req, **kwargs):
         assert f"code_verifier={verifier}" in req.body
@@ -454,6 +687,7 @@ def test_openid_authorize():
         authorize_url="https://provider.test/authorize",
         client_kwargs={"scope": "openid profile"},
         jwks={"keys": [key.as_dict()]},
+        id_token_signing_alg_values_supported=["HS256"],
     )
 
     with app.test_request_context():
@@ -513,6 +747,34 @@ def test_oauth2_access_token_with_post():
             send.return_value = mock_send_value(get_bearer_token())
             token = client.authorize_access_token()
             assert token["access_token"] == "a"
+
+
+def test_oauth2_access_denied_with_post():
+    """An error response sent with form_post raises an OAuthError."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        access_token_url="https://provider.test/token",
+        authorize_url="https://provider.test/authorize",
+    )
+    payload = {
+        "error": "access_denied",
+        "error_description": "Not Allowed",
+        "error_uri": "https://provider.test/help",
+    }
+    with app.test_request_context(data=payload, method="POST"):
+        with mock.patch("requests.sessions.Session.send") as send:
+            with pytest.raises(OAuthError) as exc_info:
+                client.authorize_access_token()
+
+            assert exc_info.value.error == "access_denied"
+            assert exc_info.value.description == "Not Allowed"
+            assert exc_info.value.uri == "https://provider.test/help"
+            send.assert_not_called()
 
 
 def test_access_token_with_fetch_token():
@@ -590,6 +852,58 @@ def test_request_with_refresh_token():
         with mock.patch("requests.sessions.Session.send", fake_send):
             resp = client.get("/api/user", token=expired_token)
             assert resp.text == "hi"
+
+
+def test_request_with_expired_token_sends_access_token_params():
+    """A new token fetched on expiry is requested with access_token_params."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        api_base_url="https://resource.test/api",
+        access_token_url="https://provider.test/token",
+        access_token_params={"audience": "api"},
+        client_kwargs={"grant_type": "client_credentials"},
+    )
+    expired_token = {
+        "token_type": "Bearer",
+        "access_token": "expired",
+        "expires_at": 1566465749,
+    }
+    bodies = []
+
+    def fake_send(sess, req, **kwargs):
+        bodies.append(req.body)
+        resp = mock.MagicMock()
+        resp.json = get_bearer_token
+        resp.status_code = 200
+        return resp
+
+    with app.test_request_context():
+        with mock.patch("requests.sessions.Session.send", fake_send):
+            client.get("/api/user", token=expired_token)
+
+    assert "audience=api" in bodies[0]
+
+
+def test_client_kwargs_access_token_params():
+    """The access_token_params of client_kwargs are kept."""
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        client_kwargs={"access_token_params": {"audience": "api"}},
+    )
+
+    session = client._get_oauth_client()
+
+    assert session.access_token_params == {"audience": "api"}
 
 
 def test_request_without_token():

@@ -62,7 +62,9 @@ key
 
 A private key is required to generate JWT. The key that you are going to use
 dependents on the ``alg`` you are using. For instance, the alg is ``RS256``,
-you need to use an RSA private key. It can be set with::
+you need to use an RSA private key. It can be set with:
+
+.. code-block:: python
 
     key = '''-----BEGIN RSA PRIVATE KEY-----\nMIIEog...'''
 
@@ -73,10 +75,11 @@ iss
 ~~~
 
 The ``iss`` value in JWT payload. The value can be your website name or URL.
-For example, Google is using::
+For example, Google is using:
+
+.. code-block:: json
 
     {"iss": "https://accounts.google.com"}
-
 
 Code Flow
 ---------
@@ -84,7 +87,12 @@ Code Flow
 OpenID Connect authorization code flow relies on the OAuth2 authorization code
 flow and extends it. In OpenID Connect, there will be a ``nonce`` parameter in
 request, we need to save it into database for later use. In this case, we have
-to rewrite our ``AuthorizationCode`` db model::
+to rewrite our ``AuthorizationCode`` db model with the OpenID Connect
+:class:`~authlib.oidc.core.AuthorizationCodeMixin`:
+
+.. code-block:: python
+
+    from authlib.oidc.core import AuthorizationCodeMixin
 
     class AuthorizationCode(Model, AuthorizationCodeMixin):
         user = ForeignKey(User, on_delete=CASCADE)
@@ -93,10 +101,17 @@ to rewrite our ``AuthorizationCode`` db model::
         redirect_uri = TextField(default='', null=True)
         response_type = TextField(default='')
         scope = TextField(default='', null=True)
-        auth_time = IntegerField(null=False, default=now_timestamp)
+        issued_at = IntegerField(null=False, default=now_timestamp)
 
-        # add nonce
+        # add nonce and auth_time
         nonce = CharField(max_length=120, default='', null=True)
+        auth_time = IntegerField(null=True)
+
+        def get_nonce(self):
+            return self.nonce
+
+        def get_auth_time(self):
+            return self.auth_time
 
         # ... other fields and methods ...
 
@@ -104,7 +119,9 @@ OpenID Connect Code flow is the same as Authorization Code flow, but with
 extended features. We can apply the :class:`OpenIDCode` extension to
 ``AuthorizationCodeGrant``.
 
-First, we need to implement the missing methods for ``OpenIDCode``::
+First, we need to implement the missing methods for ``OpenIDCode``:
+
+.. code-block:: python
 
     from joserfc.jwk import KeySet
     from authlib.oidc.core import grants, UserInfo
@@ -132,32 +149,39 @@ First, we need to implement the missing methods for ``OpenIDCode``::
         def generate_user_info(self, user, scope):
             return UserInfo(
                 sub=str(user.pk),
-                name=user.name,
+                name=user.get_full_name(),
                 email=user.email,
             ).filter(scope)
 
-Second, since there is one more ``nonce`` value in ``AuthorizationCode`` data,
-we need to save this value into database. In this case, we have to update our
-``AuthorizationCodeGrant.save_authorization_code`` method::
+Second, the ``AuthorizationCode`` data has two more values: the ``nonce``
+parameter, and the time of the user authentication. ``OpenIDCode`` sets this
+time in ``request.auth_time``, from the authorization session (see
+:ref:`django_oidc_max_age`). It becomes the
+``auth_time`` claim of the ID token. Save these values in the
+``AuthorizationCodeGrant.save_authorization_code`` method:
+
+.. code-block:: python
 
     class AuthorizationCodeGrant(_AuthorizationCodeGrant):
         def save_authorization_code(self, code, request):
-            # openid request MAY have "nonce" parameter
             nonce = request.payload.data.get('nonce')
             client = request.client
             auth_code = AuthorizationCode(
                 code=code,
                 client_id=client.client_id,
-                redirect_uri=request.redirect_uri,
+                redirect_uri=request.payload.redirect_uri,
                 scope=request.scope,
                 user=request.user,
                 nonce=nonce,
+                auth_time=request.auth_time,
             )
             auth_code.save()
             return auth_code
 
 Finally, you can register ``AuthorizationCodeGrant`` with ``OpenIDCode``
-extension::
+extension:
+
+.. code-block:: python
 
     # register it to grant endpoint
     server.register_grant(AuthorizationCodeGrant, [OpenIDCode(require_nonce=True)])
@@ -182,13 +206,18 @@ Now that you added the ``openid`` scope to your application, an OpenID token
 will be provided to this app whenever a client asks for a token with an
 ``openid`` scope.
 
-
 Implicit Flow
 -------------
 
 The Implicit Flow is mainly used by Clients implemented in a browser using
 a scripting language. You need to implement the missing methods of
-:class:`OpenIDImplicitGrant` before register it::
+:class:`OpenIDImplicitGrant` before register it.
+
+Per OpenID Connect Core 1.0 §2, the authorization server should not process the
+nonce, other than putting it in the ID token. The client checks it. This
+example accepts every nonce:
+
+.. code-block:: python
 
     from joserfc.jwk import KeySet
     from authlib.oidc.core import grants
@@ -205,23 +234,16 @@ a scripting language. You need to implement the missing methods of
             }
 
         def exists_nonce(self, nonce, request):
-            try:
-                AuthorizationCode.objects.get(
-                    client_id=request.payload.client_id, nonce=nonce)
-                )
-                return True
-            except AuthorizationCode.DoesNotExist:
-                return False
+            return False
 
         def generate_user_info(self, user, scope):
             return UserInfo(
                 sub=str(user.pk),
-                name=user.name,
+                name=user.get_full_name(),
                 email=user.email,
             ).filter(scope)
 
     server.register_grant(OpenIDImplicitGrant)
-
 
 Hybrid Flow
 ------------
@@ -232,7 +254,9 @@ by Authorization Code Flow.
 
 OpenIDHybridGrant is a subclass of OpenIDImplicitGrant, so the missing methods
 are the same, except that OpenIDHybridGrant has one more missing method, that
-is ``save_authorization_code``. You can implement it like this::
+is ``save_authorization_code``. You can implement it like this:
+
+.. code-block:: python
 
     from joserfc.jwk import KeySet
     from authlib.oidc.core import grants
@@ -249,16 +273,16 @@ is ``save_authorization_code``. You can implement it like this::
             }
 
         def save_authorization_code(self, code, request):
-            # openid request MAY have "nonce" parameter
             nonce = request.payload.data.get('nonce')
             client = request.client
             auth_code = AuthorizationCode(
                 code=code,
                 client_id=client.client_id,
-                redirect_uri=request.redirect_uri,
+                redirect_uri=request.payload.redirect_uri,
                 scope=request.scope,
                 user=request.user,
                 nonce=nonce,
+                auth_time=request.auth_time,
             )
             auth_code.save()
             return auth_code
@@ -266,7 +290,7 @@ is ``save_authorization_code``. You can implement it like this::
         def exists_nonce(self, nonce, request):
             try:
                 AuthorizationCode.objects.get(
-                    client_id=request.payload.client_id, nonce=nonce)
+                    client_id=request.payload.client_id, nonce=nonce
                 )
                 return True
             except AuthorizationCode.DoesNotExist:
@@ -275,14 +299,75 @@ is ``save_authorization_code``. You can implement it like this::
         def generate_user_info(self, user, scope):
             return UserInfo(
                 sub=str(user.pk),
-                name=user.name,
+                name=user.get_full_name(),
                 email=user.email,
             ).filter(scope)
 
     # register it to grant endpoint
     server.register_grant(OpenIDHybridGrant)
 
+All OpenID Connect flows require ``exists_nonce``, ``resolve_client_private_key``,
+``get_client_claims`` and ``generate_user_info`` methods. You can create shared
+functions for ``resolve_client_private_key``, ``get_client_claims`` and
+``generate_user_info``.
 
-Since all OpenID Connect Flow require ``exists_nonce``, ``resolve_client_private_key``,
-``get_client_claims``, ``get_client_algorithm`` and ``generate_user_info`` methods,
-you can create shared functions for them.
+.. _django_oidc_max_age:
+
+Authorization Session
+---------------------
+
+A client can ask for a recent login with ``prompt=login`` or ``max_age``, or
+for a new consent with ``prompt=consent``. Authlib applies these rules with an
+:class:`~authlib.oauth2.AuthorizationSession`.
+:ref:`authorization_session` explains the rules and the pitfalls.
+
+Store the time of the login in the session:
+
+.. code-block:: python
+
+    import time
+    from django.contrib.auth import login
+
+    def login_view(request):
+        ...
+        login(request, user)
+        request.session["auth_time"] = int(time.time())
+
+Subclass the authorization session. It keeps the start time of the requests
+in the Django session. Give the time of the interactions, and tell if the
+user must give their consent:
+
+.. code-block:: python
+
+    from authlib.oauth2 import AuthorizationSession
+
+    class MyAuthorizationSession(AuthorizationSession):
+        def get_interaction_time(self, request, interaction):
+            if interaction == "login":
+                return self.session.get("auth_time")
+            if interaction == "consent":
+                consent = get_consent(self.user, request.client)
+                return consent.issued_at.timestamp() if consent else None
+            return None
+
+        def is_consent_needed(self, request):
+            consent = get_consent(self.user, request.client)
+            return consent is None or not consent.covers(request.scope)
+
+Pass it to ``get_consent_grant``. When the user must go through an
+interaction, such as a login, it is in ``grant.interactions``, and
+``grant.prompt`` is the first of them:
+
+.. code-block:: python
+
+    def authorize(request):
+        user = request.user if request.user.is_authenticated else None
+        authorization_session = MyAuthorizationSession(user, request.session)
+        try:
+            grant = server.get_consent_grant(request, session=authorization_session)
+        except OAuth2Error as error:
+            return server.handle_error_response(request, error)
+
+        if request.method == "GET" and "login" in grant.interactions:
+            return redirect_to_login(request.get_full_path())
+        ...

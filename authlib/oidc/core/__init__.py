@@ -19,11 +19,13 @@ from .grants import OpenIDHybridGrant
 from .grants import OpenIDImplicitGrant
 from .grants import OpenIDToken
 from .models import AuthorizationCodeMixin
+from .models import AuthorizationSessionMixin
 from .userinfo import UserInfoEndpoint
 
 __all__ = [
     "OpenIDJWTAuthenticationRequest",
     "AuthorizationCodeMixin",
+    "AuthorizationSessionMixin",
     "IDToken",
     "CodeIDToken",
     "ImplicitIDToken",

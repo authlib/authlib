@@ -10,10 +10,19 @@ from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core import SignedUserInfo
 from authlib.oidc.core import UserInfo
 
+from .sync_openid import _get_claims_options
+from .sync_openid import _get_id_token_algorithms
+from .sync_openid import _may_refresh_jwk_set
+
 __all__ = ["AsyncOpenIDMixin"]
 
 
 class AsyncOpenIDMixin:
+    #: Minimum number of seconds between two fetches of the JWK set caused by
+    #: an ID token with an unknown ``kid``.
+    jwks_refresh_interval = 60
+    _jwk_set_refreshed_at = None
+
     async def fetch_jwk_set(self, force=False):
         metadata = await self.load_server_metadata()
         jwk_set = metadata.get("jwks")
@@ -109,12 +118,8 @@ class AsyncOpenIDMixin:
                 claims_cls = ImplicitIDToken
 
         metadata = await self.load_server_metadata()
-        if claims_options is None and "issuer" in metadata:
-            claims_options = {"iss": {"values": [metadata["issuer"]]}}
-
-        alg_values = metadata.get("id_token_signing_alg_values_supported")
-        if not alg_values:
-            alg_values = ["RS256"]
+        claims_options = _get_claims_options(claims_options, metadata)
+        alg_values = _get_id_token_algorithms(metadata)
 
         jwks = await self.fetch_jwk_set()
         key_set = KeySet.import_key_set(jwks)
@@ -125,6 +130,9 @@ class AsyncOpenIDMixin:
                 registry=JWSRegistry(algorithms=alg_values, strict_check_header=False),
             )
         except InvalidKeyIdError:
+            if metadata.get("jwks_uri") and not _may_refresh_jwk_set(self):
+                raise
+
             jwks = await self.fetch_jwk_set(force=True)
             key_set = KeySet.import_key_set(jwks)
             token = jwt.decode(

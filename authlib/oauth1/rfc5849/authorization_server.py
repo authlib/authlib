@@ -108,7 +108,7 @@ class AuthorizationServer(BaseServer):
         payload = [
             ("oauth_token", credential.get_oauth_token()),
             ("oauth_token_secret", credential.get_oauth_token_secret()),
-            ("oauth_callback_confirmed", True),
+            ("oauth_callback_confirmed", "true"),
         ]
         return self.handle_response(200, payload, self.TOKEN_RESPONSE_HEADER)
 

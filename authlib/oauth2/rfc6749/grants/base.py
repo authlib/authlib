@@ -1,9 +1,17 @@
-from authlib.consts import default_json_headers
+import hashlib
+import json
 
+from authlib.common.hooks import Hookable
+from authlib.consts import default_json_headers
+from authlib.deprecate import deprecate
+
+from ..authenticate_client import _validate_client
 from ..errors import InvalidRequestError
-from ..hooks import Hookable
-from ..hooks import hooked
+from ..errors import InvalidScopeError
 from ..requests import OAuth2Request
+from ..util import normalize_response_type
+
+_UNSET = object()
 
 
 class BaseGrant(Hookable):
@@ -21,7 +29,19 @@ class BaseGrant(Hookable):
 
     def __init__(self, request: OAuth2Request, server):
         super().__init__()
-        self.prompt = None
+        #: The interactions the user must go through before the
+        #: authorization response, in order, such as ``"login"`` or
+        #: ``"consent"``. Extensions add theirs while the request is validated.
+        self.interactions = []
+        #: The :class:`~authlib.oauth2.rfc6749.AuthorizationSessionMixin`
+        #: passed to ``get_consent_grant``, or ``None``.
+        self.authorization_session = None
+        #: Whether the request must be done without any user interaction,
+        #: such as with the OpenID Connect ``prompt=none``. Its errors are
+        #: then redirected even if the user is not logged in.
+        self.silent = False
+        self._deferred_error = None
+        self._prompt = _UNSET
         self.redirect_uri = None
         self.request = request
         self.server = server
@@ -29,6 +49,23 @@ class BaseGrant(Hookable):
     @property
     def client(self):
         return self.request.client
+
+    @property
+    def prompt(self):
+        """The first of the :attr:`interactions`, or ``None``."""
+        if self._prompt is not _UNSET:
+            return self._prompt
+
+        return self.interactions[0] if self.interactions else None
+
+    @prompt.setter
+    def prompt(self, value):
+        deprecate(
+            "Setting 'grant.prompt' is deprecated. Read 'grant.interactions' "
+            "instead, and keep your own values in your own attributes.",
+            version="1.11",
+        )
+        self._prompt = value
 
     def generate_token(
         self,
@@ -85,7 +122,7 @@ class BaseGrant(Hookable):
         return self.server.validate_requested_scope(scope)
 
 
-class TokenEndpointMixin:
+class TokenEndpointMixin(Hookable):
     #: Allowed HTTP methods of this token endpoint
     TOKEN_ENDPOINT_HTTP_METHODS = ["POST"]
 
@@ -106,13 +143,59 @@ class TokenEndpointMixin:
         raise NotImplementedError()
 
 
-class AuthorizationEndpointMixin:
+class AuthorizationEndpointMixin(Hookable):
     RESPONSE_TYPES = set()
     ERROR_RESPONSE_FRAGMENT = False
 
+    #: Where the authorization response parameters are added to the redirect
+    #: URI. Per RFC 6749 §4.1.2, the authorization code goes in the query.
+    RESPONSE_MODE = "query"
+
+    #: The response mode chosen for this request, if it differs from
+    #: ``RESPONSE_MODE``. Errors use it too.
+    response_mode = None
+
+    #: The authorization request parameters of this grant, with their JSON
+    #: types. Per RFC 6749 §4.1.1 and §4.2.1.
+    AUTHORIZATION_PARAMETERS = {
+        "response_type": str,
+        "client_id": str,
+        "redirect_uri": str,
+        "scope": str,
+        "state": str,
+    }
+
+    _extension_authorization_parameters = {}
+
+    @property
+    def authorization_parameters(self):
+        """The authorization request parameters of this grant, of its
+        extensions and of the server extensions, with their JSON types."""
+        return {
+            **self.server.authorization_parameters,
+            **self.AUTHORIZATION_PARAMETERS,
+            **self._extension_authorization_parameters,
+        }
+
+    def register_authorization_parameters(self, parameters):
+        """Add authorization request parameters to this grant. A grant
+        extension calls it with the parameters it introduces::
+
+            grant.register_authorization_parameters({"code_challenge": str})
+
+        :param parameters: a dict of parameter names and JSON types
+        """
+        self._extension_authorization_parameters = {
+            **self._extension_authorization_parameters,
+            **parameters,
+        }
+
     @classmethod
     def check_authorization_endpoint(cls, request: OAuth2Request):
-        return request.payload.response_type in cls.RESPONSE_TYPES
+        return normalize_response_type(request.payload.response_type) in {
+            normalize_response_type(response_type)
+            for response_type in cls.RESPONSE_TYPES
+        }
 
     @staticmethod
     def validate_authorization_redirect_uri(request: OAuth2Request, client):
@@ -130,27 +213,99 @@ class AuthorizationEndpointMixin:
                 )
             return redirect_uri
 
-    @staticmethod
-    def validate_no_multiple_request_parameter(request: OAuth2Request):
+    def query_authorization_client(self):
+        """Return the client of the authorization request.
+
+        Per RFC 6749 §3.2.1, the client authenticates at the token endpoint,
+        not at the authorization endpoint. Its ``token_endpoint_auth_method``
+        does not matter here.
+
+        :raises InvalidClientError: if ``client_id`` is missing or unknown
+        """
+        return _validate_client(
+            self.server.query_client, self.request.payload.client_id
+        )
+
+    def validate_no_multiple_request_parameter(self, request: OAuth2Request):
         """For the Authorization Endpoint, request and response parameters MUST NOT be included
         more than once. Per :rfc:`6749#section-3.1`.
-        """
-        datalist = request.payload.datalist
-        parameters = ["response_type", "client_id", "redirect_uri", "scope", "state"]
-        for param in parameters:
-            if len(datalist.get(param, [])) > 1:
-                raise InvalidRequestError(
-                    f"Multiple '{param}' in request.", state=request.payload.state
-                )
 
-    @hooked
+        It checks the parameters in :attr:`authorization_parameters`.
+        """
+        validate_no_repeated_parameter(request, self.authorization_parameters)
+
+    def get_authorization_key(self):
+        """Return a hash of the authorization request parameters.
+
+        It is the same for all the HTTP requests of one authorization
+        request, for instance before and after a login. The parameters that
+        are not in :attr:`authorization_parameters`, such as the fields of a
+        consent form, do not change it.
+        """
+        data = self.request.payload.data
+        parameters = {
+            name: data[name] for name in self.authorization_parameters if name in data
+        }
+        message = json.dumps(parameters, sort_keys=True)
+        return hashlib.sha256(message.encode()).hexdigest()
+
+    def validate_authorization_request_payload(self, redirect_uri):
+        """Validate the requested scope of an authorization request."""
+        self.validate_requested_scope()
+        scope = self.request.client.get_allowed_scope(self.request.payload.scope)
+        if scope is None:
+            raise InvalidScopeError()
+        self.request.scope = scope
+
     def validate_consent_request(self):
         redirect_uri = self.validate_authorization_request()
         self.redirect_uri = redirect_uri
         return redirect_uri
+
+    def validate_interactions(self):
+        """Check the :attr:`interactions` of the request.
+
+        It runs after :meth:`validate_consent_request`, once the extensions
+        have added their interactions. It adds ``"login"`` when the user is
+        not logged in, unless the request is :attr:`silent`. It adds
+        ``"consent"`` when the authorization session says that the user must
+        give their consent. Extensions can also check the interactions here.
+        """
+        if (
+            not self.request.user
+            and not self.silent
+            and "login" not in self.interactions
+        ):
+            index = 1 if self.interactions[:1] == ["create"] else 0
+            self.interactions.insert(index, "login")
+
+        session = self.authorization_session
+        if (
+            session is not None
+            and self.request.user
+            and "consent" not in self.interactions
+            and session.is_consent_needed(self.request)
+        ):
+            self.interactions.append("consent")
 
     def validate_authorization_request(self):
         raise NotImplementedError()
 
     def create_authorization_response(self, redirect_uri: str, grant_user):
         raise NotImplementedError()
+
+
+def validate_no_repeated_parameter(request: OAuth2Request, parameters):
+    """Check that the request does not repeat one of the parameters.
+    Per :rfc:`6749#section-3.1`.
+
+    :param request: the authorization request
+    :param parameters: the names of the parameters to check
+    :raises InvalidRequestError: if a parameter is repeated
+    """
+    datalist = request.payload.datalist
+    for param in parameters:
+        if len(datalist.get(param, [])) > 1:
+            raise InvalidRequestError(
+                f"Multiple '{param}' in request.", state=request.payload.state
+            )

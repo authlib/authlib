@@ -7,6 +7,7 @@ from authlib.common.encoding import to_unicode
 from authlib.common.encoding import urlsafe_b64encode
 from authlib.jose.errors import DecodeError
 from authlib.jose.errors import InvalidAlgorithmForMultipleRecipientsMode
+from authlib.jose.errors import InvalidCritHeaderParameterNameError
 from authlib.jose.errors import InvalidHeaderParameterNameError
 from authlib.jose.errors import KeyMismatchError
 from authlib.jose.errors import MissingAlgorithmError
@@ -93,6 +94,7 @@ class JsonWebEncryption:
 
         self._validate_sender_key(sender_key, alg)
         self._validate_private_headers(protected, alg)
+        self._validate_crit_headers(protected, alg)
 
         key = prepare_key(alg, protected, key)
         if sender_key is not None:
@@ -301,6 +303,8 @@ class JsonWebEncryption:
         for recipient in recipients:
             self._validate_private_headers(recipient["header"], alg)
 
+        self._validate_json_crit_headers(shared_header, recipients, alg)
+
         for i in range(len(keys)):
             keys[i] = prepare_key(alg, recipients[i]["header"], keys[i])
         if sender_key is not None:
@@ -474,6 +478,7 @@ class JsonWebEncryption:
 
         self._validate_sender_key(sender_key, alg)
         self._validate_private_headers(protected, alg)
+        self._validate_crit_headers(protected, alg)
 
         if isinstance(key, tuple) and len(key) == 2:
             # Ignore separately provided kid, extract essentially key only
@@ -564,6 +569,8 @@ class JsonWebEncryption:
         self._validate_private_headers(shared_header, alg)
         for recipient in recipients:
             self._validate_private_headers(recipient["header"], alg)
+
+        self._validate_json_crit_headers(shared_header, recipients, alg)
 
         kid = None
         if isinstance(key, tuple) and len(key) == 2:
@@ -742,21 +749,57 @@ class JsonWebEncryption:
                     f"{alg.name} algorithm does not use sender_key but passed sender_key value is not None"
                 )
 
+    def _header_names(self, alg):
+        """Return the header parameter names this instance understands."""
+        names = self.REGISTERED_HEADER_PARAMETER_NAMES.copy()
+        if self._private_headers:
+            names = names.union(self._private_headers)
+
+        if alg.EXTRA_HEADERS:
+            names = names.union(alg.EXTRA_HEADERS)
+
+        return names
+
     def _validate_private_headers(self, header, alg):
         # only validate private headers when developers set
         # private headers explicitly
         if self._private_headers is None:
             return
 
-        names = self.REGISTERED_HEADER_PARAMETER_NAMES.copy()
-        names = names.union(self._private_headers)
-
-        if alg.EXTRA_HEADERS:
-            names = names.union(alg.EXTRA_HEADERS)
-
+        names = self._header_names(alg)
         for k in header:
             if k not in names:
                 raise InvalidHeaderParameterNameError(k)
+
+    def _validate_crit_headers(self, header, alg):
+        """Reject 'crit' when it lists a header parameter that is not understood."""
+        if "crit" not in header:
+            return
+
+        crit_headers = header["crit"]
+        if not isinstance(crit_headers, list) or not all(
+            isinstance(x, str) for x in crit_headers
+        ):
+            raise InvalidHeaderParameterNameError("crit")
+
+        # Per RFC 7516 §4.1.13, the recipient MUST reject the JWE when it
+        # does not understand a header parameter listed in crit.
+        names = self._header_names(alg)
+        for k in crit_headers:
+            if k not in names:
+                raise InvalidCritHeaderParameterNameError(k)
+
+    def _validate_json_crit_headers(self, shared_header, recipients, alg):
+        """Validate 'crit' in a JWE JSON Serialization."""
+        # Per RFC 7516 §4.1.13 and RFC 7515 §4.1.11, crit MUST occur only
+        # in the protected header.
+        unprotected_headers = [shared_header.unprotected]
+        unprotected_headers += [recipient["header"] for recipient in recipients]
+        for header in unprotected_headers:
+            if "crit" in header:
+                raise InvalidHeaderParameterNameError("crit")
+
+        self._validate_crit_headers(shared_header.protected, alg)
 
 
 def prepare_key(alg, header, key):

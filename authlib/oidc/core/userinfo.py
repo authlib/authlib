@@ -2,10 +2,12 @@ from joserfc import jwt
 from joserfc.jws import JWSRegistry
 
 from authlib._joserfc_helpers import import_any_key
-from authlib.consts import default_json_headers
 from authlib.oauth2.rfc6749.authorization_server import AuthorizationServer
 from authlib.oauth2.rfc6749.authorization_server import OAuth2Request
 from authlib.oauth2.rfc6749.resource_protector import ResourceProtector
+from authlib.oauth2.rfc6749.responses import JsonResponse
+from authlib.oauth2.rfc6749.responses import OAuth2Response
+from authlib.oauth2.rfc6750.errors import InvalidTokenError
 
 from .claims import UserInfo
 
@@ -46,6 +48,13 @@ class UserInfoEndpoint:
         def userinfo():
             return server.create_endpoint_response("userinfo")
 
+    Some clients send the access token in the request body instead of the
+    ``Authorization`` header. To accept them, register
+    :class:`~authlib.oauth2.rfc6750.FormEncodedBodyToken` on the resource
+    protector::
+
+        resource_protector.register_extension(FormEncodedBodyToken())
+
     """
 
     ENDPOINT_NAME = "userinfo"
@@ -63,9 +72,15 @@ class UserInfoEndpoint:
 
     def __call__(self, request: OAuth2Request):
         token = self.resource_protector.acquire_token("openid")
-        client = token.get_client()
-        user = token.get_user()
-        user_info = self.generate_user_info(user, token.scope)
+        client = self.get_token_client(token)
+        if client is None:
+            raise InvalidTokenError()
+
+        user = self.get_token_user(token)
+        if user is None:
+            raise InvalidTokenError()
+
+        user_info = self.generate_user_info(user, token.get_scope())
 
         if alg := client.client_metadata.get("userinfo_signed_response_alg"):
             # If signed, the UserInfo Response MUST contain the Claims iss
@@ -78,9 +93,42 @@ class UserInfoEndpoint:
             key = import_any_key(self.resolve_private_key())
             algorithms = self.get_supported_algorithms()
             data = jwt.encode({"alg": alg}, user_info, key, algorithms)
-            return 200, data, [("Content-Type", "application/jwt")]
+            return OAuth2Response(200, data, [("Content-Type", "application/jwt")])
 
-        return 200, user_info, default_json_headers
+        return JsonResponse(user_info)
+
+    def get_token_client(self, token):
+        """Return the client the access token was issued to.
+        By default, it calls ``token.get_client()``.
+        With :ref:`specs/rfc9068` JWT access tokens, developers must
+        re-implement this method::
+
+            def get_token_client(self, token):
+                return self.server.query_client(token["client_id"])
+
+        If it returns ``None``, the endpoint returns an ``invalid_token``
+        error.
+
+        :param token: The access token returned by the resource protector.
+        """
+        return token.get_client()
+
+    def get_token_user(self, token):
+        """Return the user the access token was issued for.
+        By default, it calls ``token.get_user()``.
+        With :ref:`specs/rfc9068` JWT access tokens, developers must
+        re-implement this method::
+
+            def get_token_user(self, token):
+                return User.get(token["sub"])
+
+        If it returns ``None``, for instance when the user was deleted, the
+        endpoint returns an ``invalid_token`` error. JWT access tokens stay
+        valid until they expire, so this is the way to deny access to a user.
+
+        :param token: The access token returned by the resource protector.
+        """
+        return token.get_user()
 
     def get_supported_algorithms(self) -> list[str]:
         """Return the supported algorithms for userinfo signing.

@@ -1,5 +1,7 @@
 import zlib
 
+from authlib.jose.errors import ExceededSizeError
+
 from ..rfc7516 import JsonWebEncryption
 from ..rfc7516 import JWEZipAlgorithm
 
@@ -26,7 +28,9 @@ class DeflateZipAlgorithm(JWEZipAlgorithm):
             decompressor = zlib.decompressobj(-zlib.MAX_WBITS)
         value = decompressor.decompress(s, MAX_SIZE)
         if decompressor.unconsumed_tail:
-            raise ValueError(f"Decompressed string exceeds {MAX_SIZE} bytes")
+            raise ExceededSizeError(
+                description=f"Decompressed string exceeds {MAX_SIZE} bytes"
+            )
         return value
 
 

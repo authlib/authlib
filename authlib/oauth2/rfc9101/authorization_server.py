@@ -4,6 +4,7 @@ from joserfc.errors import JoseError
 from joserfc.errors import UnsupportedAlgorithmError
 from joserfc.jws import JWSRegistry
 
+from authlib._joserfc_helpers import audience_matches
 from authlib._joserfc_helpers import import_any_key
 
 from ..rfc6749 import AuthorizationServer
@@ -16,6 +17,10 @@ from .errors import InvalidRequestObjectError
 from .errors import InvalidRequestUriError
 from .errors import RequestNotSupportedError
 from .errors import RequestUriNotSupportedError
+
+
+class _RequestObjectPayload(BasicOAuth2Payload):
+    """The authorization request parameters of a request object."""
 
 
 class JWTAuthenticationRequest:
@@ -61,8 +66,16 @@ class JWTAuthenticationRequest:
         self.support_request_uri = support_request_uri
 
     def __call__(self, authorization_server: AuthorizationServer):
+        authorization_server.register_authorization_parameters(
+            {"request": str, "request_uri": str}
+        )
         authorization_server.register_hook(
-            "before_get_authorization_grant", self.parse_authorization_request
+            self.parse_authorization_request,
+            before=AuthorizationServer.get_authorization_grant,
+        )
+        authorization_server.register_hook(
+            self.validate_grant_parameter_types,
+            after=AuthorizationServer.get_authorization_grant,
         )
 
     def get_request_object_signing_algorithms(self, client):
@@ -111,8 +124,26 @@ class JWTAuthenticationRequest:
         request_object = self._decode_request_object(
             request, client, raw_request_object
         )
-        payload = BasicOAuth2Payload(request_object.claims)
-        request.payload = payload
+        _validate_parameter_types(
+            request_object.claims,
+            authorization_server.authorization_parameters,
+            request.payload.state,
+        )
+        request.payload = _RequestObjectPayload(request_object.claims)
+
+    def validate_grant_parameter_types(self, authorization_server, grant):
+        """Check the JSON types of the request object parameters that the
+        grant and its extensions declare.
+
+        :param authorization_server: the authorization server
+        :param grant: the grant chosen for the authorization request
+        :raises InvalidRequestObjectError: if a parameter has an invalid type
+        """
+        payload = grant.request.payload
+        if isinstance(payload, _RequestObjectPayload):
+            _validate_parameter_types(
+                payload.data, grant.authorization_parameters, payload.state
+            )
 
     def _shoud_proceed_with_request_object(
         self,
@@ -178,7 +209,7 @@ class JWTAuthenticationRequest:
         jwks = self.resolve_client_public_key(client)
         key = import_any_key(jwks)
         algorithms = self.get_request_object_signing_algorithms(client)
-        metadata = self.get_server_metadata()
+        metadata = self.get_server_metadata() or {}
         if self.get_client_require_signed_request_object(client) or metadata.get(
             "require_signed_request_object", False
         ):
@@ -209,6 +240,17 @@ class JWTAuthenticationRequest:
             raise InvalidRequestError(
                 "The 'client_id' claim from the request parameters "
                 "and the request object claims don't match.",
+                state=request.payload.state,
+            )
+
+        # Per RFC 7519 §4.1.3, if the principal processing the claim does not
+        # identify itself with a value in the "aud" claim when this claim is
+        # present, then the JWT MUST be rejected.
+        if "aud" in request_object.claims and not audience_matches(
+            request_object.claims["aud"], self.get_audiences()
+        ):
+            raise InvalidRequestObjectError(
+                description="The 'aud' claim does not identify this server.",
                 state=request.payload.state,
             )
 
@@ -246,6 +288,11 @@ class JWTAuthenticationRequest:
         to approved public destinations, including the resolved IP addresses.
         Do not follow redirects. Limit response size and retrieval time, and
         check the response media type, as described in :rfc:`9101` Section 10.4.1.
+
+        The authorization view usually calls ``get_consent_grant`` twice, to
+        show the consent page and to handle the answer of the user. Each call
+        fetches the request object again, and the client can return a
+        different one the second time. See :ref:`jar-consent-retention`.
 
         The following example adds HTTP response safeguards. The application's
         HTTP transport or network policy must also block private destinations
@@ -321,6 +368,25 @@ class JWTAuthenticationRequest:
         """
         return {}  # pragma: no cover
 
+    def get_audiences(self) -> list[str]:
+        """Return the accepted values of the request object ``aud`` claim.
+
+        A request object with an ``aud`` claim is rejected when ``aud`` does not
+        contain one of these values. A request object without ``aud`` is
+        accepted. By default, it returns the ``issuer`` of
+        :meth:`get_server_metadata`, or an empty list when there is none.
+        Developers MAY re-implement it in subclass, for example to also accept
+        the authorization endpoint URL::
+
+            def get_audiences(self):
+                metadata = self.get_server_metadata()
+                return [metadata["issuer"], metadata["authorization_endpoint"]]
+
+        :return: list of strings
+        """
+        issuer = (self.get_server_metadata() or {}).get("issuer")
+        return [issuer] if issuer else []
+
     def get_client_require_signed_request_object(self, client: ClientMixin) -> bool:
         """Return the 'require_signed_request_object' client metadata.
 
@@ -335,3 +401,19 @@ class JWTAuthenticationRequest:
         If not implemented, the value is considered as :data:`False`.
         """
         return False  # pragma: no cover
+
+
+def _validate_parameter_types(claims, parameters, state):
+    """Check the JSON types of the request object parameters."""
+    # RFC 9101 §4: parameter names and string values MUST be included as
+    # JSON strings. Numerical values MUST be included as JSON numbers.
+    for name, expected_type in parameters.items():
+        if name not in claims:
+            continue
+
+        value = claims[name]
+        if isinstance(value, bool) or not isinstance(value, expected_type):
+            raise InvalidRequestObjectError(
+                description=f"The '{name}' parameter has an invalid type.",
+                state=state,
+            )

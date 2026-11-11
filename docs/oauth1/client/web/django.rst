@@ -17,7 +17,9 @@ Looking for OAuth 1.0 provider?
 The Django client can handle OAuth 1 services. Authlib has a shared API design
 among framework integrations. Get started with :ref:`frameworks_oauth1_clients`.
 
-Create a registry with :class:`OAuth` object::
+Create a registry with :class:`OAuth` object:
+
+.. code-block:: python
 
     from authlib.integrations.django_client import OAuth
 
@@ -38,7 +40,9 @@ Configuration
 
 Authlib Django OAuth registry can load the configuration from your Django
 application settings automatically. Every key value pair can be omitted.
-They can be configured from your Django settings::
+They can be configured from your Django settings:
+
+.. code-block:: python
 
     AUTHLIB_OAUTH_CLIENTS = {
         'twitter': {
@@ -65,7 +69,9 @@ this temporary credential was created before redirecting to the provider (Twitte
 we need to save this temporary credential somewhere in order to use it later.
 
 In OAuth 1, Django client will save the request token in sessions. In this
-case, you just need to configure Session Middleware in Django::
+case, you just need to configure Session Middleware in Django:
+
+.. code-block:: python
 
     MIDDLEWARE = [
         'django.contrib.sessions.middleware.SessionMiddleware'
@@ -83,9 +89,31 @@ Routes for Authorization
 ------------------------
 
 Just like the example in :ref:`frameworks_oauth1_clients`, everything is the same.
-But there is a hint to create ``redirect_uri`` with ``request`` in Django::
+But there is a hint to create ``redirect_uri`` with ``request`` in Django:
+
+.. code-block:: python
 
     def login(request):
         # build a full authorize callback uri
         redirect_uri = request.build_absolute_uri('/authorize')
         return oauth.twitter.authorize_redirect(request, redirect_uri)
+
+.. invisible-code-block: python
+
+    from django.contrib.sessions.backends.cache import SessionStore
+    from django.test import RequestFactory
+
+    oauth.register(
+        name="twitter",
+        client_id="{{ your-twitter-consumer-key }}",
+        client_secret="{{ your-twitter-consumer-secret }}",
+        request_token_url="https://api.twitter.com/oauth/request_token",
+        access_token_url="https://api.twitter.com/oauth/access_token",
+        authorize_url="https://api.twitter.com/oauth/authenticate",
+        api_base_url="https://api.twitter.com/1.1/",
+    )
+    request = RequestFactory().get("/login")
+    request.session = SessionStore()
+    response = login(request)
+    assert response.status_code == 302
+    assert response["Location"].startswith("https://api.twitter.com/oauth/authenticate")

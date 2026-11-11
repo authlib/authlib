@@ -1,0 +1,44 @@
+.. _specs/rfc9470:
+
+RFC 9470: OAuth 2.0 Step Up Authentication Challenge Protocol
+=============================================================
+
+This section contains the generic implementation of :rfc:`9470`.
+A client can ask for a recent authentication of the user with the
+``max_age`` parameter of the authorization request. It is a number of
+seconds. When the last authentication of the user is older, the user must
+log in again.
+
+Authlib only supports ``max_age`` on the authorization server for now. The
+``acr_values`` parameter, the ``acr`` and ``auth_time`` claims of the access
+tokens, and the challenge of the resource server are not supported yet.
+
+Register :class:`~authlib.oauth2.rfc9470.StepUpAuthentication` on the
+authorization server:
+
+.. code-block:: python
+
+    from authlib.oauth2.rfc9470 import StepUpAuthentication
+
+    authorization_server.register_extension(StepUpAuthentication())
+
+It reads the time of the last login of the user, and the time the request
+started, from the :class:`~authlib.oauth2.rfc6749.AuthorizationSessionMixin`
+that you pass to ``get_consent_grant``. See :ref:`authorization_session`.
+
+When the user must log in, ``"login"`` is in ``grant.interactions``, before
+the other interactions except ``"create"`` (:ref:`specs/prompt_create`).
+``max_age=0`` always asks for a new login, and ``max_age`` is measured from
+the start of the request.
+
+The OpenID Connect grants apply ``max_age`` without this extension. Register
+it to apply ``max_age`` to the requests without the ``openid`` scope too.
+
+API Reference
+-------------
+
+.. module:: authlib.oauth2.rfc9470
+
+.. autoclass:: StepUpAuthentication
+    :member-order: bysource
+    :members:

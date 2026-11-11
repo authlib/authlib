@@ -1,5 +1,6 @@
 from joserfc.errors import InvalidClaimError
 
+from authlib.common.security import is_secure_transport
 from authlib.common.urls import is_valid_url
 from authlib.oauth2.claims import BaseClaims
 
@@ -25,6 +26,27 @@ class ClientMetadataClaims(BaseClaims):
         "request_object_encryption_enc",
         "request_uris",
     ]
+    CLAIM_TYPES = {
+        "token_endpoint_auth_signing_alg": str,
+        "application_type": str,
+        "sector_identifier_uri": str,
+        "subject_type": str,
+        "id_token_signed_response_alg": str,
+        "id_token_encrypted_response_alg": str,
+        "id_token_encrypted_response_enc": str,
+        "userinfo_signed_response_alg": str,
+        "userinfo_encrypted_response_alg": str,
+        "userinfo_encrypted_response_enc": str,
+        "default_max_age": (int, float),
+        "require_auth_time": bool,
+        "default_acr_values": [str],
+        "initiate_login_uri": str,
+        "request_object_signing_alg": str,
+        "request_object_encryption_alg": str,
+        "request_object_encryption_enc": str,
+        "request_uris": [str],
+        "response_types": [str],
+    }
 
     def validate(self, now=None, leeway=0):
         super().validate(now, leeway)
@@ -155,9 +177,10 @@ class ClientMetadataClaims(BaseClaims):
         the JWK Set referenced by the jwks_uri element from OpenID Connect Discovery 1.0
         [OpenID.Discovery].
         """
-        if self.get(
-            "id_token_signed_response_alg"
-        ) == "none" and "id_token" in self.get("response_type", ""):
+        if self.get("id_token_signed_response_alg") == "none" and any(
+            "id_token" in response_type.split()
+            for response_type in self.get("response_types", [])
+        ):
             raise InvalidClaimError("id_token_signed_response_alg")
 
         self.setdefault("id_token_signed_response_alg", "RS256")
@@ -229,10 +252,6 @@ class ClientMetadataClaims(BaseClaims):
         request parameter overrides this default value. If omitted, no default Maximum
         Authentication Age is specified.
         """
-        if self.get("default_max_age") is not None and not isinstance(
-            self["default_max_age"], (int, float)
-        ):
-            raise InvalidClaimError("default_max_age")
 
     def validate_require_auth_time(self):
         """Boolean value specifying whether the auth_time Claim in the ID Token is
@@ -244,10 +263,6 @@ class ClientMetadataClaims(BaseClaims):
         1.0 [OpenID.Core].) If omitted, the default value is false.
         """
         self.setdefault("require_auth_time", False)
-        if self.get("require_auth_time") is not None and not isinstance(
-            self["require_auth_time"], bool
-        ):
-            raise InvalidClaimError("require_auth_time")
 
     def validate_default_acr_values(self):
         """Default requested Authentication Context Class Reference values.
@@ -332,3 +347,10 @@ class ClientMetadataClaims(BaseClaims):
         value is no longer valid.
         """
         self._validate_uri("request_uris")
+        signed = self.get("request_object_signing_alg") not in (None, "none")
+        if signed or self.get("require_signed_request_object") is True:
+            return
+
+        uris = self.get("request_uris") or []
+        if not all(is_secure_transport(uri, allow_loopback=False) for uri in uris):
+            raise InvalidClaimError("request_uris")

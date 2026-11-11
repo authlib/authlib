@@ -13,6 +13,7 @@ Server.
         create_bearer_token_generator,
         get_consent_grant,
         create_authorization_response,
+        defer_anonymous_errors,
         create_token_response,
         create_endpoint_response
 
@@ -23,12 +24,14 @@ Server.
 .. data:: current_token
 
     Routes protected by :class:`ResourceProtector` can access current token
-    with this variable::
+    with this variable:
+
+    .. code-block:: python
 
         from authlib.integrations.flask_oauth2 import current_token
 
-        @require_oauth
         @app.route('/user_id')
+        @require_oauth
         def user_id():
             # current token instance of the OAuth Token model
             return current_token.user_id
@@ -48,8 +51,6 @@ Server.
 
 SQLAlchemy Helper Functions
 ---------------------------
-
-.. warning:: We will drop ``sqla_oauth2`` module in version 1.0.
 
 .. module:: authlib.integrations.sqla_oauth2
 

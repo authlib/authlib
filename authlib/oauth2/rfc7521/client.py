@@ -6,6 +6,10 @@ from authlib.oauth2.client import _load_token_response
 class AssertionClient:
     """Constructs a new Assertion Framework for OAuth 2.0 Authorization Grants
     per :rfc:`7521`.
+
+    :param access_token_params: Extra parameters for the token request, such as
+        ``resource`` (:rfc:`8707`). A list is sent as a repeated parameter. The
+        other arguments, such as ``scope``, take precedence.
     """
 
     DEFAULT_GRANT_TYPE = None
@@ -26,6 +30,7 @@ class AssertionClient:
         scope=None,
         client_id=None,
         leeway=60,
+        access_token_params=None,
         **kwargs,
     ):
         self.session = session
@@ -47,6 +52,7 @@ class AssertionClient:
         self.claims = claims
         self.scope = scope
         self.client_id = client_id
+        self.access_token_params = dict(access_token_params or {})
         if self.token_auth_class is not None:
             self.token_auth = self.token_auth_class(None, token_placement, self)
         self._kwargs = kwargs
@@ -72,7 +78,9 @@ class AssertionClient:
             claims=self.claims,
             **self._kwargs,
         )
+        params = self.access_token_params.items()
         data = {
+            **{key: value for key, value in params if value is not None},
             "assertion": to_native(assertion),
             "grant_type": self.grant_type,
         }

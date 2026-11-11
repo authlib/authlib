@@ -17,8 +17,7 @@ def sign_jwt_bearer_assertion(
     header=None,
     **kwargs,
 ):
-    if header is None:
-        header = {}
+    header = dict(header or {})
     alg = kwargs.pop("alg", None)
     if alg:
         header["alg"] = alg
@@ -41,16 +40,20 @@ def sign_jwt_bearer_assertion(
     payload["iat"] = issued_at
     payload["exp"] = expires_at
 
-    if claims is None:
-        claims = {}
     # jti uniquely identifies the JWT and prevents replay attacks (RFC 7523 §3)
-    if "jti" not in claims:
-        claims["jti"] = generate_token(36)
+    payload["jti"] = generate_token(36)
 
     if claims:
         payload.update(claims)
 
-    return jwt.encode(header, payload, import_any_key(key), algorithms=[header["alg"]])
+    key = import_any_key(key)
+    # Per OpenID Connect Core §10.1, a kid value MUST be provided when the
+    # JWK Set of the signer has several keys.
+    kid = getattr(key, "kid", None)
+    if kid and "kid" not in header:
+        header["kid"] = kid
+
+    return jwt.encode(header, payload, key, algorithms=[header["alg"]])
 
 
 def client_secret_jwt_sign(
@@ -72,12 +75,6 @@ def _sign(key, client_id, token_endpoint, alg, claims=None, **kwargs):
     subject = client_id
     # The Audience SHOULD be the URL of the Authorization Server's Token Endpoint.
     audience = token_endpoint
-
-    # jti is required
-    if claims is None:
-        claims = {}
-    if "jti" not in claims:
-        claims["jti"] = generate_token(36)
 
     return sign_jwt_bearer_assertion(
         key=key,

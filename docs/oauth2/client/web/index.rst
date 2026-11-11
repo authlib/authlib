@@ -17,7 +17,9 @@ Authlib shares a common API design among these web frameworks. Instead
 of introducing them one by one, this documentation contains the common
 usage for them all.
 
-We start with creating a registry with the ``OAuth`` class::
+We start with creating a registry with the ``OAuth`` class:
+
+.. code-block:: python
 
     # for Flask framework
     from authlib.integrations.flask_client import OAuth
@@ -27,6 +29,12 @@ We start with creating a registry with the ``OAuth`` class::
 
     # for Starlette framework
     from authlib.integrations.starlette_client import OAuth
+
+    oauth = OAuth()
+
+.. invisible-code-block: python
+
+    from authlib.integrations.django_client import OAuth
 
     oauth = OAuth()
 
@@ -47,7 +55,9 @@ For instance, GitHub is an OAuth 2.0 service, you want your users to log in
 your website with GitHub.
 
 The first step is register a remote application on the ``OAuth`` registry via
-``oauth.register`` method::
+``oauth.register`` method:
+
+.. code-block:: python
 
     oauth.register(
         name='github',
@@ -62,18 +72,27 @@ The first step is register a remote application on the ``OAuth`` registry via
     )
 
 The first parameter in ``register`` method is the **name** of the remote
-application. You can access the remote application with::
+application. You can access the remote application with:
+
+.. code-block:: python
 
     github = oauth.create_client('github')
     # or simply with
     github = oauth.github
+
+Registering the same name again replaces the remote application in
+``oauth.github`` and ``oauth.create_client('github')``. A client object you
+got before keeps the old configuration. Use ``oauth.remove_client('github')``
+to remove the remote application.
 
 The configuration of those parameters can be loaded from the framework
 configuration. Each framework has its own config system, read the framework
 specified documentation later.
 
 The ``client_kwargs`` is a dict configuration to pass extra parameters to
-:ref:`OAuth 2 Session <oauth_2_session>`, you can pass extra parameters like::
+:ref:`OAuth 2 Session <oauth_2_session>`, you can pass extra parameters like:
+
+.. code-block:: python
 
     client_kwargs = {
         'scope': 'profile',
@@ -84,6 +103,67 @@ The ``client_kwargs`` is a dict configuration to pass extra parameters to
 There are several ``token_endpoint_auth_method``, get a deep inside the
 :ref:`client_auth_methods`.
 
+Any other keyword argument accepted by ``OAuth2Session`` can be passed the
+same way. For example, ``leeway`` is the number of seconds before the actual
+expiration of an access token at which the token is considered expired and is
+refreshed (the default is 60):
+
+.. code-block:: python
+
+    client_kwargs = {
+        'scope': 'profile',
+        'leeway': 30,
+    }
+
+This ``leeway`` only affects access token expiration. The clock skew tolerated
+when validating the claims of an ``id_token`` (``exp``, ``iat`` and so on) is a
+separate setting. It defaults to 120 seconds and is passed to
+``authorize_access_token``:
+
+.. skip: next "fragment of the callback view"
+
+.. code-block:: python
+
+    token = oauth.github.authorize_access_token(request, leeway=30)
+
+To send HTTP headers with every request to the provider, for instance through
+a gateway that requires them, pass ``headers``. They are also sent with the
+``server_metadata_url`` and ``jwks_uri`` requests. They are sent to every host
+the client contacts, so only put a secret there if all the endpoints are behind
+the gateway:
+
+.. code-block:: python
+
+    client_kwargs = {
+        'scope': 'profile',
+        'headers': {'X-Api-Key': '...'},
+    }
+
+To check the provider certificate against your own certificate authority, pass
+``verify``. It also applies to the ``server_metadata_url`` and ``jwks_uri``
+requests. With the Flask and Django integrations, give the path of the CA
+bundle:
+
+.. code-block:: python
+
+    client_kwargs = {
+        'scope': 'profile',
+        'verify': '/path/to/ca-bundle.pem',
+    }
+
+With the Starlette and FastAPI integrations, HTTPX expects an SSL context:
+
+.. skip: next "the CA bundle file does not exist"
+
+.. code-block:: python
+
+    import ssl
+
+    client_kwargs = {
+        'scope': 'profile',
+        'verify': ssl.create_default_context(cafile='/path/to/ca-bundle.pem'),
+    }
+
 Routes for Authorization
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -93,7 +173,9 @@ rest steps are much simpler. The only required parts are routes:
 1. redirect to 3rd party provider (GitHub) for authentication
 2. redirect back to your website to fetch access token and profile
 
-Here is the example for GitHub login::
+Here is the example for GitHub login:
+
+.. code-block:: python
 
     def login(request):
         github = oauth.create_client('github')
@@ -107,6 +189,22 @@ Here is the example for GitHub login::
         profile = resp.json()
         # do something with the token and profile
         return '...'
+
+.. invisible-code-block: python
+
+    from urllib.parse import urlsplit
+
+    from django.contrib.sessions.backends.cache import SessionStore
+    from django.test import RequestFactory
+
+    factory = RequestFactory()
+    session = SessionStore()
+    request = factory.get("/login")
+    request.session = session
+    callback = urlsplit(consent(login(request)["Location"]))
+    request = factory.get(f"{callback.path}?{callback.query}")
+    request.session = session
+    assert authorize(request) == "..."
 
 The two routes take part in this flow:
 
@@ -124,7 +222,7 @@ The two routes take part in this flow:
         App-->>User: 302 Found → /login/oauth/authorize
         User->>AS: GET /login/oauth/authorize?state=…
         Note over User,AS: The user logs in and approves
-        AS-->>User: 302 Found → /authorize?code=…&state=…
+        AS-->>User: 303 See Other → /authorize?code=…&state=…
         User->>App: GET /authorize?code=…&state=…
         Note over App: authorize_access_token()
         App->>AS: POST /login/oauth/access_token (code)
@@ -165,20 +263,23 @@ Client Authentication Methods
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 When fetching access token, the authorization server will require a client
-authentication, Authlib provides **three default methods** defined by RFC7591:
+authentication, Authlib provides **three default methods** defined by RFC 7591:
 
 - ``client_secret_basic``
 - ``client_secret_post``
 - ``none``
 
 But if the remote provider does not support these three methods, we need to
-register our own authentication methods, like :ref:`oauth2_client_auth`::
+register our own authentication methods, like :ref:`oauth2_client_auth`:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc7523 import ClientSecretJWT
 
     oauth.register(
         'name',
-        ...
+        client_id='your-client-id',
+        client_secret='your-client-secret',
         client_auth_methods=[
             ClientSecretJWT(token_endpoint),  # client_secret_jwt
         ]
@@ -187,13 +288,42 @@ register our own authentication methods, like :ref:`oauth2_client_auth`::
 .. versionadded:: v0.15
 
     Starting from v0.15, developers can add custom authentication methods
-    directly to token endpoint::
+    directly to token endpoint:
+
+    .. code-block:: python
 
         oauth.register(
             'name',
-            ...
+            client_id='your-client-id',
+            client_secret='your-client-secret',
             token_endpoint_auth_method=ClientSecretJWT(token_endpoint),
         )
+
+Identity providers may cap the lifetime of the client assertion. Auth0,
+for instance, rejects ``client_secret_jwt`` and ``private_key_jwt``
+assertions that live longer than 5 minutes. Both classes accept an
+``expires_in`` parameter (in seconds) for that:
+
+.. invisible-code-block: python
+
+    def load_private_key():
+        return rsa_key("private")
+
+.. code-block:: python
+
+    from authlib.oauth2.rfc7523 import PrivateKeyJWT
+
+    # the private key of the client, as a joserfc key or a PEM string
+    private_key = load_private_key()
+
+    oauth.register(
+        'name',
+        client_id='your-client-id',
+        client_secret=private_key,
+        token_endpoint_auth_method=PrivateKeyJWT(
+            token_endpoint, expires_in=300
+        ),
+    )
 
 Accessing OAuth Resources
 -------------------------
@@ -207,7 +337,9 @@ Accessing OAuth Resources
 There are also chances that you need to access your user's 3rd party
 OAuth provider resources. For instance, you want to display the logged
 in user's GitHub repositories. You will use **access token** to fetch
-the resources::
+the resources:
+
+.. code-block:: python
 
     def get_github_repositories(request):
         token = OAuth2Token.find(
@@ -228,7 +360,11 @@ database.
 Design Database
 ~~~~~~~~~~~~~~~
 
-Here are some hints on how to design the OAuth 2.0 token database::
+Here are some hints on how to design the OAuth 2.0 token database:
+
+.. skip: next "uses your database models"
+
+.. code-block:: python
 
     class OAuth2Token(Model):
         name = String(length=40)
@@ -255,7 +391,11 @@ Fetch User OAuth Token
 ~~~~~~~~~~~~~~~~~~~~~~
 
 You can always pass a ``token`` parameter to the remote application request
-methods, like::
+methods, like:
+
+.. skip: next "uses your database models"
+
+.. code-block:: python
 
     token = OAuth2Token.find(name='github', user=request.user)
     oauth.github.get(url, token=token)
@@ -265,7 +405,9 @@ methods, like::
 
 However, it is not a good practice to query the token database in every request
 function. Authlib provides a way to fetch current user's token automatically for
-you, just ``register`` with ``fetch_token`` function::
+you, just ``register`` with ``fetch_token`` function:
+
+.. code-block:: python
 
     def fetch_github_token(request):
         token = OAuth2Token.find(
@@ -281,7 +423,9 @@ you, just ``register`` with ``fetch_token`` function::
         fetch_token=fetch_github_token,
     )
 
-There is also a shared way to fetch token::
+There is also a shared way to fetch token:
+
+.. code-block:: python
 
     def fetch_token(name, request):
         token = OAuth2Token.find(
@@ -294,7 +438,9 @@ There is also a shared way to fetch token::
     oauth = OAuth(fetch_token=fetch_token)
 
 Now, developers don't have to pass a ``token`` in the HTTP requests,
-instead, they can pass the ``request``::
+instead, they can pass the ``request``:
+
+.. code-block:: python
 
     def get_github_repos(request):
         resp = oauth.github.get('user/repos', request=request)
@@ -316,11 +462,13 @@ OAuth 2.0 specially.
 Auto Update Token
 ~~~~~~~~~~~~~~~~~
 
-In OAuth 1.0, access token never expires. But in OAuth 2.0, token MAY expire. If
+In OAuth 1.0, access token never expires. But in OAuth 2.0, a token can expire. If
 there is a ``refresh_token`` value, Authlib will auto update the access token if
 it is expired.
 
-We do this by passing a ``update_token`` function to ``OAuth`` registry::
+We do this by passing a ``update_token`` function to ``OAuth`` registry:
+
+.. code-block:: python
 
     def update_token(name, token, refresh_token=None, access_token=None):
         if refresh_token:
@@ -346,7 +494,9 @@ OAuth 2.0 Code Challenge
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 Adding ``code_challenge`` provided by :ref:`specs/rfc7636` is simple. You
-register your remote app with a ``code_challenge_method`` in ``client_kwargs``::
+register your remote app with a ``code_challenge_method`` in ``client_kwargs``:
+
+.. code-block:: python
 
     oauth.register(
         'example',
@@ -358,7 +508,9 @@ register your remote app with a ``code_challenge_method`` in ``client_kwargs``::
         client_kwargs={'code_challenge_method': 'S256'},
     )
 
-Note, the only supported ``code_challenge_method`` is ``S256``.
+The supported methods are ``S256`` and ``plain``. Prefer ``S256``, per
+:rfc:`RFC 9700 §2.1.1 <9700#section-2.1.1>`. Use ``plain`` only for a provider that does not
+support ``S256``.
 
 
 Compliance Fix for OAuth 2.0
@@ -366,7 +518,9 @@ Compliance Fix for OAuth 2.0
 
 For non standard OAuth 2.0 service, you can pass a ``compliance_fix`` when
 ``.register``. For example, Slack has a compliance problem, we can construct
-a method to fix the requests session::
+a method to fix the requests session:
+
+.. code-block:: python
 
     def slack_compliance_fix(session):
         def _fix(resp):
@@ -378,15 +532,15 @@ a method to fix the requests session::
             return resp
         session.register_compliance_hook('access_token_response', _fix)
 
-Then pass this ``slack_compliance_fix`` into ``.register`` parameters::
+Then pass this ``slack_compliance_fix`` into ``.register`` parameters:
+
+.. code-block:: python
 
     oauth.register(
         'slack',
         client_id='...',
         client_secret='...',
-        ...,
         compliance_fix=slack_compliance_fix,
-        ...
     )
 
 Find all the available compliance hooks at :ref:`compliance_fix_oauth2`.
@@ -407,7 +561,9 @@ provider supports OpenID Connect, we can get the user info from the returned
 userinfo_endpoint
 ~~~~~~~~~~~~~~~~~
 
-Passing a ``userinfo_endpoint`` when ``.register`` remote client::
+Passing a ``userinfo_endpoint`` when ``.register`` remote client:
+
+.. code-block:: python
 
     oauth.register(
         'google',
@@ -416,7 +572,9 @@ Passing a ``userinfo_endpoint`` when ``.register`` remote client::
         userinfo_endpoint='https://openidconnect.googleapis.com/v1/userinfo',
     )
 
-And later, when the client has obtained the access token, we can call::
+And later, when the client has obtained the access token, we can call:
+
+.. code-block:: python
 
     def authorize(request):
         token = oauth.google.authorize_access_token(request)
@@ -452,11 +610,12 @@ For OpenID Connect provider, when ``.authorize_access_token``, the provider
 will include a ``id_token`` in the response. This ``id_token`` contains the
 ``UserInfo`` we need so that we don't have to fetch userinfo endpoint again.
 
-The ``id_token`` is a JWT, with Authlib :ref:`jwt_guide`, we can decode it
-easily. Frameworks integrations will handle it automatically if configurations
-are correct.
+The ``id_token`` is a JWT. Frameworks integrations decode and validate it
+automatically if configurations are correct.
 
-A simple solution is to provide the OpenID Connect Discovery Endpoint::
+A simple solution is to provide the OpenID Connect Discovery Endpoint:
+
+.. code-block:: python
 
     oauth.register(
         'google',
@@ -471,15 +630,17 @@ have to add ``authorize_url`` and ``access_token_url``.
 
 Check out our client example: https://github.com/authlib/demo-oauth-client
 
-But if there is no discovery endpoint, developers MUST add all the missing information
-themselves::
+Without a discovery endpoint, pass the missing values to ``register``:
 
 * authorize_url
 * access_token_url
+* issuer, to check the ``iss`` claim of the ID token
 * jwks_uri
 
-This ``jwks_uri`` is the URL to get provider's public JWKs. Developers MAY also
-provide the value of ``jwks`` instead of ``jwks_uri``::
+``jwks_uri`` is the URL of the provider's public JWKs. ``jwks`` can replace
+``jwks_uri`` and hold the keys directly:
+
+.. code-block:: python
 
     oauth.register(
         'google',
@@ -487,8 +648,75 @@ provide the value of ``jwks`` instead of ``jwks_uri``::
         client_secret='...',
         access_token_url='https://example.com/oauth/access_token',
         authorize_url='https://example.com/oauth/authorize',
+        issuer='https://example.com',
         jwks={"keys": [...]}
     )
+
+
+Custom claims
+~~~~~~~~~~~~~
+
+``token['userinfo']`` is a ``UserInfo`` object built from every claim in the
+validated ``id_token``, so custom claims are available like any standard
+claim:
+
+.. skip: next "fragment of the callback view"
+
+.. code-block:: python
+
+    token = oauth.google.authorize_access_token(request)
+    userinfo = token['userinfo']
+    organization = userinfo.get('organization')
+
+This only works when the provider puts the claim in the ``id_token`` itself.
+Many providers expose extra claims only through the userinfo endpoint, or only
+when the matching scope is requested. In that case, add the scope to
+``client_kwargs`` and fetch the claims with the access token:
+
+.. skip: next "fragment of the callback view"
+
+.. code-block:: python
+
+    oauth.register(
+        'organization',
+        server_metadata_url='https://example.com/.well-known/openid-configuration',
+        client_kwargs={'scope': 'openid email profile organization'},
+    )
+
+    token = oauth.organization.authorize_access_token(request)
+    userinfo = oauth.organization.userinfo(token=token)
+
+Check the provider's documentation for the scope names and the claims each
+endpoint returns.
+
+Validating the claims
+~~~~~~~~~~~~~~~~~~~~~
+
+Authlib validates the claims of the ``id_token``, with ``CodeIDToken`` for the
+authorization code flow. Some providers send a claim in a form that the
+specification does not allow. For instance, ``amr`` must be an array of
+strings (OpenID Connect Core §2), but a provider may send a single string. To
+accept it, subclass ``CodeIDToken`` and override the ``validate_`` method of
+this claim:
+
+.. code-block:: python
+
+    from joserfc.errors import InvalidClaimError
+    from authlib.oidc.core import CodeIDToken
+
+    class LenientIDToken(CodeIDToken):
+        def validate_amr(self):
+            amr = self.get('amr')
+            if amr and not isinstance(amr, (list, str)):
+                raise InvalidClaimError('amr')
+
+Then pass the class to ``authorize_access_token`` with ``claims_cls``:
+
+.. skip: next "fragment of the callback view"
+
+.. code-block:: python
+
+    token = oauth.example.authorize_access_token(request, claims_cls=LenientIDToken)
 
 
 RP-Initiated Logout
@@ -502,7 +730,9 @@ to ensure that the user's session at the provider is also terminated.
 
 To use RP-Initiated Logout, the provider must support the ``end_session_endpoint``
 in its OpenID Connect discovery document. Authlib provides a ``logout_redirect``
-method to redirect users to this endpoint::
+method to redirect users to this endpoint:
+
+.. code-block:: python
 
     def logout(request):
         client = oauth.create_client('google')
@@ -518,7 +748,7 @@ The ``logout_redirect`` method accepts:
 
 - ``post_logout_redirect_uri``: Where to redirect after logout (must be registered with the provider)
 - ``id_token_hint``: The ID token previously issued (recommended)
-- ``state``: Opaque value for CSRF protection (auto-generated if not provided)
+- ``state``: Opaque value for CSRF protection (generated when ``post_logout_redirect_uri`` is given and ``state`` is not)
 - ``client_id``: OAuth 2.0 Client Identifier (optional)
 - ``logout_hint``: Hint about the user logging out (optional)
 - ``ui_locales``: Preferred languages for the logout UI (optional)

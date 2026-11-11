@@ -335,6 +335,21 @@ def test_non_object_payload_assertion(test_client):
     assert resp["error_description"] == "Invalid JWT payload."
 
 
+def test_deeply_nested_payload_assertion(test_client):
+    assertion = jws.serialize_compact(
+        {"alg": "HS256", "kid": "1"},
+        "[" * 30000 + "]" * 30000,
+        foo_key,
+    )
+    rv = test_client.post(
+        "/oauth/token",
+        data={"grant_type": JWTBearerGrant.GRANT_TYPE, "assertion": assertion},
+    )
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_grant"
+    assert resp["error_description"] == "Invalid JWT payload."
+
+
 def test_missing_iss_claim(test_client):
     """The 'iss' claim is read before the claims are verified, so its absence
     must be reported as an OAuth error."""

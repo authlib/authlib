@@ -15,6 +15,37 @@ def test_request_uris():
         claims.validate()
 
 
+@pytest.mark.parametrize(
+    "uris,metadata,valid",
+    [
+        (["https://client.test/request"], {}, True),
+        (["http://client.test/request"], {"request_object_signing_alg": "RS256"}, True),
+        (["http://client.test/request"], {"require_signed_request_object": True}, True),
+        (["http://client.test/request"], {}, False),
+        (["http://localhost/request"], {}, False),
+        (["http://client.test/request"], {"request_object_signing_alg": "none"}, False),
+        (["https://client.test/request", "http://client.test/request"], {}, False),
+    ],
+)
+def test_request_uris_https(uris, metadata, valid, monkeypatch):
+    """request_uris must use https unless Request Objects are signed."""
+    monkeypatch.delenv("AUTHLIB_INSECURE_TRANSPORT", raising=False)
+    metadata = {"request_uris": uris, **metadata}
+    claims = ClientMetadataClaims(metadata, {})
+    if valid:
+        claims.validate()
+    else:
+        with pytest.raises(InvalidClaimError):
+            claims.validate()
+
+
+def test_request_uris_insecure_transport(monkeypatch):
+    """AUTHLIB_INSECURE_TRANSPORT allows http request_uris for development."""
+    monkeypatch.setenv("AUTHLIB_INSECURE_TRANSPORT", "1")
+    claims = ClientMetadataClaims({"request_uris": ["http://localhost/request"]}, {})
+    claims.validate()
+
+
 def test_initiate_login_uri():
     claims = ClientMetadataClaims(
         {"initiate_login_uri": "https://client.test/initiate_login_uri"}, {}

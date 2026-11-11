@@ -34,6 +34,11 @@ class FlaskOAuth2Request(OAuth2Request):
         self.payload = FlaskOAuth2Payload(request)
 
     @property
+    def framework_request(self):
+        """The Flask request of this OAuth 2.0 request."""
+        return self._request
+
+    @property
     def args(self):
         return self._request.args
 
@@ -46,12 +51,20 @@ class FlaskJsonPayload(JsonPayload):
     def __init__(self, request: Request):
         self._request = request
 
-    @property
+    @cached_property
     def data(self):
-        return self._request.get_json()
+        try:
+            return self._request.get_json(force=True, silent=True)
+        except RecursionError:
+            return None
 
 
 class FlaskJsonRequest(JsonRequest):
     def __init__(self, request: Request):
         super().__init__(request.method, request.url, request.headers)
+        self._request = request
         self.payload = FlaskJsonPayload(request)
+
+    @property
+    def form(self):
+        return self._request.form

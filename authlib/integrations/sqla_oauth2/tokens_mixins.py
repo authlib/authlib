@@ -16,7 +16,8 @@ class OAuth2AuthorizationCodeMixin(AuthorizationCodeMixin):
     response_type = Column(Text, default="")
     scope = Column(Text, default="")
     nonce = Column(Text)
-    auth_time = Column(Integer, nullable=False, default=lambda: int(time.time()))
+    issued_at = Column(Integer, nullable=False, default=lambda: int(time.time()))
+    auth_time = Column(Integer, nullable=True)
     acr = Column(Text, nullable=True)
     amr = Column(Text, nullable=True)
 
@@ -24,7 +25,7 @@ class OAuth2AuthorizationCodeMixin(AuthorizationCodeMixin):
     code_challenge_method = Column(String(48))
 
     def is_expired(self):
-        return self.auth_time + 300 < time.time()
+        return self.issued_at + 300 < time.time()
 
     def get_redirect_uri(self):
         return self.redirect_uri

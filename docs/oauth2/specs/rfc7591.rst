@@ -1,10 +1,10 @@
 .. _specs/rfc7591:
 
-RFC7591: OAuth 2.0 Dynamic Client Registration Protocol
-=======================================================
+RFC 7591: OAuth 2.0 Dynamic Client Registration Protocol
+========================================================
 
 .. meta::
-    :description: Python API references on RFC7591 OAuth 2.0 Dynamic Client
+    :description: Python API references on RFC 7591 OAuth 2.0 Dynamic Client
         Registration Protocol in Python with Authlib implementation.
 
 .. module:: authlib.oauth2.rfc7591
@@ -14,17 +14,21 @@ Client Registration Protocol allows developers creating OAuth client via API
 through Authorization Server.
 
 To integrate with Authlib :ref:`flask_oauth2_server` or :ref:`django_oauth2_server`,
-developers MUST implement the missing methods of :class:`ClientRegistrationEndpoint`.
+implement the missing methods of :class:`ClientRegistrationEndpoint`.
 
 Client Registration Endpoint
 ----------------------------
 
 The client registration endpoint accepts client metadata as JSON payload via
-POST request. The metadata may contain a :ref:`JWT <jwt_guide>` ``software_statement``
+POST request. The metadata may contain a JWT_ ``software_statement``
 value. Endpoint can choose if it support ``software_statement``, it is not enabled
 by default.
 
-Before register the endpoint, developers MUST implement the missing methods::
+.. _JWT: https://jose.authlib.org/en/guide/jwt/
+
+Before registering the endpoint, implement the missing methods:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc7591 import ClientRegistrationEndpoint
 
@@ -34,17 +38,17 @@ Before register the endpoint, developers MUST implement the missing methods::
             auth_header = request.headers.get('Authorization')
             # bearer a-token-string
             bearer_token = auth_header.split()[1]
-            token = Token.query.get(bearer_token)
+            token = Token.query.filter_by(access_token=bearer_token).first()
+            # an expired or revoked token is not valid
+            if token is None or token.is_expired() or token.is_revoked():
+                return None
             return token
 
         def save_client(self, client_info, client_metadata, request):
-            client = OAuthClient(
-                user_id=request.credential.user_id,
-                client_id=client_info['client_id'],
-                client_secret=client_info['client_secret'],
-                **client_metadata,
-            )
-            client.save()
+            client = Client(user_id=request.credential.user_id, **client_info)
+            client.set_client_metadata(client_metadata)
+            db.session.add(client)
+            db.session.commit()
             return client
 
         def generate_client_registration_info(self, client, request):
@@ -53,8 +57,21 @@ Before register the endpoint, developers MUST implement the missing methods::
                 'registration_access_token': create_management_access_token_for_client(client),
             }
 
+        def get_server_metadata(self):
+            return {
+                'issuer': 'https://auth.example.com',
+                'scopes_supported': ['openid', 'profile'],
+                'response_types_supported': ['code'],
+                'grant_types_supported': ['authorization_code', 'refresh_token'],
+                'token_endpoint_auth_methods_supported': ['client_secret_basic'],
+            }
+
 If developers want to support ``software_statement``, additional methods
-should be implemented::
+should be implemented:
+
+.. skip: next "adds methods to the previous example"
+
+.. code-block:: python
 
     class MyClientRegistrationEndpoint(ClientRegistrationEndpoint):
         # adding this to support JWT with RS256 alg, you may change it to other alg values
@@ -65,7 +82,9 @@ should be implemented::
             # can be a string, bytes, jwk and jwk set
             return request.user.public_jwk_set
 
-Register this endpoint and use this endpoint in routes::
+Register this endpoint and use this endpoint in routes:
+
+.. code-block:: python
 
     authorization_server.register_endpoint(MyClientRegistrationEndpoint)
 
@@ -91,3 +110,28 @@ API Reference
 .. autoclass:: ClientMetadataClaims
     :member-order: bysource
     :members:
+
+.. invisible-code-block: python
+
+    def create_management_access_token_for_client(client):
+        return "management-token"
+
+    app.add_url_rule(
+        "/oauth/client/<client_id>",
+        endpoint="client_management_endpoint",
+        view_func=lambda client_id: "",
+    )
+    token = create_token(create_client())
+    response = app.test_client().post(
+        "/register",
+        json={
+            "client_name": "Example",
+            "redirect_uris": ["https://client.example/cb"],
+            "grant_types": ["authorization_code"],
+            "response_types": ["code"],
+            "scope": "profile",
+        },
+        headers={"Authorization": f"Bearer {token.access_token}"},
+    )
+    assert response.status_code == 201, response.json
+    assert Client.query.filter_by(client_id=response.json["client_id"]).first()

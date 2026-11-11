@@ -7,7 +7,9 @@ Protect users resources, so that only the authorized clients with the
 authorized access token can access the given scope resources.
 
 A resource server can be a different server other than the authorization
-server. Here is the way to protect your users' resources in Django::
+server. Here is the way to protect your users' resources in Django:
+
+.. code-block:: python
 
     from authlib.integrations.django_oauth2 import ResourceProtector, BearerTokenValidator
     from django.http import JsonResponse
@@ -20,7 +22,9 @@ server. Here is the way to protect your users' resources in Django::
         user = request.oauth_token.user
         return JsonResponse(dict(sub=user.pk, username=user.username))
 
-If the resource is not protected by a scope, omit the argument::
+If the resource is not protected by a scope, omit the argument:
+
+.. code-block:: python
 
     @require_oauth
     def user_profile(request):
@@ -29,6 +33,9 @@ If the resource is not protected by a scope, omit the argument::
 
 The decorator ``require_oauth`` will add an ``oauth_token`` property on ``request``,
 which is the instance of current in-use Token.
+
+The access token is read from the ``Authorization`` header. To also accept it
+in a form-encoded request body, see :ref:`rfc6750_form_body`.
 
 Multiple Scopes
 ---------------
@@ -57,9 +64,10 @@ It requires the token containing both ``profile`` and ``email`` scope.
 It requires the token containing either ``profile`` or ``email`` scope.
 
 
-It is also possible to mix **AND** and **OR** logic. e.g.::
+It is also possible to mix **AND** and **OR** logic. e.g.:
 
-    @app.route('/profile')
+.. code-block:: python
+
     @require_oauth(['profile email', 'user'])
     def user_profile(request):
         user = request.oauth_token.user
@@ -74,7 +82,9 @@ Optional ``require_oauth``
 --------------------------
 
 There is one more parameter for ``require_oauth`` which is used to serve
-public endpoints::
+public endpoints:
+
+.. code-block:: python
 
     @require_oauth(optional=True)
     def timeline_api(request):

@@ -1,10 +1,10 @@
 .. _specs/rfc7009:
 
-RFC7009: OAuth 2.0 Token Revocation
-===================================
+RFC 7009: OAuth 2.0 Token Revocation
+====================================
 
 .. meta::
-    :description: API references on RFC7009 OAuth 2.0 Token Revocation Authlib implementation.
+    :description: API references on RFC 7009 OAuth 2.0 Token Revocation Authlib implementation.
 
 This section contains the generic implementation of :rfc:`7009`.
 
@@ -17,36 +17,49 @@ Register Revocation Endpoint
 
 The revocation endpoint can be easily registered to :ref:`flask_oauth2_server`
 or :ref:`django_oauth2_server`. But there are missing methods to be
-implemented::
+implemented. This example uses the Flask-SQLAlchemy token model:
+
+.. code-block:: python
+
+    import time
 
     from authlib.oauth2.rfc7009 import RevocationEndpoint
 
     class MyRevocationEndpoint(RevocationEndpoint):
-        def query_token(self, token, token_type_hint, client):
-            q = Token.query.filter_by(client_id=client.client_id)
+        def query_token(self, token_string, token_type_hint):
             if token_type_hint == 'access_token':
-                return q.filter_by(access_token=token).first()
-            elif token_type_hint == 'refresh_token':
-                return q.filter_by(refresh_token=token).first()
+                return Token.query.filter_by(access_token=token_string).first()
+            if token_type_hint == 'refresh_token':
+                return Token.query.filter_by(refresh_token=token_string).first()
             # without token_type_hint
-            item = q.filter_by(access_token=token).first()
+            item = Token.query.filter_by(access_token=token_string).first()
             if item:
                 return item
-            return q.filter_by(refresh_token=token).first()
+            return Token.query.filter_by(refresh_token=token_string).first()
 
-        def revoke_token(self, token):
-            token.revoked = True
+        def revoke_token(self, token, request):
+            now = int(time.time())
+            token.access_token_revoked_at = now
+            if request.form['token'] != token.access_token:
+                token.refresh_token_revoked_at = now
             db.session.add(token)
             db.session.commit()
 
     # register it to authorization server
     authorization_server.register_endpoint(MyRevocationEndpoint)
 
-After the registration, you can create a response with::
+After the registration, you can create a response with:
+
+.. code-block:: python
 
     @app.route('/oauth/revoke', methods=['POST'])
     def revoke_token():
-        return server.create_endpoint_response(MyRevocationEndpoint.ENDPOINT_NAME)
+        return authorization_server.create_endpoint_response(MyRevocationEndpoint.ENDPOINT_NAME)
+
+``token_type_hint`` is ``None`` when the request has no hint or an unknown
+one. If no token is found with the hint, the endpoint calls ``query_token``
+again with ``None``. Per :rfc:`RFC 7009 §2.1 <7009#section-2.1>`, the hint may be wrong, so
+``revoke_token`` must not trust it to know which token was presented.
 
 
 API Reference
@@ -56,3 +69,15 @@ API Reference
     :member-order: bysource
     :members:
     :inherited-members:
+
+.. invisible-code-block: python
+
+    client = create_client()
+    token = create_token(client)
+    response = app.test_client().post(
+        "/oauth/revoke",
+        data={"token": token.refresh_token},
+        auth=("client-id", "client-secret"),
+    )
+    assert response.status_code == 200, response.json
+    assert token.is_revoked()

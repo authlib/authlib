@@ -32,14 +32,21 @@ information:
 - Client Password, usually called **client_secret**
 - Client Token Endpoint Authentication Method
 
-A client is registered by a user (developer) on your website; you MUST implement
-the missing methods of :class:`~authlib.oauth2.rfc6749.ClientMixin`::
+A user (developer) registers a client on the website. Implement
+the missing methods of :class:`~authlib.oauth2.rfc6749.ClientMixin`:
+
+.. code-block:: python
+
+    import secrets
+
+    from authlib.common.encoding import to_bytes
 
     class OAuth2Client(Model, ClientMixin):
         user = ForeignKey(User, on_delete=CASCADE)
         client_id = CharField(max_length=48, unique=True, db_index=True)
         client_secret = CharField(max_length=48, blank=True)
         client_name = CharField(max_length=120)
+        # space separated list of redirect URIs
         redirect_uris = TextField(default='')
         default_redirect_uri = TextField(blank=False, default='')
         scope = TextField(default='')
@@ -47,8 +54,7 @@ the missing methods of :class:`~authlib.oauth2.rfc6749.ClientMixin`::
         grant_type = TextField(default='')
         token_endpoint_auth_method = CharField(max_length=120, default='')
 
-        # you can add more fields according to your own need
-        # check https://tools.ietf.org/html/rfc7591#section-2
+        # RFC 7591 §2 defines more client metadata fields.
 
         def get_client_id(self):
             return self.client_id
@@ -65,10 +71,12 @@ the missing methods of :class:`~authlib.oauth2.rfc6749.ClientMixin`::
         def check_redirect_uri(self, redirect_uri):
             if redirect_uri == self.default_redirect_uri:
                 return True
-            return redirect_uri in self.redirect_uris
+            return redirect_uri in self.redirect_uris.split()
 
         def check_client_secret(self, client_secret):
-            return self.client_secret == client_secret
+            return secrets.compare_digest(
+                to_bytes(self.client_secret), to_bytes(client_secret)
+            )
 
         def check_endpoint_auth_method(self, method, endpoint):
             if endpoint == 'token':
@@ -96,8 +104,10 @@ valid duration, limited scopes and etc. It contains at least:
 - **expires_at**: when will this token expired
 - **scope**: a limited scope of resources that this token can access
 
-A token is associated with a resource owner; you MUST implement
-the missing methods of :class:`~authlib.oauth2.rfc6749.TokenMixin`::
+A token belongs to a resource owner. Implement
+the missing methods of :class:`~authlib.oauth2.rfc6749.TokenMixin`:
+
+.. code-block:: python
 
     import time
 
@@ -127,11 +137,31 @@ the missing methods of :class:`~authlib.oauth2.rfc6749.TokenMixin`::
         def get_expires_at(self):
             return self.issued_at + self.expires_in
 
+        def check_client(self, client):
+            return self.client_id == client.get_client_id()
+
+        def is_expired(self):
+            if not self.expires_in:
+                return False
+
+            return self.get_expires_at() < now_timestamp()
+
+        def is_revoked(self):
+            return self.revoked
+
+        def get_user(self):
+            return self.user
+
+        def get_client(self):
+            return OAuth2Client.objects.get(client_id=self.client_id)
+
 Server
 ------
 
 Authlib provides a ready to use :class:`~authlib.integrations.django_oauth2.AuthorizationServer`
-which has built-in tools to handle requests and responses::
+which has built-in tools to handle requests and responses:
+
+.. code-block:: python
 
     from authlib.integrations.django_oauth2 import AuthorizationServer
 
@@ -143,18 +173,25 @@ The Authorization Server has to provide endpoints:
    grant types
 2. token endpoint to issue tokens
 
-The ``AuthorizationServer`` has provided built-in methods to handle these endpoints::
+The ``AuthorizationServer`` has provided built-in methods to handle these endpoints:
 
+.. code-block:: python
+
+    from django.contrib.auth.views import redirect_to_login
     from django.shortcuts import render
     from django.views.decorators.http import require_http_methods
 
     # use ``server.create_authorization_response`` to handle authorization endpoint
 
     def authorize(request):
+        user = request.user if request.user.is_authenticated else None
         try:
-            grant = server.get_consent_grant(request, end_user=request.user)
+            grant = server.get_consent_grant(request, end_user=user)
         except OAuth2Error as error:
             return server.handle_error_response(request, error)
+
+        if "login" in grant.interactions:
+            return redirect_to_login(request.get_full_path())
 
         if request.method == 'GET':
             scope = grant.client.get_allowed_scope(grant.request.payload.scope)
@@ -173,6 +210,12 @@ The ``AuthorizationServer`` has provided built-in methods to handle these endpoi
     @require_http_methods(["POST"])  # we only allow POST for token endpoint
     def issue_token(request):
         return server.create_token_response(request)
+
+To let Authlib know if the user must give their consent, pass an
+:class:`~authlib.oauth2.rfc6749.AuthorizationSessionMixin` to
+``get_consent_grant`` instead of the user. Its ``is_consent_needed`` method
+adds ``"consent"`` to ``grant.interactions``. :ref:`django_oidc_max_age` shows a
+complete example.
 
 For now, you have set up the authorization server. But it won't work since it doesn't
 support any grant types yet. Let's head over to the next chapter.

@@ -1,0 +1,8 @@
+Breaking changes
+~~~~~~~~~~~~~~~~
+
+- ``JWTBearerTokenValidator`` refuses a JWT access token without a ``typ``
+  header, per :rfc:`9068#section-4`. It used to accept it, so another JWT
+  without ``typ`` signed by the same issuer, like the ID tokens of some
+  providers, could be used as an access token. ``JWTBearerTokenGenerator``
+  always sets ``typ`` to ``at+jwt``.

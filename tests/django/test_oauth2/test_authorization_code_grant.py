@@ -5,8 +5,10 @@ import pytest
 
 from authlib.common.urls import url_decode
 from authlib.common.urls import urlparse
+from authlib.oauth2 import AuthorizationSession
 from authlib.oauth2.rfc6749 import errors
 from authlib.oauth2.rfc6749 import grants
+from authlib.oauth2.rfc9470 import StepUpAuthentication
 
 from .models import Client
 from .models import CodeGrantMixin
@@ -56,28 +58,28 @@ def client(user):
     client.delete()
 
 
-def test_get_consent_grant_client(factory, server, client):
+def test_get_consent_grant_client(factory, server, client, user):
     url = "/authorize?response_type=code"
     request = factory.get(url)
     with pytest.raises(errors.InvalidClientError):
-        server.get_consent_grant(request)
+        server.get_consent_grant(request, end_user=user)
 
     url = "/authorize?response_type=code&client_id=invalid-id"
     request = factory.get(url)
     with pytest.raises(errors.InvalidClientError):
-        server.get_consent_grant(request)
+        server.get_consent_grant(request, end_user=user)
 
     client.response_type = ""
     client.save()
     url = "/authorize?response_type=code&client_id=client-id"
     request = factory.get(url)
     with pytest.raises(errors.UnauthorizedClientError):
-        server.get_consent_grant(request)
+        server.get_consent_grant(request, end_user=user)
 
     url = "/authorize?response_type=code&client_id=client-id&scope=profile&state=bar&redirect_uri=https%3A%2F%2Fclient.test&response_type=code"
     request = factory.get(url)
     with pytest.raises(errors.InvalidRequestError):
-        server.get_consent_grant(request)
+        server.get_consent_grant(request, end_user=user)
 
 
 def test_get_consent_grant_redirect_uri(factory, server):
@@ -93,13 +95,13 @@ def test_get_consent_grant_redirect_uri(factory, server):
     assert isinstance(grant, grants.AuthorizationCodeGrant)
 
 
-def test_get_consent_grant_scope(factory, server):
+def test_get_consent_grant_scope(factory, server, user):
     server.scopes_supported = ["profile"]
     base_url = "/authorize?response_type=code&client_id=client-id"
     url = base_url + "&scope=invalid"
     request = factory.get(url)
     with pytest.raises(errors.InvalidScopeError):
-        server.get_consent_grant(request)
+        server.get_consent_grant(request, end_user=user)
 
 
 def test_create_authorization_response(factory, server):
@@ -108,14 +110,14 @@ def test_create_authorization_response(factory, server):
     grant = server.get_consent_grant(request)
 
     resp = server.create_authorization_response(request, grant=grant)
-    assert resp.status_code == 302
+    assert resp.status_code == 303
     assert "error=access_denied" in resp["Location"]
 
     grant_user = User.objects.get(username="foo")
     resp = server.create_authorization_response(
         request, grant=grant, grant_user=grant_user
     )
-    assert resp.status_code == 302
+    assert resp.status_code == 303
     assert "code=" in resp["Location"]
 
 
@@ -189,7 +191,7 @@ def get_token_response(factory, server):
     resp = server.create_authorization_response(
         request, grant=grant, grant_user=grant_user
     )
-    assert resp.status_code == 302
+    assert resp.status_code == 303
 
     params = dict(url_decode(urlparse.urlparse(resp["Location"]).query))
     code = params["code"]
@@ -203,3 +205,17 @@ def get_token_response(factory, server):
     assert resp.status_code == 200
     data = json.loads(resp.content)
     return data
+
+
+def test_get_consent_grant_with_session(factory, server, user):
+    """The Django authorization session keeps the start time of the request
+    in the Django session."""
+    server.register_extension(StepUpAuthentication())
+    request = factory.get(
+        "/authorize?response_type=code&client_id=client-id&max_age=60"
+    )
+    request.session = factory.session
+    authorization_session = AuthorizationSession(user, request.session)
+    grant = server.get_consent_grant(request, session=authorization_session)
+    key = grant.request.authorization_key
+    assert request.session["authlib_request_times"] == {key: grant.request.request_time}

@@ -1,10 +1,10 @@
 .. _specs/rfc7662:
 
-RFC7662: OAuth 2.0 Token Introspection
-======================================
+RFC 7662: OAuth 2.0 Token Introspection
+=======================================
 
 .. meta::
-    :description: API references on RFC7009, OAuth 2.0 Token Introspection,
+    :description: API references on RFC 7662, OAuth 2.0 Token Introspection,
         in Python via Authlib implementation.
 
 This section contains the generic implementation of :rfc:`7662`. OAuth 2.0 Token
@@ -71,7 +71,9 @@ Authlib is designed to be very extendable, with the method of
 ``.register_endpoint`` on ``AuthorizationServer``, it is easy to add the
 introspection endpoint to the authorization server. It works on both
 :ref:`flask_oauth2_server` and :ref:`django_oauth2_server`. But first,
-we need to implement the missing methods::
+we need to implement the missing methods:
+
+.. code-block:: python
 
     from authlib.oauth2.rfc7662 import IntrospectionEndpoint
 
@@ -98,18 +100,24 @@ we need to implement the missing methods::
                 'sub': get_token_user_sub(token),
                 'aud': token.client_id,
                 'iss': 'https://server.example.com/',
-                'exp': token.expires_at,
+                'exp': token.issued_at + token.expires_in,
                 'iat': token.issued_at,
             }
 
         def check_permission(self, token, client, request):
-            # for example, we only allow internal client to access introspection endpoint
-            return client.client_type == 'internal'
+            # for example, only the resource server can access the introspection endpoint
+            return client.client_id == 'resource-server'
 
     # register it to authorization server
     server.register_endpoint(MyIntrospectionEndpoint)
 
-After the registration, we can create a response with::
+``token_type_hint`` is ``None`` when the request has no hint or an unknown
+one. If no token is found with the hint, the endpoint calls ``query_token``
+again with ``None``, per :rfc:`RFC 7662 §2.1 <7662#section-2.1>`.
+
+After the registration, we can create a response with:
+
+.. code-block:: python
 
     @app.route('/oauth/introspect', methods=['POST'])
     def introspect_token():
@@ -124,7 +132,11 @@ Use Introspection in Resource Server
 .. versionadded:: v1.0
 
 When resource server has no access to token database, it can use introspection
-endpoint to validate the given token. Here is how::
+endpoint to validate the given token. Here is how:
+
+.. skip: next "depends on the application secrets"
+
+.. code-block:: python
 
     import requests
     from authlib.oauth2.rfc7662 import IntrospectTokenValidator
@@ -139,7 +151,11 @@ endpoint to validate the given token. Here is how::
             resp.raise_for_status()
             return resp.json()
 
-We can then register this token validator in to resource protector::
+We can then register this token validator in to resource protector:
+
+.. skip: next "uses the previous example"
+
+.. code-block:: python
 
     require_oauth = ResourceProtector()
     require_oauth.register_token_validator(MyIntrospectTokenValidator())
@@ -157,3 +173,21 @@ API Reference
 
 .. autoclass:: IntrospectTokenValidator
     :members:
+
+.. invisible-code-block: python
+
+    def get_token_username(token):
+        return None
+
+    def get_token_user_sub(token):
+        return None
+
+    client = create_client("resource-server")
+    token = create_token(client)
+    response = app.test_client().post(
+        "/oauth/introspect",
+        data={"token": token.access_token},
+        auth=("resource-server", "client-secret"),
+    )
+    assert response.status_code == 200, response.json
+    assert response.json["active"] is True

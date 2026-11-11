@@ -9,6 +9,7 @@ from authlib.oauth2.rfc6749.grants.authorization_code import (
 from .implicit import OpenIDImplicitGrant
 from .util import is_openid_scope
 from .util import validate_nonce
+from .util import validate_response_mode
 
 log = logging.getLogger(__name__)
 
@@ -19,7 +20,6 @@ class OpenIDHybridGrant(OpenIDImplicitGrant):
 
     RESPONSE_TYPES = {"code id_token", "code token", "code id_token token"}
     GRANT_TYPE = "code"
-    DEFAULT_RESPONSE_MODE = "fragment"
 
     def generate_authorization_code(self):
         """ "The method to generate "code" value for authorization code data.
@@ -42,6 +42,7 @@ class OpenIDHybridGrant(OpenIDImplicitGrant):
                     redirect_uri=request.payload.redirect_uri,
                     scope=request.scope,
                     nonce=request.payload.data.get("nonce"),
+                    auth_time=request.auth_time,
                     user_id=request.user.id,
                 )
                 auth_code.save()
@@ -50,12 +51,13 @@ class OpenIDHybridGrant(OpenIDImplicitGrant):
 
     def validate_authorization_request(self):
         self.register_hook(
-            "after_validate_authorization_request_payload",
             lambda grant, redirect_uri: validate_nonce(
                 grant.request, grant.exists_nonce, required=True
             ),
+            after=self.validate_authorization_request_payload,
         )
         redirect_uri = validate_code_authorization_request(self)
+        validate_response_mode(self, redirect_uri)
         if not is_openid_scope(self.request.scope):
             raise InvalidScopeError(
                 "Missing 'openid' scope",

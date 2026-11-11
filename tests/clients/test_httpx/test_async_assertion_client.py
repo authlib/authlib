@@ -1,4 +1,5 @@
 import time
+import urllib.parse
 
 import pytest
 from httpx2 import ASGITransport
@@ -93,3 +94,35 @@ async def test_without_alg():
     ) as client:
         with pytest.raises(ValueError):
             await client.get("https://provider.test")
+
+
+@pytest.mark.asyncio
+async def test_access_token_params():
+    """access_token_params are added to the token request."""
+    bodies = []
+
+    async def verifier(request):
+        if str(request.url) == "https://provider.test/token":
+            bodies.append((await request.body()).decode())
+
+    async with AsyncAssertionClient(
+        "https://provider.test/token",
+        issuer="foo",
+        subject="foo",
+        audience="foo",
+        alg="HS256",
+        key=hmac_key,
+        scope="email",
+        access_token_params={
+            "resource": ["https://a.test/"],
+            "scope": "x",
+            "foo": None,
+        },
+        transport=ASGITransport(AsyncMockDispatch(default_token, assert_func=verifier)),
+    ) as client:
+        await client.get("https://provider.test")
+
+    params = urllib.parse.parse_qsl(bodies[0], keep_blank_values=True)
+    assert ("resource", "https://a.test/") in params
+    assert [v for k, v in params if k == "scope"] == ["email"]
+    assert "foo" not in [k for k, _ in params]
