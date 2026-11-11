@@ -380,6 +380,7 @@ def validate_code_authorization_request(grant):
         raise UnauthorizedClientError(
             f"The client is not authorized to use 'response_type={response_type}'",
             redirect_uri=redirect_uri,
+            redirect_fragment=grant.ERROR_RESPONSE_FRAGMENT,
         )
 
     grant.request.client = client
@@ -388,5 +389,6 @@ def validate_code_authorization_request(grant):
         grant.validate_authorization_request_payload(redirect_uri)
     except OAuth2Error as error:
         error.redirect_uri = redirect_uri
+        error.redirect_fragment = grant.ERROR_RESPONSE_FRAGMENT
         raise error
     return redirect_uri

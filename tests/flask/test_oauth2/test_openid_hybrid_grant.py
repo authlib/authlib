@@ -229,8 +229,55 @@ def test_require_nonce(test_client):
             "user_id": "1",
         },
     )
-    assert "error=invalid_request" in rv.location
-    assert "nonce" in rv.location
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["error"] == "invalid_request"
+    assert "nonce" in params["error_description"]
+    assert params["state"] == "bar"
+
+
+def test_unsupported_scope(test_client, server):
+    """A scope that the server does not support is refused with
+    invalid_scope, redirected in the fragment."""
+    server.scopes_supported = ["openid"]
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "client_id": "client-id",
+            "response_type": "code token",
+            "scope": "openid profile",
+            "state": "bar",
+            "nonce": "abc",
+            "redirect_uri": "https://client.test",
+            "user_id": "1",
+        },
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["error"] == "invalid_scope"
+    assert params["state"] == "bar"
+
+
+def test_unauthorized_response_type(test_client, client, db):
+    """A response type that the client may not use is refused with
+    unauthorized_client, redirected in the fragment."""
+    client.set_client_metadata(
+        {**client.client_metadata, "response_types": ["code id_token"]}
+    )
+    db.session.commit()
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "client_id": "client-id",
+            "response_type": "code token",
+            "scope": "openid profile",
+            "state": "bar",
+            "nonce": "abc",
+            "redirect_uri": "https://client.test",
+            "user_id": "1",
+        },
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["error"] == "unauthorized_client"
+    assert params["state"] == "bar"
 
 
 def test_invalid_response_type(test_client):
