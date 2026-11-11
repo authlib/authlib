@@ -1,7 +1,8 @@
 Authors
 =======
 
-Authlib is written and maintained by `Hsiaoming Yang <https://lepture.com>`_.
+Authlib is written by `Hsiaoming Yang <https://lepture.com>`_. It is maintained
+by Hsiaoming Yang and `Éloi Rivard <https://github.com/azmeuk>`_.
 
 
 Contributors
@@ -16,7 +17,6 @@ Here is the list of the main contributors:
 - Mario Jimenez Carrasco
 - Bastian Venthur
 - Nuno Santos
-- Éloi Rivard
 
 And more on https://github.com/authlib/authlib/graphs/contributors
 
