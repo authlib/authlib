@@ -9,6 +9,7 @@ from authlib.deprecate import accepts_argument
 from authlib.deprecate import deprecate
 from authlib.oauth2.form_post import FormPost
 from authlib.oauth2.multiple_response_types import MultipleResponseTypes
+from authlib.oauth2.rfc6749 import AccessDeniedError
 from authlib.oauth2.rfc6749 import AuthorizationResponse
 from authlib.oauth2.rfc6749 import InvalidRequestError
 from authlib.oauth2.rfc6749 import scope_to_list
@@ -368,6 +369,68 @@ def resolve_authentication(grant, redirect_uri):
     session."""
     grant.request.auth_time = resolve_auth_time(grant)
     set_authentication_context(grant, redirect_uri)
+    validate_essential_acr(grant, redirect_uri)
+
+
+def _get_acr_request(claims_request):
+    """Return the request of the acr claim in the id_token member of a claims
+    request, or None."""
+    acr = (get_requested_claims(claims_request, "id_token") or {}).get("acr")
+    return acr if isinstance(acr, dict) else None
+
+
+def get_claims_parameter_acr_values(claims_request):
+    """Return the ``acr`` values that the ``id_token`` member of a ``claims``
+    request asks for, with ``values`` or ``value``, or ``None``."""
+    return _get_acr_values(_get_acr_request(claims_request) or {})
+
+
+def _get_acr_values(acr):
+    """Return the values of an acr claim request, or None."""
+    values = acr.get("values")
+    if not isinstance(values, list):
+        values = [acr.get("value")]
+
+    values = [value for value in values if isinstance(value, str)]
+    return values or None
+
+
+def is_essential_acr_unmet(request, acr):
+    """Tell whether the ``claims`` parameter of the request asks for an
+    essential ``acr`` with values, and ``acr`` is not one of them.
+
+    :param request: the authorization request
+    :param acr: the ``acr`` of the authentication of the user
+    """
+    acr_request = _get_acr_request(getattr(request, "claims_request", None))
+    if acr_request is None or acr_request.get("essential") is not True:
+        return False
+
+    values = _get_acr_values(acr_request)
+    return values is not None and acr not in values
+
+
+def validate_essential_acr(grant, redirect_uri):
+    """Refuse the request when the ``claims`` parameter asks for an essential
+    ``acr`` that the authentication does not satisfy.
+
+    Per OIDC Core §5.5.1.1, the server MUST then treat the outcome as a failed
+    authentication attempt. The request is refused with ``access_denied``,
+    redirected to the client.
+
+    :param grant: the grant that creates the authorization response
+    :param redirect_uri: the redirect URI of the authorization request
+    :raises AccessDeniedError: if the ``acr`` of the request is not one of the
+        requested values
+    """
+    if not is_essential_acr_unmet(grant.request, grant.request.acr):
+        return
+
+    raise AccessDeniedError(
+        "The authentication does not satisfy the requested 'acr' values.",
+        redirect_uri=redirect_uri,
+        redirect_fragment=grant.ERROR_RESPONSE_FRAGMENT,
+    )
 
 
 def get_requested_claims(claims_request, member):

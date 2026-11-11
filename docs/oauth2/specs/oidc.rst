@@ -48,6 +48,8 @@ OpenID Endpoints
     :show-inheritance:
     :members:
 
+.. autofunction:: get_requested_acr_values
+
 .. autoclass:: AuthorizationCodeMixin
     :show-inheritance:
     :members: get_claims_request

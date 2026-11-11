@@ -5,9 +5,11 @@ https://openid.net/specs/openid-connect-core-1_0.html#ClaimsParameter
 
 import json
 
+from authlib.oauth2 import rfc9470
 from authlib.oauth2.rfc6749 import AuthorizationServer
 from authlib.oauth2.rfc6749 import InvalidRequestError
 
+from .grants.util import get_claims_parameter_acr_values
 from .grants.util import is_openid_scope
 
 # OIDC Core §5.5: the members that request claims for the ID token and for the
@@ -35,10 +37,14 @@ class ClaimsParameter:
 
     The parameter can request claims that the scope does not cover. Show them
     on the consent page, and only return the claims that the user accepts to
-    share. The extension does not check the ``acr`` and ``sub`` values that the
-    parameter requests. To refuse an ``acr`` that the authentication does not
-    satisfy, raise an error from the ``get_acr`` method of the authorization
-    session.
+    share.
+
+    When the parameter requests an essential ``acr`` with ``values``, and the
+    ``acr`` that ``get_acr`` returns is not one of them, the request is refused
+    with ``access_denied``. To return ``unmet_authentication_requirements``
+    instead, register
+    :class:`~authlib.oidc.unmet_authentication_requirements.UnmetAuthenticationRequirements`.
+    The extension does not check a requested ``sub`` value.
     """
 
     def __call__(self, authorization_server):
@@ -91,6 +97,21 @@ class ClaimsParameter:
             )
 
         request.claims_request = claims_request
+
+
+def get_requested_acr_values(request):
+    """Return the ``acr`` values that the request asks for, in order of
+    preference, or an empty list. The values of the ``acr`` claim in the
+    ``id_token`` member of the ``claims`` parameter come first. Without them,
+    the values of the ``acr_values`` parameter are returned.
+
+    :param request: the authorization request
+    """
+    values = get_claims_parameter_acr_values(getattr(request, "claims_request", None))
+    if values is not None:
+        return values
+
+    return rfc9470.get_requested_acr_values(request)
 
 
 def _parse_claims_request(value):

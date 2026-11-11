@@ -309,3 +309,23 @@ def test_hooked_rejects_custom_names():
         pytest.raises(TypeError, match="custom hook names"),
     ):
         hooked(after="after_custom")
+
+
+def test_hooks_without_hookable_init():
+    """An instance whose __init__ does not call Hookable.__init__ still accepts
+    hooks."""
+
+    class Session(Hookable):
+        def __init__(self, user):
+            self.user = user
+
+        def get_acr(self, request):
+            return "silver"
+
+    session = Session("alice")
+    assert session.get_acr(None) == "silver"
+    session.register_hook(
+        lambda instance, original, request: "gold", replace=session.get_acr
+    )
+    assert session.get_acr(None) == "gold"
+    assert Session("bob").get_acr(None) == "silver"

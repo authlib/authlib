@@ -23,6 +23,9 @@ from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core.grants import OpenIDCode as _OpenIDCode
 from authlib.oidc.prompt_create import PromptValues
 from authlib.oidc.unmet_authentication_requirements import (
+    UnmetAuthenticationRequirements,
+)
+from authlib.oidc.unmet_authentication_requirements import (
     UnmetAuthenticationRequirementsError,
 )
 from tests.util import HMAC_SECRET
@@ -1359,3 +1362,117 @@ def test_generate_user_info_without_claims(test_client, server):
         )
 
     assert claims["sub"] == "1"
+
+
+def authorize_with_claims(test_client, claims_request):
+    """Send an authorization request with a claims parameter, and return the
+    parameters of the redirection."""
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "code",
+            "client_id": "client-id",
+            "scope": "openid",
+            "redirect_uri": "https://client.test",
+            "state": "bar",
+            "claims": json.dumps(claims_request),
+            "user_id": "1",
+        },
+    )
+    return dict(url_decode(urlparse.urlparse(rv.location).query))
+
+
+@pytest.mark.parametrize(
+    "acr_request",
+    [
+        {"essential": True, "values": ["gold", "platinum"]},
+        {"essential": True, "value": "gold"},
+    ],
+)
+def test_essential_acr_unmet(test_client, server, monkeypatch, acr_request):
+    """An essential acr that the authentication does not satisfy is refused
+    with access_denied, redirected to the client."""
+    monkeypatch.setattr(
+        AuthorizationSession, "get_acr", lambda self, request: "silver", raising=False
+    )
+    server.register_extension(ClaimsParameter())
+    register_oidc_code_grant(server)
+    params = authorize_with_claims(test_client, {"id_token": {"acr": acr_request}})
+    assert params["error"] == "access_denied"
+    assert params["state"] == "bar"
+
+
+@pytest.mark.parametrize(
+    "acr_request",
+    [
+        {"essential": True, "values": ["gold", "platinum"]},
+        {"values": ["platinum"]},
+        {"essential": True},
+    ],
+)
+def test_essential_acr_met_or_voluntary(test_client, server, monkeypatch, acr_request):
+    """A satisfied essential acr, a voluntary acr or an essential acr without
+    values does not refuse the request."""
+    monkeypatch.setattr(
+        AuthorizationSession, "get_acr", lambda self, request: "gold", raising=False
+    )
+    server.register_extension(ClaimsParameter())
+    register_oidc_code_grant(server)
+    params = authorize_with_claims(test_client, {"id_token": {"acr": acr_request}})
+    assert "code" in params
+
+
+@pytest.mark.parametrize(
+    ("acr", "error"),
+    [("silver", "unmet_authentication_requirements"), ("gold", None)],
+)
+def test_essential_acr_unmet_extension(app, test_client, server, acr, error):
+    """With the UnmetAuthenticationRequirements extension, an essential acr
+    that is not met is refused with unmet_authentication_requirements."""
+
+    class AcrAuthorizationSession(AuthorizationSession):
+        def get_acr(self, request):
+            return acr
+
+    app.config["AUTHORIZATION_SESSION"] = AcrAuthorizationSession
+    server.register_extension(ClaimsParameter())
+    server.register_extension(UnmetAuthenticationRequirements())
+    register_oidc_code_grant(server)
+    claims_request = {"id_token": {"acr": {"essential": True, "values": ["gold"]}}}
+    params = authorize_with_claims(test_client, claims_request)
+    assert params.get("error") == error
+    assert params["state"] == "bar"
+
+
+def test_unmet_extension_without_claims_parameter(app, test_client, server):
+    """Without the claims parameter, the extension does not refuse the
+    requested acr_values."""
+
+    class AcrAuthorizationSession(AuthorizationSession):
+        def get_acr(self, request):
+            return "silver"
+
+    app.config["AUTHORIZATION_SESSION"] = AcrAuthorizationSession
+    server.register_extension(UnmetAuthenticationRequirements())
+    register_oidc_code_grant(server)
+    claims = exchange_code_for_id_token(test_client, {"acr_values": "gold"})
+    assert claims["sub"] == "1"
+
+
+def test_unmet_extension_with_plain_acr_mixin(app, test_client, server):
+    """A get_acr inherited from a plain class is checked too."""
+
+    class AcrMixin:
+        def get_acr(self, request):
+            return "silver"
+
+    class AcrAuthorizationSession(AcrMixin, AuthorizationSession):
+        pass
+
+    app.config["AUTHORIZATION_SESSION"] = AcrAuthorizationSession
+    server.register_extension(ClaimsParameter())
+    server.register_extension(UnmetAuthenticationRequirements())
+    register_oidc_code_grant(server)
+    claims_request = {"id_token": {"acr": {"essential": True, "values": ["gold"]}}}
+    params = authorize_with_claims(test_client, claims_request)
+    assert params["error"] == "unmet_authentication_requirements"

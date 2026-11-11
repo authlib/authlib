@@ -70,6 +70,9 @@ class Hookable:
             if it does not belong to the class of this object or to its parents,
             or if the arguments do not match one of the two forms.
         """
+        if self._hooks is None:
+            self._hooks = defaultdict(dict)
+
         targets = {"before": before, "after": after, "replace": replace}
         targets = {
             phase: method for phase, method in targets.items() if method is not None
@@ -104,7 +107,7 @@ class Hookable:
         self._hooks[f"{phase}_{name}"][hook_or_name] = None
 
     def execute_hook(self, hook_type, *args, **kwargs):
-        for hook in list(self._hooks.get(hook_type, ())):
+        for hook in list((self._hooks or {}).get(hook_type, ())):
             hook(self, *args, **kwargs)
 
 

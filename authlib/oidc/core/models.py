@@ -50,8 +50,9 @@ class AuthorizationSessionMixin(_AuthorizationSessionMixin):
 
     The time of the ``"login"`` interaction becomes the ``auth_time`` claim of
     the ID token, and :meth:`get_acr` and :meth:`get_amr` give its ``acr`` and
-    ``amr`` claims. To refuse a request whose ``acr_values`` cannot be met,
-    raise
+    ``amr`` claims. The ``acr`` values that the client requests are given by
+    :func:`~authlib.oidc.core.get_requested_acr_values`. To refuse a request
+    whose requested ``acr`` cannot be met, raise
     :class:`~authlib.oidc.unmet_authentication_requirements.UnmetAuthenticationRequirementsError`
     from :meth:`get_acr`. :meth:`get_interaction_time` also takes
     ``"select_account"``, the time the user selected their account.

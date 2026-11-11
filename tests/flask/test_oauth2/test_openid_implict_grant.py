@@ -16,6 +16,9 @@ from authlib.oidc.core import ClaimsParameter
 from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core.grants import OpenIDImplicitGrant as _OpenIDImplicitGrant
 from authlib.oidc.unmet_authentication_requirements import (
+    UnmetAuthenticationRequirements,
+)
+from authlib.oidc.unmet_authentication_requirements import (
     UnmetAuthenticationRequirementsError,
 )
 from tests.util import HMAC_SECRET
@@ -888,4 +891,60 @@ def test_invalid_claims_parameter(test_client, server):
     )
     params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
     assert params["error"] == "invalid_request"
+    assert params["state"] == "bar"
+
+
+def test_essential_acr_unmet(test_client, server, monkeypatch):
+    """An essential acr that the authentication does not satisfy is refused
+    with access_denied, redirected in the fragment."""
+    monkeypatch.setattr(
+        AuthorizationSession, "get_acr", lambda self, request: "silver", raising=False
+    )
+    server.register_extension(ClaimsParameter())
+    claims_request = {"id_token": {"acr": {"essential": True, "values": ["gold"]}}}
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "id_token",
+            "client_id": "client-id",
+            "scope": "openid",
+            "state": "bar",
+            "nonce": "abc",
+            "redirect_uri": "https://client.test/callback",
+            "claims": json.dumps(claims_request),
+            "user_id": "1",
+        },
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["error"] == "access_denied"
+    assert params["state"] == "bar"
+
+
+def test_essential_acr_unmet_extension(app, test_client, server):
+    """With the UnmetAuthenticationRequirements extension, the error is
+    unmet_authentication_requirements, redirected in the fragment."""
+
+    class AcrAuthorizationSession(AuthorizationSession):
+        def get_acr(self, request):
+            return "silver"
+
+    app.config["AUTHORIZATION_SESSION"] = AcrAuthorizationSession
+    server.register_extension(ClaimsParameter())
+    server.register_extension(UnmetAuthenticationRequirements())
+    claims_request = {"id_token": {"acr": {"essential": True, "values": ["gold"]}}}
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "id_token",
+            "client_id": "client-id",
+            "scope": "openid",
+            "state": "bar",
+            "nonce": "abc",
+            "redirect_uri": "https://client.test/callback",
+            "claims": json.dumps(claims_request),
+            "user_id": "1",
+        },
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["error"] == "unmet_authentication_requirements"
     assert params["state"] == "bar"

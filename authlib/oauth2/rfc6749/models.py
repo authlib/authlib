@@ -4,6 +4,8 @@
 This module defines how to construct Client, AuthorizationCode and Token.
 """
 
+from authlib.common.hooks import Hookable
+
 
 class ClientMixin:
     """Implementation of OAuth 2 Client described in :rfc:`6749#section-2` with
@@ -252,7 +254,7 @@ class TokenMixin:
         raise NotImplementedError()
 
 
-class AuthorizationSessionMixin:
+class AuthorizationSessionMixin(Hookable):
     """The session of a user at the authorization server, during an
     authorization request. Developers MAY implement it, and pass it to
     ``get_consent_grant``. It gives the facts that Authlib needs to decide

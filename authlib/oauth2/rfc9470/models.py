@@ -11,7 +11,8 @@ class AuthorizationSessionMixin(_AuthorizationSessionMixin):
         """Return the Authentication Context Class Reference that the
         authentication of the user satisfies, such as
         ``"urn:mace:incommon:iap:silver"``. The values that the client
-        requests are in ``request.payload.data.get("acr_values")``. Raise an
+        requests are given by
+        :func:`~authlib.oauth2.rfc9470.get_requested_acr_values`. Raise an
         :class:`~authlib.oauth2.OAuth2Error` to refuse the request: it is
         redirected to the client. By default, there is no ``acr``.
 

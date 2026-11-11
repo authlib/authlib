@@ -7,7 +7,11 @@ from joserfc.errors import InvalidClaimError
 from joserfc.errors import MissingClaimError
 
 from authlib.deprecate import AuthlibDeprecationWarning
+from authlib.oauth2 import rfc9470
 from authlib.oauth2.rfc6749 import AuthorizationServer
+from authlib.oauth2.rfc6749 import (
+    AuthorizationSessionMixin as OAuth2AuthorizationSessionMixin,
+)
 from authlib.oauth2.rfc6749 import InvalidRequestError
 from authlib.oauth2.rfc6749.grants import AuthorizationEndpointMixin
 from authlib.oauth2.rfc6749.grants import BaseGrant
@@ -21,9 +25,13 @@ from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core import OpenIDCode
 from authlib.oidc.core import UserInfo
 from authlib.oidc.core import get_claim_cls_by_response_type
+from authlib.oidc.core import get_requested_acr_values
 from authlib.oidc.core.errors import LoginRequiredError
 from authlib.oidc.core.grants.util import call_generate_user_info
 from authlib.oidc.core.grants.util import validate_request_prompt
+from authlib.oidc.unmet_authentication_requirements import (
+    UnmetAuthenticationRequirements,
+)
 
 USER = object()
 
@@ -298,6 +306,67 @@ def test_generate_user_info_partial_without_claims():
         )
 
     assert user_info == {"sub": "user-1"}
+
+
+def acr_request(data, claims_request=None):
+    """Return a request with the given parameters and claims request."""
+    payload = types.SimpleNamespace(data=data)
+    return types.SimpleNamespace(payload=payload, claims_request=claims_request)
+
+
+def test_get_requested_acr_values():
+    """The acr values of the claims parameter come before acr_values."""
+    assert rfc9470.get_requested_acr_values(acr_request({})) == []
+    request = acr_request({"acr_values": "gold silver"})
+    assert rfc9470.get_requested_acr_values(request) == ["gold", "silver"]
+    assert get_requested_acr_values(request) == ["gold", "silver"]
+
+    claims_request = {"id_token": {"acr": {"values": ["platinum"]}}}
+    request = acr_request({"acr_values": "gold"}, claims_request)
+    assert get_requested_acr_values(request) == ["platinum"]
+
+    claims_request = {"id_token": {"acr": {"value": "platinum"}}}
+    assert get_requested_acr_values(acr_request({}, claims_request)) == ["platinum"]
+
+    for acr in (None, {"values": []}, {"values": [1]}):
+        claims_request = {"id_token": {"acr": acr}}
+        request = acr_request({"acr_values": "gold"}, claims_request)
+        assert get_requested_acr_values(request) == ["gold"]
+
+
+def test_unmet_extension_with_unhookable_get_acr():
+    """A get_acr that cannot be hooked is left as it is."""
+
+    class AcrMixin:
+        def get_acr(self, request):
+            return "silver"
+
+    class Session(AcrMixin, OAuth2AuthorizationSessionMixin):
+        pass
+
+    session = Session()
+    payload = types.SimpleNamespace(scope="openid")
+    grant = types.SimpleNamespace(
+        authorization_session=session, request=types.SimpleNamespace(payload=payload)
+    )
+    UnmetAuthenticationRequirements().register_session_hooks(grant)
+    assert session.get_acr(None) == "silver"
+
+
+@pytest.mark.parametrize(
+    ("session", "scope"),
+    [(None, "openid"), (AuthorizationSessionMixin(), "profile")],
+    ids=["no-session", "no-openid-scope"],
+)
+def test_unmet_extension_without_hook(session, scope):
+    """Without a session, or without the openid scope, no hook is
+    registered."""
+    payload = types.SimpleNamespace(scope=scope)
+    grant = types.SimpleNamespace(
+        authorization_session=session, request=types.SimpleNamespace(payload=payload)
+    )
+    UnmetAuthenticationRequirements().register_session_hooks(grant)
+    assert not getattr(session, "_hooks", None)
 
 
 def test_openid_code_on_custom_grant(monkeypatch):

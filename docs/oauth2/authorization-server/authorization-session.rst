@@ -64,13 +64,23 @@ The grants also set them in ``request.amr`` and ``request.acr``, so that
             return self.session.get("acr")
 
 A client can ask for ``acr`` values with the ``acr_values`` parameter, in
-order of preference. They are in ``request.payload.data.get("acr_values")``.
-The server does not have to meet them. Per OpenID Connect Core §5.5.1.1, when
-it cannot provide a requested value, it should return the current ``acr`` of
-the session, as in this example. To refuse the request instead, raise
+order of preference. :func:`~authlib.oauth2.rfc9470.get_requested_acr_values`
+returns them. With OpenID Connect, use
+:func:`~authlib.oidc.core.get_requested_acr_values` instead. It also reads the
+``acr`` claim of the ``claims`` parameter (:ref:`specs/oidc`).
+
+The server does not have to meet the ``acr_values``. Per OpenID Connect Core
+§5.5.1.1, when it cannot provide a requested value, it should return the
+current ``acr`` of the session, as in this example. To refuse the request
+instead, raise
 :class:`~authlib.oidc.unmet_authentication_requirements.UnmetAuthenticationRequirementsError`
 from ``get_acr``. The error is redirected to the client. ``get_acr`` is called
 after the login and the consent, so it cannot ask the user to log in again.
+
+An essential ``acr`` requested with the ``claims`` parameter is stricter. When
+``get_acr`` returns another value, the OpenID Connect grants refuse the
+request with ``access_denied``, or with ``unmet_authentication_requirements``
+with the extension of :ref:`specs/unmet_authentication_requirements`.
 
 The time of the login comes from ``get_interaction_time(request, "login")``.
 It must come from a real authentication, with a password or another factor.
