@@ -156,6 +156,37 @@ def test_invalid_code(test_client):
     assert resp["error"] == "invalid_grant"
 
 
+def test_reused_code(test_client, client, monkeypatch):
+    """A reused code is denied, and the tokens issued with it can be revoked."""
+    revoked = []
+
+    def revoke_authorization_code_tokens(self, code, client):
+        revoked.append((code, client.client_id))
+
+    monkeypatch.setattr(
+        AuthorizationCodeGrant,
+        "revoke_authorization_code_tokens",
+        revoke_authorization_code_tokens,
+    )
+    rv = test_client.post(authorize_url, data={"user_id": "1"})
+    code = dict(url_decode(urlparse.urlparse(rv.location).query))["code"]
+    headers = create_basic_header("client-id", "client-secret")
+    data = {"grant_type": "authorization_code", "code": code}
+
+    rv = test_client.post("/oauth/token", data=data, headers=headers)
+    assert "access_token" in json.loads(rv.data)
+    assert revoked == []
+
+    rv = test_client.post("/oauth/token", data=data, headers=headers)
+    assert json.loads(rv.data)["error"] == "invalid_grant"
+    assert revoked == [(code, "client-id")]
+
+    data["code"] = "unknown"
+    rv = test_client.post("/oauth/token", data=data, headers=headers)
+    assert json.loads(rv.data)["error"] == "invalid_grant"
+    assert revoked == [(code, "client-id"), ("unknown", "client-id")]
+
+
 def test_invalid_redirect_uri(test_client):
     uri = authorize_url + "&redirect_uri=https%3A%2F%2Fa.c"
     rv = test_client.post(uri, data={"user_id": "1"})

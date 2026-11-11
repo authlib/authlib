@@ -112,6 +112,59 @@ clients:
 
         # ... the methods of the previous example
 
+Reused Codes
+~~~~~~~~~~~~
+
+A code can be exchanged only once. When the grant does not find a code, it
+denies the request with ``invalid_grant``. Per :rfc:`6749#section-4.1.2`, if
+the code was already used, the server should also revoke the tokens issued
+with it. The grant calls
+:meth:`~AuthorizationCodeGrant.revoke_authorization_code_tokens` with the code
+string and the client before it denies the request. By default, this method
+does nothing.
+
+To revoke the tokens, link each token to its code. For instance, add an
+``authorization_code`` field to the ``OAuth2Token`` model, and fill it in
+``save_token``. ``request.authorization_code`` is the code being exchanged.
+A token issued by the refresh token grant takes the code of the previous
+token, ``request.refresh_token``:
+
+.. code-block:: python
+
+    from authlib.integrations.django_oauth2 import AuthorizationServer
+
+    def get_authorization_code(request):
+        if request.authorization_code:
+            return request.authorization_code.code
+
+        if request.refresh_token:
+            return request.refresh_token.authorization_code
+
+        return None
+
+    class MyAuthorizationServer(AuthorizationServer):
+        def save_token(self, token, request):
+            token = {**token, "authorization_code": get_authorization_code(request)}
+            return super().save_token(token, request)
+
+Then revoke the tokens that carry the code:
+
+.. code-block:: python
+
+    class AuthorizationCodeGrant(grants.AuthorizationCodeGrant):
+        # ... the methods of the previous example
+
+        def revoke_authorization_code_tokens(self, code, client):
+            OAuth2Token.objects.filter(authorization_code=code).update(revoked=True)
+
+The codes can be stored anywhere, for instance in a database or in a cache.
+A used code can be deleted, or kept with a ``used`` flag. If it is kept,
+``query_authorization_code`` must not return it.
+
+Two requests that exchange the same code at the same time can both get a
+token. To prevent it, lock the code while it is exchanged, for instance with
+``SELECT ... FOR UPDATE`` in ``query_authorization_code``.
+
 Implicit Grant
 --------------
 
