@@ -220,6 +220,7 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
         # code was issued to "client_id" in the request
         authorization_code = self.query_authorization_code(code, client)
         if not authorization_code:
+            self.revoke_authorization_code_tokens(code, client)
             raise InvalidGrantError("Invalid 'code' in request.")
 
         # validate redirect_uri parameter
@@ -333,6 +334,28 @@ class AuthorizationCodeGrant(BaseGrant, AuthorizationEndpointMixin, TokenEndpoin
         :param authorization_code: the instance of authorization_code
         """
         raise NotImplementedError()
+
+    def revoke_authorization_code_tokens(self, code, client):
+        """Revoke the tokens issued with an authorization code that is used again.
+
+        The grant calls this method when :meth:`query_authorization_code`
+        returns ``None``. The request is then denied with ``invalid_grant``.
+        Per :rfc:`6749#section-4.1.2`, if the code was already used, the server
+        should revoke the tokens issued with it. By default, nothing is revoked.
+
+        To support it, store the code string with each token, then revoke the
+        tokens that carry it::
+
+            def revoke_authorization_code_tokens(self, code, client):
+                Token.query.filter_by(authorization_code=code).update({"revoked": True})
+
+        The method is also called for unknown or expired codes.
+        In that case, no token should match. The ``client`` is the client that
+        sent the code. It can differ from the client the code was issued to.
+
+        :param code: the ``code`` string sent by the client.
+        :param client: the authenticated client.
+        """
 
     def authenticate_user(self, authorization_code):
         """Authenticate the user related to this authorization_code. Developers
