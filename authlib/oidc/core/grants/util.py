@@ -13,6 +13,7 @@ from authlib.oauth2.rfc6749 import InvalidRequestError
 from authlib.oauth2.rfc6749 import scope_to_list
 from authlib.oauth2.rfc9470 import get_max_age
 from authlib.oauth2.rfc9470 import is_login_required
+from authlib.oauth2.rfc9470 import set_authentication_context
 
 from ..errors import AccountSelectionRequiredError
 from ..errors import ConsentRequiredError
@@ -358,3 +359,10 @@ def resolve_auth_time(grant):
 
     auth_time = session.get_interaction_time(grant.request, "login")
     return None if auth_time is None else int(auth_time)
+
+
+def resolve_authentication(grant, redirect_uri):
+    """Set the auth_time, acr and amr of the request, from the authorization
+    session."""
+    grant.request.auth_time = resolve_auth_time(grant)
+    set_authentication_context(grant, redirect_uri)

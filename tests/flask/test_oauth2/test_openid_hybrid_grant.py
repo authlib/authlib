@@ -23,6 +23,7 @@ from tests.util import HMAC_SECRET
 from tests.util import parse_form
 
 from .models import AuthorizationCode
+from .models import AuthorizationSession
 from .models import CodeGrantMixin
 from .models import exists_nonce
 from .models import save_authorization_code
@@ -661,3 +662,24 @@ def test_response_mode_form_post_non_http_redirect_uri(
     assert rv.json["error"] == "invalid_request"
     assert rv.location is None
     assert b"<form" not in rv.data
+
+
+def test_acr_amr_claims(test_client, monkeypatch):
+    """The acr and amr claims of the front-channel ID token come from the
+    authorization session."""
+    monkeypatch.setattr(
+        AuthorizationSession,
+        "get_acr",
+        lambda self, request: "urn:mace:incommon:iap:silver",
+        raising=False,
+    )
+    monkeypatch.setattr(
+        AuthorizationSession, "get_amr", lambda self: ["pwd", "otp"], raising=False
+    )
+    rv = test_client.post("/oauth/authorize", data=dict(HYBRID_PARAMS))
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    token = jwt.decode(
+        params["id_token"], OctKey.import_key(HMAC_SECRET), algorithms=["HS256"]
+    )
+    assert token.claims["acr"] == "urn:mace:incommon:iap:silver"
+    assert token.claims["amr"] == ["pwd", "otp"]

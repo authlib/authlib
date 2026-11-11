@@ -2,6 +2,7 @@ import time
 
 from ..rfc6749 import AuthorizationServer
 from ..rfc6749 import InvalidRequestError
+from ..rfc6749 import OAuth2Error
 
 
 class StepUpAuthentication:
@@ -124,3 +125,26 @@ def get_max_age(request, redirect_uri, redirect_fragment=False):
         redirect_uri=redirect_uri,
         redirect_fragment=redirect_fragment,
     )
+
+
+def set_authentication_context(grant, redirect_uri):
+    """Set ``request.acr`` and ``request.amr`` from the authorization session
+    of the grant. An error raised by ``get_acr`` is redirected to the client.
+
+    :param grant: the grant that creates the authorization response
+    :param redirect_uri: the redirect URI of the authorization request
+    """
+    request = grant.request
+    session = grant.authorization_session
+    get_acr = getattr(session, "get_acr", None)
+    get_amr = getattr(session, "get_amr", None)
+    try:
+        request.acr = get_acr(request) if get_acr else None
+    except OAuth2Error as error:
+        if error.redirect_uri is None:
+            error.redirect_uri = redirect_uri
+            error.redirect_fragment = grant.ERROR_RESPONSE_FRAGMENT
+
+        raise
+
+    request.amr = get_amr() if get_amr else None

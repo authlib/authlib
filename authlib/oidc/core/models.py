@@ -1,5 +1,5 @@
 from authlib.oauth2.rfc6749 import AuthorizationCodeMixin as _AuthorizationCodeMixin
-from authlib.oauth2.rfc6749 import (
+from authlib.oauth2.rfc9470 import (
     AuthorizationSessionMixin as _AuthorizationSessionMixin,
 )
 
@@ -34,10 +34,14 @@ class AuthorizationCodeMixin(_AuthorizationCodeMixin):
 
 class AuthorizationSessionMixin(_AuthorizationSessionMixin):
     """The authorization session of OpenID Connect. It adds the account
-    selection to :class:`~authlib.oauth2.rfc6749.AuthorizationSessionMixin`.
+    selection to :class:`~authlib.oauth2.rfc9470.AuthorizationSessionMixin`.
 
     The time of the ``"login"`` interaction becomes the ``auth_time`` claim of
-    the ID token. :meth:`get_interaction_time` also takes
+    the ID token, and :meth:`get_acr` and :meth:`get_amr` give its ``acr`` and
+    ``amr`` claims. To refuse a request whose ``acr_values`` cannot be met,
+    raise
+    :class:`~authlib.oidc.unmet_authentication_requirements.UnmetAuthenticationRequirementsError`
+    from :meth:`get_acr`. :meth:`get_interaction_time` also takes
     ``"select_account"``, the time the user selected their account.
     """
 

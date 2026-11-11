@@ -21,6 +21,9 @@ from authlib.oauth2.rfc9470 import StepUpAuthentication
 from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core.grants import OpenIDCode as _OpenIDCode
 from authlib.oidc.prompt_create import PromptValues
+from authlib.oidc.unmet_authentication_requirements import (
+    UnmetAuthenticationRequirementsError,
+)
 from tests.util import HMAC_SECRET
 from tests.util import read_file_path
 
@@ -1156,3 +1159,75 @@ def test_request_time_not_read_with_prompt_none_by_earlier_extension(
     rv = test_client.get("/oauth/authorize?" + url_encode(PROMPT_PARAMS + params))
     assert rv.data == b"ok"
     assert calls == []
+
+
+class AuthenticationContextCodeGrant(AuthorizationCodeGrant):
+    """Store the acr and amr of the request in the authorization code."""
+
+    def save_authorization_code(self, code, request):
+        item = save_authorization_code(code, request)
+        item.acr = request.acr
+        item.amr = " ".join(request.amr or [])
+        return item
+
+
+def test_acr_amr_claims(test_client, server, monkeypatch):
+    """The acr and amr of the authorization session reach
+    save_authorization_code, and the ID token."""
+    monkeypatch.setattr(
+        AuthorizationSession, "get_acr", lambda self, request: "gold", raising=False
+    )
+    monkeypatch.setattr(
+        AuthorizationSession, "get_amr", lambda self: ["hwk"], raising=False
+    )
+    register_oidc_code_grant(server, grant_cls=AuthenticationContextCodeGrant)
+    claims = exchange_code_for_id_token(test_client)
+    assert claims["acr"] == "gold"
+    assert claims["amr"] == ["hwk"]
+
+
+def test_unmet_authentication_requirements(test_client, server, monkeypatch):
+    """An error raised by get_acr is redirected to the client in the query."""
+
+    def get_acr(self, request):
+        raise UnmetAuthenticationRequirementsError()
+
+    monkeypatch.setattr(AuthorizationSession, "get_acr", get_acr, raising=False)
+    register_oidc_code_grant(server)
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "code",
+            "client_id": "client-id",
+            "scope": "openid profile",
+            "redirect_uri": "https://client.test",
+            "state": "bar",
+            "acr_values": "gold",
+            "user_id": "1",
+        },
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert params["error"] == "unmet_authentication_requirements"
+    assert params["state"] == "bar"
+
+
+def test_acr_amr_without_openid_scope(test_client, server, monkeypatch):
+    """Without the openid scope, get_acr is not called."""
+
+    def get_acr(self, request):
+        raise UnmetAuthenticationRequirementsError()
+
+    monkeypatch.setattr(AuthorizationSession, "get_acr", get_acr, raising=False)
+    register_oidc_code_grant(server)
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "code",
+            "client_id": "client-id",
+            "scope": "profile",
+            "redirect_uri": "https://client.test",
+            "acr_values": "gold",
+            "user_id": "1",
+        },
+    )
+    assert "code" in dict(url_decode(urlparse.urlparse(rv.location).query))

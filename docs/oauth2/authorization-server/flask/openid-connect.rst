@@ -126,11 +126,12 @@ First, we need to implement the missing methods for ``OpenIDCode``:
                 email=user.email,
             ).filter(scope)
 
-Second, the ``AuthorizationCode`` data has two more values: the ``nonce``
-parameter, and the time of the user authentication. ``OpenIDCode`` sets this
-time in ``request.auth_time``, from the authorization session (see
-:ref:`flask_odic_max_age`). It becomes the
-``auth_time`` claim of the ID token. Save these values in the
+Second, the ``AuthorizationCode`` data has more values: the ``nonce``
+parameter, and the authentication of the user. ``OpenIDCode`` sets the time,
+the ``acr`` and the ``amr`` of this authentication in ``request.auth_time``,
+``request.acr`` and ``request.amr``, from the authorization session (see
+:ref:`flask_odic_max_age`). They become the ``auth_time``, ``acr`` and ``amr`` claims of
+the ID token. Save these values in the
 :ref:`flask_oauth2_code_grant` ``save_authorization_code`` method:
 
 .. code-block:: python
@@ -146,6 +147,8 @@ time in ``request.auth_time``, from the authorization session (see
                 user_id=request.user.id,
                 nonce=nonce,
                 auth_time=request.auth_time,
+                acr=request.acr,
+                amr=" ".join(request.amr or []),
             )
             db.session.add(auth_code)
             db.session.commit()
@@ -265,6 +268,8 @@ is ``save_authorization_code``. You can implement it like this:
                 user_id=request.user.id,
                 nonce=nonce,
                 auth_time=request.auth_time,
+                acr=request.acr,
+                amr=" ".join(request.amr or []),
             )
             db.session.add(item)
             db.session.commit()

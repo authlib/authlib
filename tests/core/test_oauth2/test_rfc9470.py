@@ -5,9 +5,13 @@ import pytest
 from authlib.oauth2.rfc6749 import AuthorizationServer
 from authlib.oauth2.rfc6749 import AuthorizationSessionMixin
 from authlib.oauth2.rfc6749 import InvalidRequestError
+from authlib.oauth2.rfc9470 import (
+    AuthorizationSessionMixin as StepUpAuthorizationSessionMixin,
+)
 from authlib.oauth2.rfc9470 import StepUpAuthentication
 from authlib.oauth2.rfc9470 import get_max_age
 from authlib.oauth2.rfc9470 import is_login_required
+from authlib.oidc.core import AuthorizationSessionMixin as OIDCAuthorizationSessionMixin
 
 USER = object()
 
@@ -161,3 +165,12 @@ def test_login_after_create(interactions, expected):
     grant = create_grant(FixedSession(0), interactions=interactions, max_age="60")
     StepUpAuthentication().validate_max_age(grant, None)
     assert grant.interactions == expected
+
+
+def test_authentication_context_defaults():
+    """By default, the authorization session has no acr and no amr, and the
+    OpenID Connect session inherits them."""
+    session = OIDCAuthorizationSessionMixin()
+    assert isinstance(session, StepUpAuthorizationSessionMixin)
+    assert session.get_acr(None) is None
+    assert session.get_amr() is None

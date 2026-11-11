@@ -13,6 +13,9 @@ from authlib.oauth2.multiple_response_types import MultipleResponseTypes
 from authlib.oauth2.rfc6749 import AuthorizationServer
 from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core.grants import OpenIDImplicitGrant as _OpenIDImplicitGrant
+from authlib.oidc.unmet_authentication_requirements import (
+    UnmetAuthenticationRequirementsError,
+)
 from tests.util import HMAC_SECRET
 from tests.util import parse_form
 
@@ -771,3 +774,64 @@ def test_consent_required(test_client, monkeypatch):
     rv = test_client.get(add_params_to_uri("/oauth/authorize", query))
     params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
     assert params["error"] == "consent_required"
+
+
+def authentication_context(monkeypatch, acr="urn:mace:incommon:iap:silver"):
+    """Give the authorization sessions an acr and an amr."""
+    monkeypatch.setattr(
+        AuthorizationSession, "get_acr", lambda self, request: acr, raising=False
+    )
+    monkeypatch.setattr(
+        AuthorizationSession, "get_amr", lambda self: ["pwd", "otp"], raising=False
+    )
+
+
+def test_acr_amr_claims(test_client, monkeypatch):
+    """The acr and amr claims of the ID token come from the authorization
+    session."""
+    authentication_context(monkeypatch)
+    rv = test_client.post("/oauth/authorize", data=IMPLICIT_PARAMS)
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    claims = validate_claims(params["id_token"], params)
+    assert claims["acr"] == "urn:mace:incommon:iap:silver"
+    assert claims["amr"] == ["pwd", "otp"]
+
+
+def test_no_acr_amr_claims(test_client):
+    """Without acr and amr in the authorization session, the ID token has
+    none."""
+    rv = test_client.post("/oauth/authorize", data=IMPLICIT_PARAMS)
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    claims = validate_claims(params["id_token"], params)
+    assert "acr" not in claims
+    assert "amr" not in claims
+
+
+def test_acr_from_acr_values(test_client, monkeypatch):
+    """The session can choose the acr among the requested acr_values."""
+
+    def get_acr(self, request):
+        return request.payload.data["acr_values"].split()[-1]
+
+    monkeypatch.setattr(AuthorizationSession, "get_acr", get_acr, raising=False)
+    data = {**IMPLICIT_PARAMS, "acr_values": "gold silver"}
+    rv = test_client.post("/oauth/authorize", data=data)
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    claims = validate_claims(params["id_token"], params)
+    assert claims["acr"] == "silver"
+
+
+def test_unmet_authentication_requirements(test_client, monkeypatch):
+    """The session can refuse the request when it cannot meet the acr_values,
+    and the error is redirected to the client."""
+
+    def get_acr(self, request):
+        raise UnmetAuthenticationRequirementsError()
+
+    monkeypatch.setattr(AuthorizationSession, "get_acr", get_acr, raising=False)
+    data = {**IMPLICIT_PARAMS, "acr_values": "gold"}
+    rv = test_client.post("/oauth/authorize", data=data)
+    assert rv.location.startswith("https://client.test/callback#")
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["error"] == "unmet_authentication_requirements"
+    assert params["state"] == "bar"

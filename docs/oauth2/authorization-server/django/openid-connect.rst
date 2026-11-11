@@ -103,15 +103,23 @@ to rewrite our ``AuthorizationCode`` db model with the OpenID Connect
         scope = TextField(default='', null=True)
         issued_at = IntegerField(null=False, default=now_timestamp)
 
-        # add nonce and auth_time
+        # add nonce and the authentication of the user
         nonce = CharField(max_length=120, default='', null=True)
         auth_time = IntegerField(null=True)
+        acr = CharField(max_length=255, null=True)
+        amr = CharField(max_length=255, null=True)
 
         def get_nonce(self):
             return self.nonce
 
         def get_auth_time(self):
             return self.auth_time
+
+        def get_acr(self):
+            return self.acr
+
+        def get_amr(self):
+            return self.amr.split() if self.amr else None
 
         # ... other fields and methods ...
 
@@ -153,11 +161,12 @@ First, we need to implement the missing methods for ``OpenIDCode``:
                 email=user.email,
             ).filter(scope)
 
-Second, the ``AuthorizationCode`` data has two more values: the ``nonce``
-parameter, and the time of the user authentication. ``OpenIDCode`` sets this
-time in ``request.auth_time``, from the authorization session (see
-:ref:`django_oidc_max_age`). It becomes the
-``auth_time`` claim of the ID token. Save these values in the
+Second, the ``AuthorizationCode`` data has more values: the ``nonce``
+parameter, and the authentication of the user. ``OpenIDCode`` sets the time,
+the ``acr`` and the ``amr`` of this authentication in ``request.auth_time``,
+``request.acr`` and ``request.amr``, from the authorization session (see
+:ref:`django_oidc_max_age`). They become the ``auth_time``, ``acr`` and ``amr`` claims of
+the ID token. Save these values in the
 ``AuthorizationCodeGrant.save_authorization_code`` method:
 
 .. code-block:: python
@@ -174,6 +183,8 @@ time in ``request.auth_time``, from the authorization session (see
                 user=request.user,
                 nonce=nonce,
                 auth_time=request.auth_time,
+                acr=request.acr,
+                amr=" ".join(request.amr or []),
             )
             auth_code.save()
             return auth_code
@@ -283,6 +294,8 @@ is ``save_authorization_code``. You can implement it like this:
                 user=request.user,
                 nonce=nonce,
                 auth_time=request.auth_time,
+                acr=request.acr,
+                amr=" ".join(request.amr or []),
             )
             auth_code.save()
             return auth_code
