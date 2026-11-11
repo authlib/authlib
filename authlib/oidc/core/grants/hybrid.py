@@ -2,6 +2,7 @@ import logging
 
 from authlib.common.security import generate_token
 from authlib.oauth2.rfc6749 import InvalidScopeError
+from authlib.oauth2.rfc6749 import OAuth2Error
 from authlib.oauth2.rfc6749.grants.authorization_code import (
     validate_code_authorization_request,
 )
@@ -53,12 +54,6 @@ class OpenIDHybridGrant(OpenIDImplicitGrant):
         raise NotImplementedError()
 
     def validate_authorization_request(self):
-        self.register_hook(
-            lambda grant, redirect_uri: validate_nonce(
-                grant.request, grant.exists_nonce, required=True
-            ),
-            after=self.validate_authorization_request_payload,
-        )
         redirect_uri = validate_code_authorization_request(self)
         validate_response_mode(self, redirect_uri)
         if not is_openid_scope(self.request.scope):
@@ -67,6 +62,13 @@ class OpenIDHybridGrant(OpenIDImplicitGrant):
                 redirect_uri=redirect_uri,
                 redirect_fragment=True,
             )
+
+        try:
+            validate_nonce(self.request, self.exists_nonce, required=True)
+        except OAuth2Error as error:
+            error.redirect_uri = redirect_uri
+            error.redirect_fragment = True
+            raise error
 
         set_id_token_hint_sub(
             self.request, self, redirect_uri=redirect_uri, redirect_fragment=True

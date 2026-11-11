@@ -235,6 +235,29 @@ def test_require_nonce(test_client):
     assert params["state"] == "bar"
 
 
+def test_nonce_checked_once(test_client, monkeypatch):
+    """The nonce is checked once per validation of the request."""
+    calls = []
+    monkeypatch.setattr(
+        "tests.flask.test_oauth2.test_openid_hybrid_grant.exists_nonce",
+        lambda nonce, request: calls.append(nonce) or False,
+    )
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "client_id": "client-id",
+            "response_type": "code token",
+            "scope": "openid profile",
+            "state": "bar",
+            "nonce": "abc",
+            "redirect_uri": "https://client.test",
+            "user_id": "1",
+        },
+    )
+    assert "code=" in rv.location
+    assert calls == ["abc", "abc"]
+
+
 def test_unsupported_scope(test_client, server):
     """A scope that the server does not support is refused with
     invalid_scope, redirected in the fragment."""
