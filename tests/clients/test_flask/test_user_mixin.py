@@ -13,6 +13,7 @@ from joserfc.jwk import KeySet
 from joserfc.jwk import OctKey
 
 from authlib.integrations.flask_client import OAuth
+from authlib.integrations.flask_client import OAuthError
 from authlib.oidc.core.grants.util import create_half_hash
 
 from ..util import get_bearer_token
@@ -367,6 +368,7 @@ def make_signed_userinfo_client(client_id="dev"):
         jwks={"keys": [secret_key.as_dict()]},
         issuer="https://provider.test",
         userinfo_endpoint="https://provider.test/userinfo",
+        userinfo_signing_alg_values_supported=["HS256"],
     )
     return app, client
 
@@ -674,6 +676,7 @@ def test_fetch_userinfo_signed_jwt_via_jwks_uri_key_rotation():
 
     client.server_metadata["jwks"] = {"keys": [secret_key.as_dict()]}
     client.server_metadata["jwks_uri"] = "https://provider.test/jwks"
+    client.server_metadata["userinfo_signing_alg_values_supported"] = ["RS256"]
 
     now = int(time.time())
     claims = {
@@ -703,3 +706,100 @@ def test_fetch_userinfo_signed_jwt_via_jwks_uri_key_rotation():
             user = client.userinfo()
             assert user.sub == "123"
             assert user["name"] == "John Doe"
+
+
+def test_fetch_userinfo_signed_jwt_default_algorithms():
+    """Without signing metadata, the default algorithms of joserfc are accepted."""
+    app, client = make_signed_userinfo_client()
+    del client.server_metadata["userinfo_signing_alg_values_supported"]
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "123",
+        "exp": now + 60,
+    }
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(encode_signed_userinfo(claims)),
+        ):
+            assert client.userinfo().sub == "123"
+
+
+def test_fetch_userinfo_registered_signed_response_alg():
+    """A response signed with the registered algorithm is accepted."""
+    app, client = make_signed_userinfo_client()
+    client.server_metadata["userinfo_signed_response_alg"] = "HS256"
+    del client.server_metadata["userinfo_signing_alg_values_supported"]
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "123",
+        "exp": now + 60,
+    }
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(encode_signed_userinfo(claims)),
+        ):
+            assert client.userinfo().sub == "123"
+
+
+def test_fetch_userinfo_json_with_none_signed_response_alg():
+    """A registered none algorithm accepts JSON responses."""
+    app, client = make_signed_userinfo_client()
+    client.server_metadata["userinfo_signed_response_alg"] = "none"
+
+    def fake_send(sess, req, **kwargs):
+        resp = mock.MagicMock(spec=requests.Response)
+        resp.status_code = 200
+        resp.headers = {"Content-Type": "application/json"}
+        resp.json = lambda: {"sub": "123"}
+        return resp
+
+    with app.test_request_context():
+        with mock.patch("requests.sessions.Session.send", fake_send):
+            assert client.userinfo().sub == "123"
+
+
+def test_fetch_userinfo_signed_response_alg():
+    """The registered userinfo_signed_response_alg is the only accepted one."""
+    app, client = make_signed_userinfo_client()
+    client.server_metadata["userinfo_signed_response_alg"] = "RS256"
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "123",
+        "exp": now + 60,
+    }
+
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(encode_signed_userinfo(claims)),
+        ):
+            with pytest.raises(UnsupportedAlgorithmError):
+                client.userinfo()
+
+
+def test_fetch_userinfo_json_with_signed_response_alg():
+    """A JSON response is refused when userinfo_signed_response_alg is set."""
+    app, client = make_signed_userinfo_client()
+    client.server_metadata["userinfo_signed_response_alg"] = "HS256"
+
+    def fake_send(sess, req, **kwargs):
+        resp = mock.MagicMock(spec=requests.Response)
+        resp.status_code = 200
+        resp.headers = {"Content-Type": "application/json"}
+        resp.json = lambda: {"sub": "123"}
+        return resp
+
+    with app.test_request_context():
+        with mock.patch("requests.sessions.Session.send", fake_send):
+            with pytest.raises(OAuthError, match="not signed"):
+                client.userinfo()

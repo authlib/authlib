@@ -7,19 +7,22 @@ from authlib.common.security import generate_token
 from authlib.common.urls import add_params_to_uri
 from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core import ImplicitIDToken
-from authlib.oidc.core import SignedUserInfo
 from authlib.oidc.core import UserInfo
 
 from .sync_openid import _get_claims_options
 from .sync_openid import _get_id_token_algorithms
+from .sync_openid import _get_userinfo_algorithms
+from .sync_openid import _is_jwt_response
 from .sync_openid import _may_refresh_jwk_set
+from .sync_openid import _parse_json_userinfo
+from .sync_openid import _validate_signed_userinfo
 
 __all__ = ["AsyncOpenIDMixin"]
 
 
 class AsyncOpenIDMixin:
     #: Minimum number of seconds between two fetches of the JWK set caused by
-    #: an ID token with an unknown ``kid``.
+    #: an ID token or a signed UserInfo response with an unknown ``kid``.
     jwks_refresh_interval = 60
     _jwk_set_refreshed_at = None
 
@@ -41,63 +44,38 @@ class AsyncOpenIDMixin:
         self.server_metadata["jwks"] = jwk_set
         return jwk_set
 
+    async def _decode_jwt(self, value, metadata, algorithms):
+        """Decode a JWT signed with a key of the provider JWK set."""
+        registry = JWSRegistry(algorithms=algorithms, strict_check_header=False)
+        key_set = KeySet.import_key_set(await self.fetch_jwk_set())
+        try:
+            return jwt.decode(value, key=key_set, registry=registry)
+        except InvalidKeyIdError:
+            if metadata.get("jwks_uri") and not _may_refresh_jwk_set(self):
+                raise
+
+        key_set = KeySet.import_key_set(await self.fetch_jwk_set(force=True))
+        return jwt.decode(value, key=key_set, registry=registry)
+
     async def userinfo(self, **kwargs):
         """Fetch user info from ``userinfo_endpoint``.
 
-        When the provider returns the UserInfo Claims as a signed JWT
-        (``Content-Type: application/jwt``, as allowed by `Section 5.3.2`_),
-        the JWT is decoded with the provider's JWK Set, the same trust
-        path as :meth:`parse_id_token`, and its ``sub``, ``iss`` and
-        ``aud`` claims are validated per `Section 5.3.2`_.
-
-        .. _`Section 5.3.2`: https://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse
+        When the response is a signed JWT (OpenID Connect Core §5.3.2), its
+        signature is verified with the provider JWK set, and its ``sub``,
+        ``iss`` and ``aud`` claims are validated. When the client registered
+        ``userinfo_signed_response_alg``, the response must be signed with
+        this algorithm.
         """
         metadata = await self.load_server_metadata()
         resp = await self.get(metadata["userinfo_endpoint"], **kwargs)
         resp.raise_for_status()
-        content_type = resp.headers.get("Content-Type", "")
-        media_type = content_type.split(";")[0].strip().lower()
-        if media_type == "application/jwt":
-            data = await self._parse_signed_userinfo(resp.text, metadata)
-        else:
-            data = resp.json()
-        return UserInfo(data)
+        if not _is_jwt_response(resp):
+            return _parse_json_userinfo(resp, metadata)
 
-    async def _parse_signed_userinfo(self, text, metadata, leeway=120):
-        alg_values = metadata.get("userinfo_signing_alg_values_supported")
-        jwks = await self.fetch_jwk_set()
-        key_set = KeySet.import_key_set(jwks)
-        try:
-            token = jwt.decode(
-                text,
-                key=key_set,
-                registry=JWSRegistry(algorithms=alg_values, strict_check_header=False),
-            )
-        except InvalidKeyIdError:
-            jwks = await self.fetch_jwk_set(force=True)
-            key_set = KeySet.import_key_set(jwks)
-            token = jwt.decode(
-                text,
-                key=key_set,
-                registry=JWSRegistry(algorithms=alg_values, strict_check_header=False),
-            )
-
-        claims = SignedUserInfo(token.claims, token.header)
-        # Section 5.3.2: the sub Claim MUST always be returned in the
-        # UserInfo Response, and a signed response MUST contain the
-        # iss and aud Claims as members.
-        claims_options = {
-            "sub": {"essential": True},
-            "iss": {"essential": True},
-            "aud": {"essential": True},
-        }
-        if "issuer" in metadata:
-            claims_options["iss"]["values"] = [metadata["issuer"]]
-        if self.client_id:
-            claims_options["aud"]["values"] = [self.client_id]
-        claims.options = claims_options
-        claims.validate(leeway=leeway)
-        return claims
+        token = await self._decode_jwt(
+            resp.text, metadata, _get_userinfo_algorithms(metadata)
+        )
+        return _validate_signed_userinfo(token, metadata, self.client_id)
 
     async def parse_id_token(
         self, token, nonce, claims_options=None, claims_cls=None, leeway=120
@@ -121,26 +99,7 @@ class AsyncOpenIDMixin:
         claims_options = _get_claims_options(claims_options, metadata)
         alg_values = _get_id_token_algorithms(metadata)
 
-        jwks = await self.fetch_jwk_set()
-        key_set = KeySet.import_key_set(jwks)
-        try:
-            token = jwt.decode(
-                token["id_token"],
-                key=key_set,
-                registry=JWSRegistry(algorithms=alg_values, strict_check_header=False),
-            )
-        except InvalidKeyIdError:
-            if metadata.get("jwks_uri") and not _may_refresh_jwk_set(self):
-                raise
-
-            jwks = await self.fetch_jwk_set(force=True)
-            key_set = KeySet.import_key_set(jwks)
-            token = jwt.decode(
-                token["id_token"],
-                key=key_set,
-                registry=JWSRegistry(algorithms=alg_values, strict_check_header=False),
-            )
-
+        token = await self._decode_jwt(token["id_token"], metadata, alg_values)
         claims = claims_cls(token.claims, token.header, claims_options, claims_params)
         claims.validate(leeway=leeway)
         return UserInfo(claims)

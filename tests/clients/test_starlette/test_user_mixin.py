@@ -1,3 +1,4 @@
+import json
 import time
 
 import pytest
@@ -12,6 +13,7 @@ from joserfc.jwk import KeySet
 from starlette.requests import Request
 
 from authlib.integrations.starlette_client import OAuth
+from authlib.integrations.starlette_client import OAuthError
 from authlib.oidc.core.grants.util import create_half_hash
 
 from ..asgi_helper import AsyncPathMapDispatch
@@ -309,7 +311,14 @@ def encode_signed_userinfo(claims):
     return jwt.encode({"alg": "HS256", "kid": "f"}, claims, secret_key)
 
 
-async def run_fetch_signed_userinfo(payload, jwks=None, jwks_uri=None, client_id="dev"):
+async def run_fetch_signed_userinfo(
+    payload,
+    jwks=None,
+    jwks_uri=None,
+    client_id="dev",
+    content_type=b"application/jwt",
+    **metadata,
+):
 
     oauth = OAuth()
 
@@ -319,7 +328,7 @@ async def run_fetch_signed_userinfo(payload, jwks=None, jwks_uri=None, client_id
     path_maps = {
         "/userinfo": {
             "body": payload,
-            "headers": [(b"content-type", b"application/jwt")],
+            "headers": [(b"content-type", content_type)],
         }
     }
     if jwks_uri:
@@ -335,12 +344,14 @@ async def run_fetch_signed_userinfo(payload, jwks=None, jwks_uri=None, client_id
         client_secret="dev",
         fetch_token=fetch_token,
         userinfo_endpoint="https://provider.test/userinfo",
+        userinfo_signing_alg_values_supported=["HS256", "RS256"],
         issuer="https://provider.test",
         jwks=jwks,
         jwks_uri=jwks_uri,
         client_kwargs={
             "transport": transport,
         },
+        **metadata,
     )
 
     req_scope = {"type": "http", "session": {}}
@@ -519,3 +530,32 @@ async def test_fetch_userinfo_signed_jwt_via_jwks_uri_key_rotation():
         jwks_uri="https://provider.test/jwks",
     )
     assert user.sub == "123"
+
+
+@pytest.mark.asyncio
+async def test_fetch_userinfo_signed_response_alg():
+    """Only the registered userinfo_signed_response_alg is accepted."""
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "123",
+        "exp": now + 60,
+    }
+    with pytest.raises(UnsupportedAlgorithmError):
+        await run_fetch_signed_userinfo(
+            encode_signed_userinfo(claims),
+            jwks={"keys": [secret_key.as_dict()]},
+            userinfo_signed_response_alg="RS256",
+        )
+
+
+@pytest.mark.asyncio
+async def test_fetch_userinfo_json_with_signed_response_alg():
+    """A JSON response is refused when userinfo_signed_response_alg is set."""
+    with pytest.raises(OAuthError, match="not signed"):
+        await run_fetch_signed_userinfo(
+            json.dumps({"sub": "123"}),
+            content_type=b"application/json",
+            userinfo_signed_response_alg="HS256",
+        )

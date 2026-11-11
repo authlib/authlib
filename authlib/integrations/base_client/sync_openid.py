@@ -7,23 +7,91 @@ from joserfc.jws import JWSRegistry
 
 from authlib.common.security import generate_token
 from authlib.common.urls import add_params_to_uri
+from authlib.oauth2.claims import JWTClaims
 from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core import ImplicitIDToken
-from authlib.oidc.core import SignedUserInfo
 from authlib.oidc.core import UserInfo
+
+from .errors import OAuthError
+
+
+class _SignedUserInfo(JWTClaims):
+    """Claims of a UserInfo response returned as a signed JWT."""
+
+    REGISTERED_CLAIMS = JWTClaims.REGISTERED_CLAIMS + [
+        claim
+        for claim in UserInfo.REGISTERED_CLAIMS
+        if claim not in JWTClaims.REGISTERED_CLAIMS
+    ]
+
+
+def _get_algorithms(metadata, name):
+    """Return the algorithms of the name_signing_alg_values_supported
+    metadata, without none.
+    """
+    algorithms = metadata.get(f"{name}_signing_alg_values_supported") or []
+    if isinstance(algorithms, str):
+        algorithms = [algorithms]
+
+    return [alg for alg in algorithms if alg != "none"]
 
 
 def _get_id_token_algorithms(metadata):
     """Return the algorithms accepted for the ID token signature."""
-    algorithms = metadata.get("id_token_signing_alg_values_supported") or []
-    if isinstance(algorithms, str):
-        algorithms = [algorithms]
-
-    algorithms = [alg for alg in algorithms if alg != "none"]
-
     # Per OpenID Connect Registration §2, a client receives RS256 ID tokens
     # by default.
-    return algorithms or ["RS256"]
+    return _get_algorithms(metadata, "id_token") or ["RS256"]
+
+
+def _get_userinfo_algorithms(metadata):
+    """Return the algorithms accepted for the UserInfo response signature.
+
+    Without metadata, the default algorithms of joserfc are accepted.
+    """
+    alg = metadata.get("userinfo_signed_response_alg")
+    if alg and alg != "none":
+        return [alg]
+
+    return _get_algorithms(metadata, "userinfo") or None
+
+
+def _is_jwt_response(resp):
+    """Tell whether the response is a JWT."""
+    content_type = resp.headers.get("Content-Type", "")
+    return content_type.split(";")[0].strip().lower() == "application/jwt"
+
+
+def _parse_json_userinfo(resp, metadata):
+    """Return the claims of a JSON UserInfo response."""
+    # Per OpenID Connect Registration §2, if userinfo_signed_response_alg is
+    # specified, the response will be JWT serialized.
+    if metadata.get("userinfo_signed_response_alg", "none") != "none":
+        raise OAuthError(description="The UserInfo response is not signed.")
+
+    return UserInfo(resp.json())
+
+
+def _validate_signed_userinfo(token, metadata, client_id, leeway=120):
+    """Validate the claims of a signed UserInfo response."""
+    # Per OpenID Connect Core §5.3.2, the sub Claim MUST always be returned
+    # in the UserInfo Response. If signed, the UserInfo Response MUST contain
+    # the Claims iss (issuer) and aud (audience) as members. The iss value
+    # MUST be the OP's Issuer Identifier URL. The aud value MUST be or
+    # include the RP's Client ID value.
+    options = {
+        "sub": {"essential": True},
+        "iss": {"essential": True},
+        "aud": {"essential": True},
+    }
+    if metadata.get("issuer"):
+        options["iss"]["values"] = [metadata["issuer"]]
+
+    if client_id:
+        options["aud"]["values"] = [client_id]
+
+    claims = _SignedUserInfo(token.claims, token.header, options)
+    claims.validate(leeway=leeway)
+    return UserInfo(claims)
 
 
 def _get_claims_options(claims_options, metadata):
@@ -59,7 +127,7 @@ def _may_refresh_jwk_set(client):
 
 class OpenIDMixin:
     #: Minimum number of seconds between two fetches of the JWK set caused by
-    #: an ID token with an unknown ``kid``.
+    #: an ID token or a signed UserInfo response with an unknown ``kid``.
     jwks_refresh_interval = 60
     _jwk_set_refreshed_at = None
 
@@ -81,61 +149,38 @@ class OpenIDMixin:
         self.server_metadata["jwks"] = jwk_set
         return jwk_set
 
+    def _decode_jwt(self, value, metadata, algorithms):
+        """Decode a JWT signed with a key of the provider JWK set."""
+        registry = JWSRegistry(algorithms=algorithms, strict_check_header=False)
+        key_set = KeySet.import_key_set(self.fetch_jwk_set())
+        try:
+            return jwt.decode(value, key=key_set, registry=registry)
+        except InvalidKeyIdError:
+            if metadata.get("jwks_uri") and not _may_refresh_jwk_set(self):
+                raise
+
+        key_set = KeySet.import_key_set(self.fetch_jwk_set(force=True))
+        return jwt.decode(value, key=key_set, registry=registry)
+
     def userinfo(self, **kwargs):
         """Fetch user info from ``userinfo_endpoint``.
 
-        When the provider returns the UserInfo Claims as a signed JWT
-        (``Content-Type: application/jwt``, as allowed by `Section 5.3.2`_),
-        the JWT is decoded with the provider's JWK Set, the same trust
-        path as :meth:`parse_id_token`, and its ``sub``, ``iss`` and
-        ``aud`` claims are validated per `Section 5.3.2`_.
-
-        .. _`Section 5.3.2`: https://openid.net/specs/openid-connect-core-1_0.html#UserInfoResponse
+        When the response is a signed JWT (OpenID Connect Core §5.3.2), its
+        signature is verified with the provider JWK set, and its ``sub``,
+        ``iss`` and ``aud`` claims are validated. When the client registered
+        ``userinfo_signed_response_alg``, the response must be signed with
+        this algorithm.
         """
         metadata = self.load_server_metadata()
         resp = self.get(metadata["userinfo_endpoint"], **kwargs)
         resp.raise_for_status()
-        content_type = resp.headers.get("Content-Type", "")
-        media_type = content_type.split(";")[0].strip().lower()
-        if media_type == "application/jwt":
-            data = self._parse_signed_userinfo(resp.text, metadata)
-        else:
-            data = resp.json()
-        return UserInfo(data)
+        if not _is_jwt_response(resp):
+            return _parse_json_userinfo(resp, metadata)
 
-    def _parse_signed_userinfo(self, text, metadata, leeway=120):
-        alg_values = metadata.get("userinfo_signing_alg_values_supported")
-        key_set = KeySet.import_key_set(self.fetch_jwk_set())
-        try:
-            token = jwt.decode(
-                text,
-                key=key_set,
-                registry=JWSRegistry(algorithms=alg_values, strict_check_header=False),
-            )
-        except InvalidKeyIdError:
-            key_set = KeySet.import_key_set(self.fetch_jwk_set(force=True))
-            token = jwt.decode(
-                text,
-                key=key_set,
-                registry=JWSRegistry(algorithms=alg_values, strict_check_header=False),
-            )
-
-        claims = SignedUserInfo(token.claims, token.header)
-        # Section 5.3.2: the sub Claim MUST always be returned in the
-        # UserInfo Response, and a signed response MUST contain the
-        # iss and aud Claims as members.
-        claims_options = {
-            "sub": {"essential": True},
-            "iss": {"essential": True},
-            "aud": {"essential": True},
-        }
-        if "issuer" in metadata:
-            claims_options["iss"]["values"] = [metadata["issuer"]]
-        if self.client_id:
-            claims_options["aud"]["values"] = [self.client_id]
-        claims.options = claims_options
-        claims.validate(leeway=leeway)
-        return claims
+        token = self._decode_jwt(
+            resp.text, metadata, _get_userinfo_algorithms(metadata)
+        )
+        return _validate_signed_userinfo(token, metadata, self.client_id)
 
     def parse_id_token(
         self, token, nonce, claims_options=None, claims_cls=None, leeway=120
@@ -164,24 +209,7 @@ class OpenIDMixin:
         claims_options = _get_claims_options(claims_options, metadata)
         alg_values = _get_id_token_algorithms(metadata)
 
-        key_set = KeySet.import_key_set(self.fetch_jwk_set())
-        try:
-            token = jwt.decode(
-                token["id_token"],
-                key=key_set,
-                registry=JWSRegistry(algorithms=alg_values, strict_check_header=False),
-            )
-        except InvalidKeyIdError:
-            if metadata.get("jwks_uri") and not _may_refresh_jwk_set(self):
-                raise
-
-            key_set = KeySet.import_key_set(self.fetch_jwk_set(force=True))
-            token = jwt.decode(
-                token["id_token"],
-                key=key_set,
-                registry=JWSRegistry(algorithms=alg_values, strict_check_header=False),
-            )
-
+        token = self._decode_jwt(token["id_token"], metadata, alg_values)
         claims = claims_cls(token.claims, token.header, claims_options, claims_params)
         claims.validate(leeway=leeway)
         return UserInfo(claims)
