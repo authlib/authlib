@@ -1,4 +1,5 @@
 import base64
+from urllib.parse import quote
 
 from authlib.common.encoding import to_bytes
 from authlib.common.encoding import to_native
@@ -10,7 +11,18 @@ from .rfc6750 import add_bearer_token
 
 
 def encode_client_secret_basic(client, method, uri, headers, body):
-    text = f"{client.client_id}:{client.client_secret}"
+    client_id = client.client_id or ""
+    client_secret = client.client_secret or ""
+    if client.encode_client_credentials:
+        # Per RFC 6749 §2.3.1, the client identifier is encoded using the
+        # "application/x-www-form-urlencoded" encoding algorithm per Appendix
+        # B, and the encoded value is used as the username; the client
+        # password is encoded using the same algorithm and used as the
+        # password.
+        client_id = quote(client_id, safe="")
+        client_secret = quote(client_secret, safe="")
+
+    text = f"{client_id}:{client_secret}"
     auth = to_native(base64.b64encode(to_bytes(text, "latin1")))
     headers["Authorization"] = f"Basic {auth}"
     return uri, headers, body
@@ -50,7 +62,13 @@ class ClientAuth:
         * client_secret_basic (default)
         * client_secret_post
         * none
+
+    :param encode_client_credentials: Encode the client ID and secret before
+        they are sent with ``client_secret_basic``, as RFC 6749 §2.3.1
+        requires. Set it to ``False`` for a server that does not decode them.
     """
+
+    encode_client_credentials = True
 
     DEFAULT_AUTH_METHODS = {
         "client_secret_basic": encode_client_secret_basic,
@@ -58,12 +76,19 @@ class ClientAuth:
         "none": encode_none,
     }
 
-    def __init__(self, client_id, client_secret, auth_method=None):
+    def __init__(
+        self,
+        client_id,
+        client_secret,
+        auth_method=None,
+        encode_client_credentials=True,
+    ):
         if auth_method is None:
             auth_method = "client_secret_basic"
 
         self.client_id = client_id
         self.client_secret = client_secret
+        self.encode_client_credentials = encode_client_credentials
 
         if auth_method in self.DEFAULT_AUTH_METHODS:
             auth_method = self.DEFAULT_AUTH_METHODS[auth_method]
