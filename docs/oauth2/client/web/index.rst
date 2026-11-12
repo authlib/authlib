@@ -638,6 +638,46 @@ A simple solution is to provide the OpenID Connect Discovery Endpoint:
 The discovery endpoint provides all the information we need so that we don't
 have to add ``authorize_url`` and ``access_token_url``.
 
+The client checks that the ``issuer`` of the discovery document is the issuer
+the URL is built from, per :rfc:`RFC 8414 §3.3 <8414#section-3.3>` and
+`OpenID Connect Discovery §4.3`_. Otherwise, it raises
+``MismatchingIssuerError``. This stops a server from using the issuer of
+another provider. A URL without a ``/.well-known/`` path is not checked.
+
+Some providers serve another issuer:
+
+* the Microsoft multi-tenant endpoints, such as ``common`` and
+  ``organizations``, serve ``https://login.microsoftonline.com/{tenantid}/v2.0``;
+* a Microsoft tenant given by its domain name serves the issuer of the tenant
+  ID;
+* Azure AD v1 and Azure AD B2C serve an issuer on another path or host;
+* a server reached through an internal host name, for instance in Docker,
+  serves its public issuer.
+
+Pass this issuer to ``register``, or set ``{name}_ISSUER`` in the
+configuration. The document must then have exactly this issuer:
+
+.. code-block:: python
+
+    oauth.register(
+        'keycloak',
+        client_id='...',
+        client_secret='...',
+        issuer='http://localhost:8080/realms/example',
+        server_metadata_url='http://keycloak:8080/realms/example/.well-known/openid-configuration',
+        client_kwargs={'scope': 'openid email profile'},
+    )
+
+This issuer is also the expected ``iss`` claim of the ID token. With the
+Microsoft multi-tenant endpoints, the ``iss`` claim has the tenant ID, so check
+it yourself with the ``claims_options`` parameter of ``authorize_access_token``.
+
+Only pass the issuer of a provider you know. When the discovery URL comes from
+another server, for instance from the metadata of a protected resource
+(:rfc:`9728`), let the client check it.
+
+.. _`OpenID Connect Discovery §4.3`: https://openid.net/specs/openid-connect-discovery-1_0.html#ProviderConfigurationValidation
+
 Check out our client example: https://github.com/authlib/demo-oauth-client
 
 Without a discovery endpoint, pass the missing values to ``register``:

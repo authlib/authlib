@@ -9,6 +9,7 @@ from starlette.requests import Request
 
 from authlib.common.urls import url_decode
 from authlib.common.urls import urlparse
+from authlib.integrations.base_client import MismatchingIssuerError
 from authlib.integrations.starlette_client import OAuth
 from authlib.integrations.starlette_client import OAuthError
 
@@ -438,6 +439,7 @@ async def test_oauth2_fetch_metadata():
             path_maps={
                 "/.well-known/openid-configuration": {
                     "body": {
+                        "issuer": "https://provider.test",
                         "authorization_endpoint": "https://provider.test/authorize",
                         "jwks_uri": "https://provider.test/.well-known/keys",
                     }
@@ -465,6 +467,32 @@ async def test_oauth2_fetch_metadata():
 
 
 @pytest.mark.asyncio
+async def test_oauth2_metadata_issuer_mismatch():
+    """The server metadata is refused when its issuer does not match the
+    metadata URL."""
+    oauth = OAuth()
+    transport = ASGITransport(
+        AsyncPathMapDispatch(
+            {
+                "/.well-known/openid-configuration": {
+                    "body": {"issuer": "https://attacker.test"}
+                }
+            }
+        )
+    )
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+        client_kwargs={"transport": transport},
+    )
+    with pytest.raises(MismatchingIssuerError):
+        await client.load_server_metadata()
+
+    assert "_loaded_at" not in client.server_metadata
+
+
+@pytest.mark.asyncio
 async def test_oauth2_authorize_with_metadata():
     oauth = OAuth()
     transport = ASGITransport(
@@ -472,7 +500,8 @@ async def test_oauth2_authorize_with_metadata():
             {
                 "/.well-known/openid-configuration": {
                     "body": {
-                        "authorization_endpoint": "https://provider.test/authorize"
+                        "issuer": "https://provider.test",
+                        "authorization_endpoint": "https://provider.test/authorize",
                     }
                 }
             }
@@ -504,6 +533,7 @@ async def test_oauth2_metadata_does_not_configure_client():
             {
                 "/.well-known/openid-configuration": {
                     "body": {
+                        "issuer": "https://provider.test",
                         "authorization_endpoint": "https://provider.test/authorize",
                         "client_id": "other",
                         "scope": "admin",
@@ -545,7 +575,10 @@ async def test_oauth2_refresh_token_with_metadata_token_endpoint():
         AsyncPathMapDispatch(
             path_maps={
                 "/.well-known/openid-configuration": {
-                    "body": {"token_endpoint": "https://provider.test/token"}
+                    "body": {
+                        "issuer": "https://provider.test",
+                        "token_endpoint": "https://provider.test/token",
+                    }
                 },
                 "/token": {"body": get_bearer_token()},
                 "/api/user": {"body": {"sub": "123"}},

@@ -4,7 +4,14 @@ import time
 from authlib.common.security import generate_token
 from authlib.common.urls import urlparse
 from authlib.consts import default_user_agent
+from authlib.oauth2.rfc8414.well_known import (
+    get_well_known_url as get_oauth_well_known_url,
+)
+from authlib.oidc.discovery.well_known import (
+    get_well_known_url as get_oidc_well_known_url,
+)
 
+from .errors import MismatchingIssuerError
 from .errors import MismatchingStateError
 from .errors import MissingRequestTokenError
 from .errors import MissingTokenError
@@ -235,7 +242,26 @@ class OAuth2Base:
         return session
 
     def _update_server_metadata(self, metadata):
-        """Merge the fetched server metadata document."""
+        """Merge the fetched server metadata document.
+
+        The issuer of the document must be the issuer given to register, or
+        else an issuer that the metadata URL is built from.
+        """
+        issuer = metadata.get("issuer")
+        if expected := self._register_kwargs.get("issuer"):
+            valid = issuer == expected
+        else:
+            valid = _is_metadata_url_issuer(self._server_metadata_url, issuer)
+
+        if not valid:
+            raise MismatchingIssuerError(
+                description=(
+                    f"The issuer {issuer!r} of the server metadata does not "
+                    f"match {expected or self._server_metadata_url!r}. If the "
+                    "provider uses another issuer, pass it to register."
+                ),
+            )
+
         metadata["_loaded_at"] = time.time()
         self.server_metadata.update(metadata)
 
@@ -386,3 +412,21 @@ class OAuth2Mixin(_RequestMixin, OAuth2Base):
             if redirect_uri is not None:
                 client.redirect_uri = redirect_uri
             return client.fetch_token(token_endpoint, **kwargs)
+
+
+def _is_metadata_url_issuer(url, issuer):
+    """Tell if the metadata URL is built from the issuer.
+
+    Any issuer is accepted when the URL has no well-known path.
+    """
+    if "/.well-known/" not in urlparse.urlsplit(url).path:
+        return True
+
+    if not isinstance(issuer, str):
+        return False
+
+    return url in (
+        get_oidc_well_known_url(issuer, external=True),
+        get_oauth_well_known_url(issuer, external=True),
+        get_oauth_well_known_url(issuer, external=True, suffix="openid-configuration"),
+    )

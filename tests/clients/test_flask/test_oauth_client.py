@@ -10,6 +10,7 @@ from joserfc import jwt
 
 from authlib.common.urls import url_decode
 from authlib.common.urls import urlparse
+from authlib.integrations.base_client import MismatchingIssuerError
 from authlib.integrations.flask_client import FlaskOAuth2App
 from authlib.integrations.flask_client import OAuth
 from authlib.integrations.flask_client import OAuthError
@@ -463,6 +464,7 @@ def test_oauth2_fetch_metadata():
             if req.url == "https://provider.test/.well-known/openid-configuration":
                 return mock_send_value(
                     {
+                        "issuer": "https://provider.test",
                         "authorization_endpoint": "https://provider.test/authorize",
                         "jwks_uri": "https://provider.test/.well-known/keys",
                     }
@@ -499,6 +501,7 @@ def test_oauth2_client_kwargs_headers():
         if req.url.endswith("/openid-configuration"):
             return mock_send_value(
                 {
+                    "issuer": "https://provider.test",
                     "token_endpoint": "https://provider.test/token",
                     "jwks_uri": "https://provider.test/jwks",
                 }
@@ -542,7 +545,10 @@ def test_oauth2_authorize_with_metadata():
     )
     with mock.patch("requests.sessions.Session.send") as send:
         send.return_value = mock_send_value(
-            {"authorization_endpoint": "https://provider.test/authorize"}
+            {
+                "issuer": "https://provider.test",
+                "authorization_endpoint": "https://provider.test/authorize",
+            }
         )
 
         with app.test_request_context():
@@ -564,6 +570,7 @@ def test_oauth2_metadata_does_not_configure_client():
         client_kwargs={"scope": "openid", "verify": "/ca.pem"},
     )
     metadata = {
+        "issuer": "https://provider.test",
         "authorization_endpoint": "https://provider.test/authorize",
         "client_id": "other",
         "scope": "admin",
@@ -613,7 +620,12 @@ def test_oauth2_refresh_token_with_metadata_token_endpoint():
     def fake_send(sess, req, **kwargs):
         urls.append(req.url)
         if req.url == "https://provider.test/.well-known/openid-configuration":
-            return mock_send_value({"token_endpoint": "https://provider.test/token"})
+            return mock_send_value(
+                {
+                    "issuer": "https://provider.test",
+                    "token_endpoint": "https://provider.test/token",
+                }
+            )
 
         if req.url == "https://provider.test/token":
             return mock_send_value(get_bearer_token())
@@ -625,6 +637,156 @@ def test_oauth2_refresh_token_with_metadata_token_endpoint():
             client.get("user", token=expired_token)
 
     assert urls[1] == "https://provider.test/token"
+
+
+def load_metadata(metadata_url, metadata_issuer, **kwargs):
+    """Register a client and load its server metadata."""
+    app = Flask(__name__)
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev", client_id="dev", server_metadata_url=metadata_url, **kwargs
+    )
+    metadata = {"authorization_endpoint": "https://provider.test/authorize"}
+    if metadata_issuer:
+        metadata["issuer"] = metadata_issuer
+
+    with mock.patch("requests.sessions.Session.send") as send:
+        send.return_value = mock_send_value(metadata)
+        client.load_server_metadata()
+
+    return client
+
+
+@pytest.mark.parametrize(
+    "metadata_url,metadata_issuer",
+    [
+        (
+            "https://provider.test/.well-known/openid-configuration",
+            "https://provider.test",
+        ),
+        (
+            "https://provider.test/.well-known/openid-configuration",
+            "https://provider.test/",
+        ),
+        (
+            "https://provider.test/realms/x/.well-known/openid-configuration",
+            "https://provider.test/realms/x",
+        ),
+        (
+            "https://provider.test/.well-known/openid-configuration/tenant",
+            "https://provider.test/tenant",
+        ),
+        (
+            "https://provider.test/.well-known/oauth-authorization-server",
+            "https://provider.test",
+        ),
+        (
+            "https://provider.test/.well-known/oauth-authorization-server/tenant",
+            "https://provider.test/tenant",
+        ),
+        (
+            "https://provider.test/realms/x/.well-known/openid-configuration",
+            "https://provider.test/realms/x/",
+        ),
+        ("https://provider.test/metadata.json", "https://other.test"),
+    ],
+)
+def test_oauth2_metadata_issuer(metadata_url, metadata_issuer):
+    """The server metadata is accepted when its issuer matches the metadata
+    URL, or when the URL has no well-known path."""
+    client = load_metadata(metadata_url, metadata_issuer)
+    assert client.server_metadata["issuer"] == metadata_issuer
+
+
+@pytest.mark.parametrize(
+    "metadata_url,metadata_issuer",
+    [
+        (
+            "https://provider.test/.well-known/openid-configuration",
+            "https://attacker.test",
+        ),
+        ("https://provider.test/.well-known/openid-configuration", None),
+        (
+            "https://provider.test/realms/x/.well-known/openid-configuration",
+            "https://provider.test/realms/other",
+        ),
+        (
+            "https://provider.test/.well-known/oauth-authorization-server/tenant",
+            "https://provider.test",
+        ),
+        (
+            "https://provider.test/.well-known/openid-configuration?p=policy",
+            "https://provider.test",
+        ),
+    ],
+)
+def test_oauth2_metadata_issuer_mismatch(metadata_url, metadata_issuer):
+    """The server metadata is refused when its issuer does not match the
+    metadata URL (RFC 8414 §3.3, OpenID Connect Discovery §4.3)."""
+    with pytest.raises(MismatchingIssuerError):
+        load_metadata(metadata_url, metadata_issuer)
+
+
+def test_oauth2_metadata_issuer_from_config():
+    """The issuer can be set in the application config."""
+    app = Flask(__name__)
+    app.config.update(
+        {
+            "DEV_CLIENT_ID": "dev",
+            "DEV_ISSUER": "http://localhost:8080/realms/x",
+            "DEV_SERVER_METADATA_URL": (
+                "http://keycloak:8080/realms/x/.well-known/openid-configuration"
+            ),
+        }
+    )
+    oauth = OAuth(app)
+    client = oauth.register("dev")
+    with mock.patch("requests.sessions.Session.send") as send:
+        send.return_value = mock_send_value(
+            {"issuer": "http://localhost:8080/realms/x"}
+        )
+        client.load_server_metadata()
+
+    assert client.server_metadata["issuer"] == "http://localhost:8080/realms/x"
+
+
+def test_oauth2_metadata_issuer_not_cached():
+    """Refused server metadata is not kept."""
+    app = Flask(__name__)
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        server_metadata_url="https://provider.test/.well-known/openid-configuration",
+    )
+    with mock.patch("requests.sessions.Session.send") as send:
+        send.return_value = mock_send_value({"issuer": "https://attacker.test"})
+        with pytest.raises(MismatchingIssuerError):
+            client.load_server_metadata()
+
+        with pytest.raises(MismatchingIssuerError):
+            client.load_server_metadata()
+
+    assert send.call_count == 2
+    assert "_loaded_at" not in client.server_metadata
+
+
+def test_oauth2_metadata_registered_issuer():
+    """The issuer given to register replaces the issuer of the metadata URL."""
+    issuer = "https://login.microsoftonline.com/{tenantid}/v2.0"
+    client = load_metadata(
+        "https://login.microsoftonline.com/common/v2.0/.well-known/openid-configuration",
+        issuer,
+        issuer=issuer,
+    )
+    assert client.server_metadata["issuer"] == issuer
+
+    with pytest.raises(MismatchingIssuerError):
+        load_metadata(
+            "https://provider.test/.well-known/openid-configuration",
+            "https://provider.test/",
+            issuer="https://provider.test",
+        )
 
 
 @pytest.mark.parametrize("method", ["S256", "plain"])

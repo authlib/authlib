@@ -1,4 +1,5 @@
 from .errors import InvalidTokenError
+from .errors import MismatchingIssuerError
 from .errors import MismatchingStateError
 from .errors import MissingRequestTokenError
 from .errors import MissingTokenError
@@ -26,4 +27,5 @@ __all__ = [
     "InvalidTokenError",
     "UnsupportedTokenTypeError",
     "MismatchingStateError",
+    "MismatchingIssuerError",
 ]
