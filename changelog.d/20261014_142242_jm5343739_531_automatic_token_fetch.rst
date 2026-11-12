@@ -1,8 +1,20 @@
-
 Added
 ~~~~~
 
-- Automatically fetch initial OAuth2 access tokens for the
-  ``client_credentials`` grant in Requests and synchronous
-  and asynchronous HTTPX clients when a token endpoint is
-  configured (issue #531, PR #946).
+- The Requests and HTTPX OAuth 2 clients fetch the first ``client_credentials``
+  token by themselves when a token endpoint is configured. :pr:`946`
+- ``OAuth2Session``, the HTTPX OAuth 2 clients and the assertion clients accept
+  ``access_token_params``, extra parameters for the token request such as
+  ``audience`` or ``resource``. They are also sent when a new token is fetched
+  automatically. :issue:`783`
+
+Fixed
+~~~~~
+
+- ``fetch_token(grant_type="client_credentials")`` remembers the grant, so an
+  expired token is fetched again. It used to raise ``InvalidTokenError``.
+  :issue:`660`
+- The OAuth 2 web clients send ``access_token_params`` when they fetch a new
+  ``client_credentials`` token on expiry. They used to drop them. :issue:`783`
+- ``AsyncOAuth2Client`` no longer refreshes with an outdated refresh token when
+  concurrent requests find an expired token. :pr:`963`

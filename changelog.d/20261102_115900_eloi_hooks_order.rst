@@ -1,4 +1,0 @@
-Fixed
-~~~~~
-
-- Hooks run in the order they are registered. The order used to be random.

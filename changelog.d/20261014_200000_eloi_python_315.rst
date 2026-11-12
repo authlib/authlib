@@ -1,4 +1,4 @@
 Added
 ~~~~~
 
-- Support Python 3.15.
+- Support Python 3.15. :pr:`958`

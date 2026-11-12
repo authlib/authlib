@@ -2,3 +2,4 @@ Breaking changes
 ~~~~~~~~~~~~~~~~
 
 - Stop supporting Python 3.10. Authlib supports Python 3.11 to 3.15.
+  :pr:`991`
