@@ -19,6 +19,7 @@ OAUTH_CLIENT_PARAMS = (
     "api_base_url",
     "client_kwargs",
     "server_metadata_url",
+    "issuer",
 )
 
 

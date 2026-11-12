@@ -72,6 +72,7 @@ Here is a full list of the configuration keys:
 - ``{name}_API_BASE_URL``: A base URL endpoint to make requests simple
 - ``{name}_CLIENT_KWARGS``: Extra keyword arguments for OAuth1Session or OAuth2Session
 - ``{name}_SERVER_METADATA_URL``: URL of the OpenID Connect discovery or OAuth 2.0 server metadata document
+- ``{name}_ISSUER``: Issuer of the provider, when it differs from the server metadata URL
 
 
 We suggest that you keep ONLY ``{name}_CLIENT_ID`` and ``{name}_CLIENT_SECRET`` in
