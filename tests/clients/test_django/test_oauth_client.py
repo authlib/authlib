@@ -14,6 +14,7 @@ from authlib.oidc.core.grants.util import create_half_hash
 from tests.util import HMAC_SECRET
 
 from ..util import get_bearer_token
+from ..util import get_bearer_token_with_claims
 from ..util import mock_send_value
 
 dev_client = {"client_id": "dev-key", "client_secret": "dev-secret"}
@@ -538,3 +539,25 @@ def test_validate_logout_response_invalid_state(factory):
     request.session = factory.session
     with pytest.raises(OAuthError, match='Invalid "state" parameter'):
         client.validate_logout_response(request)
+
+
+def test_userinfo_sub_mismatch_with_fetched_token(factory):
+    """The sub is checked against the token that fetch_token returns, when no
+    token is passed.
+    """
+    oauth = OAuth()
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        fetch_token=lambda request: get_bearer_token_with_claims(),
+        userinfo_endpoint="https://provider.test/userinfo",
+    )
+
+    request = factory.get("/profile")
+    request.session = factory.session
+    with mock.patch("requests.sessions.Session.send") as send:
+        send.return_value = mock_send_value({"sub": "456"})
+        send.return_value.headers = {"Content-Type": "application/json"}
+        with pytest.raises(OAuthError, match="sub"):
+            client.userinfo(request=request)

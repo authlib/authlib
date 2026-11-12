@@ -46,3 +46,12 @@ def get_bearer_token():
         "expires_in": "3600",
         "expires_at": int(time.time()) + 3600,
     }
+
+
+def get_bearer_token_with_claims(sub="123"):
+    """Return a bearer token with the ID token claims in its userinfo key, as
+    authorize_access_token does.
+    """
+    token = get_bearer_token()
+    token["userinfo"] = {"sub": sub}
+    return token

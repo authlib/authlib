@@ -130,6 +130,12 @@ class AsyncOAuth2Mixin(OAuth2Base):
             return await client.fetch_token(token_endpoint, **kwargs)
 
 
+async def _get_requested_token(ctx, request):
+    """Return the token that fetch_token gives for the request."""
+    if ctx._fetch_token and request:
+        return await ctx._fetch_token(request)
+
+
 async def _http_request(ctx, session, method, url, token, kwargs):
     request = kwargs.pop("request", None)
     withhold_token = kwargs.get("withhold_token")
@@ -139,8 +145,9 @@ async def _http_request(ctx, session, method, url, token, kwargs):
     if withhold_token:
         return await session.request(method, url, **kwargs)
 
-    if token is None and ctx._fetch_token and request:
-        token = await ctx._fetch_token(request)
+    if token is None:
+        token = await _get_requested_token(ctx, request)
+
     if token is None:
         raise MissingTokenError()
 

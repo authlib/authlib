@@ -581,6 +581,13 @@ And later, when the client has obtained the access token, we can call:
         user = oauth.google.userinfo(token=token)
         return '...'
 
+When the provider returns an ID token, the token returned by
+``authorize_access_token`` holds its claims in ``token["userinfo"]``. When
+``userinfo()`` uses this token, the ``sub`` of the response must be the
+``sub`` of the ID token (`OpenID Connect Core §5.3.2`_). Otherwise,
+``userinfo()`` raises an ``OAuthError``. This applies whether the token is
+passed with ``token=``, or found by the client.
+
 
 Signed UserInfo Responses
 ~~~~~~~~~~~~~~~~~~~~~~~~~

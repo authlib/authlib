@@ -94,6 +94,25 @@ def _validate_signed_userinfo(token, metadata, client_id, leeway=120):
     return UserInfo(claims)
 
 
+def _check_userinfo_sub(userinfo, token):
+    """Check that the sub of the UserInfo response is the sub of the ID token.
+
+    The ID token claims are in the userinfo key of the token returned by
+    authorize_access_token. Without them, there is nothing to compare.
+    """
+    claims = token.get("userinfo") if token else None
+    if not claims or "sub" not in claims:
+        return
+
+    # Per OpenID Connect Core §5.3.2, the sub Claim in the UserInfo Response
+    # MUST be verified to exactly match the sub Claim in the ID Token; if they
+    # do not match, the UserInfo Response values MUST NOT be used.
+    if userinfo.get("sub") != claims["sub"]:
+        raise OAuthError(
+            description="The UserInfo sub does not match the ID token sub."
+        )
+
+
 def _get_claims_options(claims_options, metadata):
     """Add the issuer check to the claims options, unless they check the
     issuer themselves.
@@ -170,17 +189,28 @@ class OpenIDMixin:
         ``iss`` and ``aud`` claims are validated. When the client registered
         ``userinfo_signed_response_alg``, the response must be signed with
         this algorithm.
+
+        The ``sub`` of the response must be the ``sub`` of the ID token
+        (OpenID Connect Core §5.3.2). The ID token claims come from the token
+        returned by ``authorize_access_token``.
         """
         metadata = self.load_server_metadata()
-        resp = self.get(metadata["userinfo_endpoint"], **kwargs)
-        resp.raise_for_status()
-        if not _is_jwt_response(resp):
-            return _parse_json_userinfo(resp, metadata)
+        token = kwargs.pop("token", None)
+        if token is None:
+            token = self._get_requested_token(kwargs.get("request"))
 
-        token = self._decode_jwt(
-            resp.text, metadata, _get_userinfo_algorithms(metadata)
-        )
-        return _validate_signed_userinfo(token, metadata, self.client_id)
+        resp = self.get(metadata["userinfo_endpoint"], token=token, **kwargs)
+        resp.raise_for_status()
+        if _is_jwt_response(resp):
+            decoded = self._decode_jwt(
+                resp.text, metadata, _get_userinfo_algorithms(metadata)
+            )
+            userinfo = _validate_signed_userinfo(decoded, metadata, self.client_id)
+        else:
+            userinfo = _parse_json_userinfo(resp, metadata)
+
+        _check_userinfo_sub(userinfo, token)
+        return userinfo
 
     def parse_id_token(
         self, token, nonce, claims_options=None, claims_cls=None, leeway=120

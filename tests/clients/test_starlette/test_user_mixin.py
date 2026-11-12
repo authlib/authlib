@@ -18,6 +18,7 @@ from authlib.oidc.core.grants.util import create_half_hash
 
 from ..asgi_helper import AsyncPathMapDispatch
 from ..util import get_bearer_token
+from ..util import get_bearer_token_with_claims
 from ..util import read_key_file
 
 secret_key = jwk.import_key("test-oct-secret", "oct", {"kid": "f"})
@@ -317,13 +318,15 @@ async def run_fetch_signed_userinfo(
     jwks_uri=None,
     client_id="dev",
     content_type=b"application/jwt",
+    token=None,
+    fetched_token=None,
     **metadata,
 ):
 
     oauth = OAuth()
 
     async def fetch_token(request):
-        return get_bearer_token()
+        return fetched_token or get_bearer_token()
 
     path_maps = {
         "/userinfo": {
@@ -356,7 +359,7 @@ async def run_fetch_signed_userinfo(
 
     req_scope = {"type": "http", "session": {}}
     req = Request(req_scope)
-    return await client.userinfo(request=req)
+    return await client.userinfo(request=req, token=token)
 
 
 @pytest.mark.asyncio
@@ -558,4 +561,74 @@ async def test_fetch_userinfo_json_with_signed_response_alg():
             json.dumps({"sub": "123"}),
             content_type=b"application/json",
             userinfo_signed_response_alg="HS256",
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "token",
+    [
+        get_bearer_token_with_claims(),
+        get_bearer_token(),
+        None,
+    ],
+    ids=["id-token", "no-id-token", "no-token"],
+)
+async def test_fetch_userinfo_sub_accepted(token):
+    """The UserInfo response is returned when its sub is the ID token sub,
+    or when no ID token is known.
+    """
+    user = await run_fetch_signed_userinfo(
+        json.dumps({"sub": "123"}),
+        content_type=b"application/json",
+        token=token,
+    )
+    assert user.sub == "123"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "payload",
+    [{"sub": "456"}, {"name": "John Doe"}],
+    ids=["other-sub", "missing-sub"],
+)
+async def test_fetch_userinfo_json_sub_mismatch(payload):
+    """A JSON UserInfo response without the ID token sub is refused."""
+    with pytest.raises(OAuthError, match="sub"):
+        await run_fetch_signed_userinfo(
+            json.dumps(payload),
+            content_type=b"application/json",
+            token=get_bearer_token_with_claims(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_fetch_userinfo_sub_mismatch_with_fetched_token():
+    """The sub is checked against the token that fetch_token returns, when no
+    token is passed.
+    """
+    with pytest.raises(OAuthError, match="sub"):
+        await run_fetch_signed_userinfo(
+            json.dumps({"sub": "456"}),
+            content_type=b"application/json",
+            fetched_token=get_bearer_token_with_claims(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_fetch_userinfo_signed_jwt_sub_mismatch():
+    """A signed UserInfo response with another sub is refused."""
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "456",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    with pytest.raises(OAuthError, match="sub"):
+        await run_fetch_signed_userinfo(
+            encode_signed_userinfo(claims),
+            jwks={"keys": [secret_key.as_dict()]},
+            token=get_bearer_token_with_claims(),
         )

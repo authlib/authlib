@@ -9,6 +9,8 @@ from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core import UserInfo
 
+from .async_app import _get_requested_token
+from .sync_openid import _check_userinfo_sub
 from .sync_openid import _get_claims_options
 from .sync_openid import _get_id_token_algorithms
 from .sync_openid import _get_userinfo_algorithms
@@ -65,17 +67,28 @@ class AsyncOpenIDMixin:
         ``iss`` and ``aud`` claims are validated. When the client registered
         ``userinfo_signed_response_alg``, the response must be signed with
         this algorithm.
+
+        The ``sub`` of the response must be the ``sub`` of the ID token
+        (OpenID Connect Core §5.3.2). The ID token claims come from the token
+        returned by ``authorize_access_token``.
         """
         metadata = await self.load_server_metadata()
-        resp = await self.get(metadata["userinfo_endpoint"], **kwargs)
-        resp.raise_for_status()
-        if not _is_jwt_response(resp):
-            return _parse_json_userinfo(resp, metadata)
+        token = kwargs.pop("token", None)
+        if token is None:
+            token = await _get_requested_token(self, kwargs.get("request"))
 
-        token = await self._decode_jwt(
-            resp.text, metadata, _get_userinfo_algorithms(metadata)
-        )
-        return _validate_signed_userinfo(token, metadata, self.client_id)
+        resp = await self.get(metadata["userinfo_endpoint"], token=token, **kwargs)
+        resp.raise_for_status()
+        if _is_jwt_response(resp):
+            decoded = await self._decode_jwt(
+                resp.text, metadata, _get_userinfo_algorithms(metadata)
+            )
+            userinfo = _validate_signed_userinfo(decoded, metadata, self.client_id)
+        else:
+            userinfo = _parse_json_userinfo(resp, metadata)
+
+        _check_userinfo_sub(userinfo, token)
+        return userinfo
 
     async def parse_id_token(
         self, token, nonce, claims_options=None, claims_cls=None, leeway=120
