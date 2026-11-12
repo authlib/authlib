@@ -17,6 +17,7 @@ from authlib.integrations.flask_client import OAuthError
 from authlib.oidc.core.grants.util import create_half_hash
 
 from ..util import get_bearer_token
+from ..util import get_bearer_token_with_claims
 from ..util import read_key_file
 
 secret_key = OctKey.import_key("test-oct-secret", {"kty": "oct", "kid": "f"})
@@ -803,3 +804,107 @@ def test_fetch_userinfo_json_with_signed_response_alg():
         with mock.patch("requests.sessions.Session.send", fake_send):
             with pytest.raises(OAuthError, match="not signed"):
                 client.userinfo()
+
+
+def make_json_userinfo_response(payload):
+    """Return a fake send function that answers with a JSON UserInfo
+    response.
+    """
+
+    def fake_send(sess, req, **kwargs):
+        resp = mock.MagicMock(spec=requests.Response)
+        resp.status_code = 200
+        resp.headers = {"Content-Type": "application/json"}
+        resp.json = lambda: payload
+        return resp
+
+    return fake_send
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        get_bearer_token_with_claims(),
+        get_bearer_token(),
+        None,
+    ],
+    ids=["id-token", "no-id-token", "no-token"],
+)
+def test_fetch_userinfo_sub_accepted(token):
+    """The UserInfo response is returned when its sub is the ID token sub,
+    or when no ID token is known.
+    """
+    app, client = make_signed_userinfo_client()
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_json_userinfo_response({"sub": "123"}),
+        ):
+            user = client.userinfo(token=token)
+            assert user.sub == "123"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [{"sub": "456"}, {"name": "John Doe"}],
+    ids=["other-sub", "missing-sub"],
+)
+def test_fetch_userinfo_json_sub_mismatch(payload):
+    """A JSON UserInfo response without the ID token sub is refused."""
+    app, client = make_signed_userinfo_client()
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_json_userinfo_response(payload),
+        ):
+            with pytest.raises(OAuthError, match="sub"):
+                client.userinfo(token=get_bearer_token_with_claims())
+
+
+def test_fetch_userinfo_signed_jwt_sub_mismatch():
+    """A signed UserInfo response with another sub is refused."""
+    app, client = make_signed_userinfo_client()
+    now = int(time.time())
+    claims = {
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "sub": "456",
+        "iat": now,
+        "exp": now + 3600,
+    }
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_signed_userinfo_response(encode_signed_userinfo(claims)),
+        ):
+            with pytest.raises(OAuthError, match="sub"):
+                client.userinfo(token=get_bearer_token_with_claims())
+
+
+def test_fetch_userinfo_sub_mismatch_with_stored_token():
+    """The sub is checked against the token stored by authorize_access_token,
+    when no token is passed.
+    """
+    app, client = make_signed_userinfo_client()
+    with app.test_request_context():
+        client.token = get_bearer_token_with_claims()
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_json_userinfo_response({"sub": "456"}),
+        ):
+            with pytest.raises(OAuthError, match="sub"):
+                client.userinfo()
+
+
+def test_fetch_userinfo_sub_ignores_claims_without_sub():
+    """Token claims without sub are not compared."""
+    app, client = make_signed_userinfo_client()
+    token = get_bearer_token()
+    token["userinfo"] = {"login": "john"}
+    with app.test_request_context():
+        with mock.patch(
+            "requests.sessions.Session.send",
+            make_json_userinfo_response({"sub": "123"}),
+        ):
+            user = client.userinfo(token=token)
+            assert user.sub == "123"
