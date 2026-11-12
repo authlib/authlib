@@ -69,6 +69,12 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: |
         version="${GITHUB_REF_NAME#v}"
-        url="https://docs.authlib.org/en/stable/upgrades/changelog.html#changelog-${version//./-}"
+        docs="stable"
+        flags=()
+        if [[ "$version" =~ (a|b|rc)[0-9]+$ ]]; then
+          docs="latest"
+          flags=(--prerelease)
+        fi
+        url="https://docs.authlib.org/en/${docs}/upgrades/changelog.html#changelog-${version//./-}"
         gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-          --notes "Changelog: $url" --generate-notes
+          --notes "Changelog: $url" --generate-notes "${flags[@]}"
