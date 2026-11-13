@@ -239,5 +239,6 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
             header,
             token_data,
             key=key,
+            algorithms=[self.alg],
         )
         return access_token

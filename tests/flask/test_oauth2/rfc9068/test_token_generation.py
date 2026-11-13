@@ -259,6 +259,25 @@ def test_jwks_dict(client, user, jwks):
     assert claims["sub"] == str(user.id)
 
 
+def test_non_recommended_algorithm(client, user, jwks):
+    """The access token is signed with the configured 'alg', even when
+    joserfc does not recommend it."""
+
+    class RS512JWTBearerTokenGenerator(JWTBearerTokenGenerator):
+        def get_jwks(self):
+            return jwks
+
+        def get_audiences(self, client, user, scope):
+            return resource
+
+    token_generator = RS512JWTBearerTokenGenerator(issuer=issuer, alg="RS512")
+    access_token = token_generator.access_token_generator(
+        client, "authorization_code", user, "profile"
+    )
+    token = jwt.decode(access_token, jwks, algorithms=["RS512"])
+    assert token.header["alg"] == "RS512"
+
+
 def test_default_audiences(client, user, jwks):
     """Without a get_audiences override, the client ID is used, with a warning."""
 
