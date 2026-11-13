@@ -5,6 +5,7 @@ from joserfc import jwt
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.security import generate_token
+from authlib.deprecate import accepts_argument
 from authlib.deprecate import deprecate
 from authlib.oauth2.rfc6750.token import BearerTokenGenerator
 
@@ -22,9 +23,9 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         class MyJWTBearerTokenGenerator(JWTBearerTokenGenerator):
             def get_jwks(self): ...
 
-            def get_extra_claims(self, client, grant_type, user, scope): ...
+            def get_extra_claims(self, client, grant_type, user, scope, request): ...
 
-            def get_audiences(self, client, user, scope):
+            def get_audiences(self, client, user, scope, request):
                 return "https://resource-server.example.org"
 
 
@@ -49,7 +50,7 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         self.issuer = issuer
         self.alg = alg
         self._client_id_audience_warned = False
-        self._user_hooks_warned = set()
+        self._hooks_warned = set()
 
     def get_jwks(self):
         """Return the JWKs that will be used to sign the JWT access token.
@@ -60,28 +61,39 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         """
         raise NotImplementedError()
 
-    def get_extra_claims(self, client, grant_type, user, scope):
+    def get_extra_claims(self, client, grant_type, user, scope, request=None):
         """Return extra claims to add in the JWT access token. Developers MAY
         re-implement this method to add identity claims like the ones in
         :ref:`specs/oidc` ID Token, or any other arbitrary claims::
 
-            def get_extra_claims(self, client, grant_type, user, scope):
+            def get_extra_claims(self, client, grant_type, user, scope, request):
                 return generate_user_info(user, scope)
+
+        :param client: the client that makes the request.
+        :param grant_type: the requested grant type.
+        :param user: the authorized user.
+        :param scope: the granted scope.
+        :param request: the current request, or ``None``.
         """
         return {}
 
-    def get_audiences(self, client, user, scope) -> str | list[str]:
+    def get_audiences(self, client, user, scope, request=None) -> str | list[str]:
         """Return the identifier of the resource, or the list of identifiers,
         that receives the token. Developers MUST re-implement this method. The
-        result can depend on the client, the user or the scope::
+        result can depend on the client, the user, the scope or the request::
 
-            def get_audiences(self, client, user, scope):
+            def get_audiences(self, client, user, scope, request):
                 if "admin" in scope_to_list(scope):
                     return [API_URL, ADMIN_API_URL]
                 return API_URL
 
         The default implementation returns the client ID. It is deprecated, and
         will raise :class:`NotImplementedError` in 1.11, like :meth:`get_jwks`.
+
+        :param client: the client that makes the request.
+        :param user: the authorized user.
+        :param scope: the granted scope.
+        :param request: the current request, or ``None``.
         """
         if not self._client_id_audience_warned:
             self._client_id_audience_warned = True
@@ -162,13 +174,19 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         """
         return None
 
-    def get_jti(self, client, grant_type, user, scope) -> str:
+    def get_jti(self, client, grant_type, user, scope, request=None) -> str:
         """JWT ID.
         Create an unique identifier for the token. Developers MAY re-implement
         this method::
 
-            def get_jti(self, client, grant_type, user scope):
+            def get_jti(self, client, grant_type, user, scope, request):
                 return generate_random_string(16)
+
+        :param client: the client that makes the request.
+        :param grant_type: the requested grant type.
+        :param user: the authorized user.
+        :param scope: the granted scope.
+        :param request: the current request, or ``None``.
         """
         return generate_token(16)
 
@@ -194,7 +212,9 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
             "exp": now + expires_in,
             "client_id": client.get_client_id(),
             "iat": now,
-            "jti": self.get_jti(client, grant_type, user, scope),
+            "jti": self._call_hook(
+                "get_jti", client, grant_type, user, scope, request=request
+            ),
             "scope": scope,
         }
 
@@ -229,7 +249,9 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         # indicator values is outside the scope of this specification.
 
         else:
-            token_data["aud"] = self.get_audiences(client, user, scope)
+            token_data["aud"] = self._call_hook(
+                "get_audiences", client, user, scope, request=request
+            )
 
         # If the values in the 'scope' parameter refer to different default resource
         # indicator values, the authorization server SHOULD reject the request with
@@ -256,7 +278,11 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         # resistant or the access tokens are meant to be used only within a private
         # subsystem. Please refer to Sections 4.2 and 4.3 of [RFC7519] for details.
 
-        token_data.update(self.get_extra_claims(client, grant_type, user, scope))
+        token_data.update(
+            self._call_hook(
+                "get_extra_claims", client, grant_type, user, scope, request=request
+            )
+        )
 
         # This specification registers the 'application/at+jwt' media type, which can
         # be used to indicate that the content is a JWT access token. JWT access tokens
@@ -282,16 +308,34 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         if _takes_request(method):
             return method(request=request)
 
-        if hook not in self._user_hooks_warned:
-            self._user_hooks_warned.add(hook)
-            deprecate(
-                f"'{type(self).__name__}.{hook}' receives the user. "
-                "Make 'request' its only parameter. "
-                "In 1.11, it will receive the request.",
-                stacklevel=4,
-            )
-
+        self._warn_hook(
+            hook,
+            "receives the user. Make 'request' its only parameter. "
+            "In 1.11, it will receive the request.",
+        )
         return method(user)
+
+    def _call_hook(self, hook, *args, request):
+        """Call a hook with the request as a keyword argument. A hook without a
+        ``request`` parameter is called without it, with a deprecation
+        warning."""
+        method = getattr(self, hook)
+        if accepts_argument(method, "request"):
+            return method(*args, request=request)
+
+        self._warn_hook(
+            hook,
+            "does not accept a 'request' argument. In 1.11, it will always receive it.",
+        )
+        return method(*args)
+
+    def _warn_hook(self, hook, message):
+        """Warn once per hook that its signature is deprecated."""
+        if hook in self._hooks_warned:
+            return
+
+        self._hooks_warned.add(hook)
+        deprecate(f"'{type(self).__name__}.{hook}' {message}", stacklevel=5)
 
 
 def _takes_request(method):

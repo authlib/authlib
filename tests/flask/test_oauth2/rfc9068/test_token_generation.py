@@ -64,7 +64,7 @@ def token_generator(server, jwks):
         def get_jwks(self):
             return jwks
 
-        def get_audiences(self, client, user, scope):
+        def get_audiences(self, client, user, scope, request):
             return resource
 
     token_generator = MyJWTBearerTokenGenerator(issuer=issuer)
@@ -135,8 +135,8 @@ def test_generate_jwt_access_token_extra_claims(
     subsystem. Please refer to Sections 4.2 and 4.3 of [RFC7519] for details.
     """
 
-    def get_extra_claims(client, grant_type, user, scope):
-        return {"username": user.username}
+    def get_extra_claims(client, grant_type, user, scope, request):
+        return {"username": user.username, "grant": request.payload.grant_type}
 
     token_generator.get_extra_claims = get_extra_claims
 
@@ -168,6 +168,7 @@ def test_generate_jwt_access_token_extra_claims(
     access_token = res.json["access_token"]
     claims = jwt.decode(access_token, jwks).claims
     assert claims["username"] == user.username
+    assert claims["grant"] == "authorization_code"
 
 
 @pytest.mark.skip
@@ -238,7 +239,7 @@ def test_authentication_hooks_receive_request(test_client, server, user, client,
         def get_jwks(self):
             return jwks
 
-        def get_audiences(self, client, user, scope):
+        def get_audiences(self, client, user, scope, request):
             return resource
 
         def get_auth_time(self, request):
@@ -269,7 +270,7 @@ def test_authentication_hooks_with_user(test_client, server, user, client, jwks)
         def get_jwks(self):
             return jwks
 
-        def get_audiences(self, client, user, scope):
+        def get_audiences(self, client, user, scope, request):
             return resource
 
         def get_auth_time(self, user):
@@ -309,7 +310,7 @@ def test_authentication_hooks_signatures(client, user, jwks):
         def get_jwks(self):
             return jwks
 
-        def get_audiences(self, client, user, scope):
+        def get_audiences(self, client, user, scope, request):
             return resource
 
         def get_acr(self, *, request):
@@ -331,6 +332,37 @@ def test_authentication_hooks_signatures(client, user, jwks):
     assert claims["amr"] == ["pwd"]
 
 
+def test_hooks_without_request(client, user, jwks):
+    """get_extra_claims, get_audiences and get_jti without a request parameter
+    are deprecated but still work."""
+
+    class MyJWTBearerTokenGenerator(JWTBearerTokenGenerator):
+        def get_jwks(self):
+            return jwks
+
+        def get_extra_claims(self, client, grant_type, user, scope):
+            return {"extra": "value"}
+
+        def get_audiences(self, client, user, scope):
+            return resource
+
+        def get_jti(self, client, grant_type, user, scope):
+            return "jti"
+
+    token_generator = MyJWTBearerTokenGenerator(issuer=issuer)
+    with pytest.warns(AuthlibDeprecationWarning, match="'request'") as record:
+        for _ in range(2):
+            access_token = token_generator.access_token_generator(
+                client, "authorization_code", user, "profile"
+            )
+
+    assert len(record) == 3
+    claims = jwt.decode(access_token, jwks).claims
+    assert claims["extra"] == "value"
+    assert claims["aud"] == resource
+    assert claims["jti"] == "jti"
+
+
 def test_jwks_dict(client, user, jwks):
     """A JWKS dict is still accepted by 'get_jwks' but deprecated."""
 
@@ -338,7 +370,7 @@ def test_jwks_dict(client, user, jwks):
         def get_jwks(self):
             return read_file_path("jwks_private.json")
 
-        def get_audiences(self, client, user, scope):
+        def get_audiences(self, client, user, scope, request):
             return resource
 
     token_generator = DictJWTBearerTokenGenerator(issuer=issuer)
@@ -375,8 +407,8 @@ def test_default_audiences_with_super(client, user, jwks):
         def get_jwks(self):
             return jwks
 
-        def get_audiences(self, client, user, scope):
-            return [super().get_audiences(client, user, scope), resource]
+        def get_audiences(self, client, user, scope, request):
+            return [super().get_audiences(client, user, scope, request), resource]
 
     token_generator = MyJWTBearerTokenGenerator(issuer=issuer)
     with pytest.warns(AuthlibDeprecationWarning, match="get_audiences"):
@@ -414,7 +446,7 @@ def test_expires_generator(client, user, jwks):
         def get_jwks(self):
             return jwks
 
-        def get_audiences(self, client, user, scope):
+        def get_audiences(self, client, user, scope, request):
             return resource
 
     token_generator = MyJWTBearerTokenGenerator(issuer=issuer, expires_generator=600)
@@ -432,7 +464,7 @@ def test_override_without_expires_in(client, user, jwks):
         def get_jwks(self):
             return jwks
 
-        def get_audiences(self, client, user, scope):
+        def get_audiences(self, client, user, scope, request):
             return resource
 
         def access_token_generator(self, client, grant_type, user, scope):
