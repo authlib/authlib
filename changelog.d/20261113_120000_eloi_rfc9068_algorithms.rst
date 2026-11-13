@@ -1,0 +1,5 @@
+Fixed
+~~~~~
+
+- ``JWTBearerTokenGenerator`` signs access tokens with any ``alg`` that joserfc supports, such as ``RS512`` or ``PS256``.
+  Before, only ``HS256``, ``RS256`` and ``ES256`` worked.
