@@ -4,12 +4,3 @@ Fixed
 - ``JWTBearerTokenGenerator`` uses the ``expires_in`` given to ``generate``
   for the ``exp`` claim. The JWT used to keep the default lifetime, while the
   response announced the given one.
-
-Deprecated
-~~~~~~~~~~
-
-- Access token generators without an ``expires_in`` parameter are deprecated.
-  In 1.11, they will always receive it. Add it to the function of
-  ``OAUTH2_ACCESS_TOKEN_GENERATOR`` (Flask) or ``access_token_generator``
-  (Django), and to the ``access_token_generator`` overrides of
-  ``JWTBearerTokenGenerator``.

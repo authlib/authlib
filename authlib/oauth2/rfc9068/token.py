@@ -1,9 +1,11 @@
+import inspect
 import time
 
 from joserfc import jwt
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.security import generate_token
+from authlib.deprecate import accepts_argument
 from authlib.deprecate import deprecate
 from authlib.oauth2.rfc6750.token import BearerTokenGenerator
 
@@ -21,9 +23,9 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         class MyJWTBearerTokenGenerator(JWTBearerTokenGenerator):
             def get_jwks(self): ...
 
-            def get_extra_claims(self, client, grant_type, user, scope): ...
+            def get_extra_claims(self, client, grant_type, user, scope, request): ...
 
-            def get_audiences(self, client, user, scope):
+            def get_audiences(self, client, user, scope, request):
                 return "https://resource-server.example.org"
 
 
@@ -48,6 +50,7 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         self.issuer = issuer
         self.alg = alg
         self._client_id_audience_warned = False
+        self._hooks_warned = set()
 
     def get_jwks(self):
         """Return the JWKs that will be used to sign the JWT access token.
@@ -58,28 +61,39 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         """
         raise NotImplementedError()
 
-    def get_extra_claims(self, client, grant_type, user, scope):
+    def get_extra_claims(self, client, grant_type, user, scope, request=None):
         """Return extra claims to add in the JWT access token. Developers MAY
         re-implement this method to add identity claims like the ones in
         :ref:`specs/oidc` ID Token, or any other arbitrary claims::
 
-            def get_extra_claims(self, client, grant_type, user, scope):
+            def get_extra_claims(self, client, grant_type, user, scope, request):
                 return generate_user_info(user, scope)
+
+        :param client: the client that makes the request.
+        :param grant_type: the requested grant type.
+        :param user: the authorized user.
+        :param scope: the granted scope.
+        :param request: the current request, or ``None``.
         """
         return {}
 
-    def get_audiences(self, client, user, scope) -> str | list[str]:
+    def get_audiences(self, client, user, scope, request=None) -> str | list[str]:
         """Return the identifier of the resource, or the list of identifiers,
         that receives the token. Developers MUST re-implement this method. The
-        result can depend on the client, the user or the scope::
+        result can depend on the client, the user, the scope or the request::
 
-            def get_audiences(self, client, user, scope):
+            def get_audiences(self, client, user, scope, request):
                 if "admin" in scope_to_list(scope):
                     return [API_URL, ADMIN_API_URL]
                 return API_URL
 
         The default implementation returns the client ID. It is deprecated, and
         will raise :class:`NotImplementedError` in 1.11, like :meth:`get_jwks`.
+
+        :param client: the client that makes the request.
+        :param user: the authorized user.
+        :param scope: the granted scope.
+        :param request: the current request, or ``None``.
         """
         if not self._client_id_audience_warned:
             self._client_id_audience_warned = True
@@ -92,57 +106,93 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
 
         return client.get_client_id()
 
-    def get_acr(self, user) -> str | None:
+    def get_acr(self, request) -> str | None:
         """Authentication Context Class Reference.
-        Returns a user-defined case sensitive string indicating the class of
-        authentication the used performed. Token audience may refuse to give access to
-        some resources if some ACR criteria are not met.
-        :ref:`specs/oidc` defines one special value: ``0`` means that the user
-        authentication did not respect `ISO29115`_ level 1, and will be refused monetary
-        operations. Developers MAY re-implement this method::
+        Return a case sensitive string that tells the class of authentication
+        that the user performed. The token audience may refuse some resources
+        if some ACR criteria are not met. :ref:`specs/oidc` defines one special
+        value: ``0`` means that the user authentication did not respect
+        `ISO29115`_ level 1, and will be refused monetary operations. See
+        :meth:`get_auth_time` to find the authentication of the token.
+        Developers MAY re-implement this method::
 
-            def get_acr(self, user):
-                if user.insecure_session():
-                    return "0"
-                return "urn:mace:incommon:iap:silver"
+            def get_acr(self, request):
+                if request and request.authorization_code:
+                    return request.authorization_code.get_acr()
+                return None
+
+        :param request: the current request, or ``None``.
 
         .. _ISO29115: https://www.iso.org/standard/45138.html
         """
         return None
 
-    def get_auth_time(self, user) -> int | None:
+    def get_auth_time(self, request) -> int | None:
         """User authentication time.
-        Time when the End-User authentication occurred. Its value is a JSON number
-        representing the number of seconds from 1970-01-01T0:0:0Z as measured in UTC
-        until the date/time. Developers MAY re-implement this method::
+        Return the time when the user authenticated, as a number of seconds
+        since 1970-01-01T00:00:00Z UTC. Developers MAY re-implement this method.
 
-            def get_auth_time(self, user):
-                return datetime.timestamp(user.get_auth_time())
+        The value belongs to the authentication that the token comes from, not
+        to the user. The request gives access to it:
+
+        - at the token endpoint, ``request.authorization_code``,
+          ``request.refresh_token`` or ``request.credential`` hold the grant;
+        - at the authorization endpoint, the OpenID Connect implicit and hybrid
+          grants set ``request.auth_time``, ``request.acr`` and ``request.amr``.
+          Other grants do not set these attributes.
+
+        ``request.refresh_token`` is the token object that
+        ``authenticate_refresh_token`` returns. Store the authentication values
+        on it to keep them in refreshed access tokens::
+
+            def get_auth_time(self, request):
+                if request is None:
+                    return None
+                if request.authorization_code:
+                    return request.authorization_code.get_auth_time()
+                if request.refresh_token:
+                    return request.refresh_token.get_auth_time()
+                return None
+
+        :param request: the current request, or ``None``.
         """
         return None
 
-    def get_amr(self, user) -> list[str] | None:
+    def get_amr(self, request) -> list[str] | None:
         """Authentication Methods References.
-        Defined by :ref:`specs/oidc` as an option list of user-defined case-sensitive
-        strings indication which authentication methods have been used to authenticate
-        the user. Developers MAY re-implement this method::
+        Return the list of case sensitive strings that tell which
+        authentication methods the user used, as defined by :ref:`specs/oidc`.
+        See :meth:`get_auth_time` to find the authentication of the token.
+        Developers MAY re-implement this method::
 
-            def get_amr(self, user):
-                return ["2FA"] if user.has_2fa_enabled() else []
+            def get_amr(self, request):
+                if request and request.authorization_code:
+                    return request.authorization_code.get_amr()
+                return None
+
+        :param request: the current request, or ``None``.
         """
         return None
 
-    def get_jti(self, client, grant_type, user, scope) -> str:
+    def get_jti(self, client, grant_type, user, scope, request=None) -> str:
         """JWT ID.
         Create an unique identifier for the token. Developers MAY re-implement
         this method::
 
-            def get_jti(self, client, grant_type, user scope):
+            def get_jti(self, client, grant_type, user, scope, request):
                 return generate_random_string(16)
+
+        :param client: the client that makes the request.
+        :param grant_type: the requested grant type.
+        :param user: the authorized user.
+        :param scope: the granted scope.
+        :param request: the current request, or ``None``.
         """
         return generate_token(16)
 
-    def access_token_generator(self, client, grant_type, user, scope, expires_in=None):
+    def access_token_generator(
+        self, client, grant_type, user, scope, expires_in=None, request=None
+    ):
         """Generate a JWT access token.
 
         :param client: the client that makes the request.
@@ -151,6 +201,7 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         :param scope: the granted scope.
         :param expires_in: the lifetime of the token, in seconds. Defaults to
             the lifetime of the grant type.
+        :param request: the current request, or ``None``.
         """
         if expires_in is None:
             expires_in = self._get_expires_in(client, grant_type)
@@ -161,7 +212,9 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
             "exp": now + expires_in,
             "client_id": client.get_client_id(),
             "iat": now,
-            "jti": self.get_jti(client, grant_type, user, scope),
+            "jti": self._call_hook(
+                "get_jti", client, grant_type, user, scope, request=request
+            ),
             "scope": scope,
         }
 
@@ -196,26 +249,28 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         # indicator values is outside the scope of this specification.
 
         else:
-            token_data["aud"] = self.get_audiences(client, user, scope)
+            token_data["aud"] = self._call_hook(
+                "get_audiences", client, user, scope, request=request
+            )
 
         # If the values in the 'scope' parameter refer to different default resource
         # indicator values, the authorization server SHOULD reject the request with
         # 'invalid_scope' as described in Section 4.1.2.1 of [RFC6749].
         # TODO: Implement this with RFC8707
 
-        if auth_time := self.get_auth_time(user):
+        if auth_time := self._call_user_hook("get_auth_time", user, request):
             token_data["auth_time"] = auth_time
 
         # The meaning and processing of acr Claim Values is out of scope for this
         # specification.
 
-        if acr := self.get_acr(user):
+        if acr := self._call_user_hook("get_acr", user, request):
             token_data["acr"] = acr
 
         # The definition of particular values to be used in the amr Claim is beyond the
         # scope of this specification.
 
-        if amr := self.get_amr(user):
+        if amr := self._call_user_hook("get_amr", user, request):
             token_data["amr"] = amr
 
         # Authorization servers MAY return arbitrary attributes not defined in any
@@ -223,7 +278,11 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
         # resistant or the access tokens are meant to be used only within a private
         # subsystem. Please refer to Sections 4.2 and 4.3 of [RFC7519] for details.
 
-        token_data.update(self.get_extra_claims(client, grant_type, user, scope))
+        token_data.update(
+            self._call_hook(
+                "get_extra_claims", client, grant_type, user, scope, request=request
+            )
+        )
 
         # This specification registers the 'application/at+jwt' media type, which can
         # be used to indicate that the content is a JWT access token. JWT access tokens
@@ -241,3 +300,49 @@ class JWTBearerTokenGenerator(BearerTokenGenerator):
             key=key,
         )
         return access_token
+
+    def _call_user_hook(self, hook, user, request):
+        """Call a hook with the request. A hook whose first parameter is not
+        ``request`` gets the user, with a deprecation warning."""
+        method = getattr(self, hook)
+        if _takes_request(method):
+            return method(request=request)
+
+        self._warn_hook(
+            hook,
+            "receives the user. Make 'request' its only parameter. "
+            "In 1.11, it will receive the request.",
+        )
+        return method(user)
+
+    def _call_hook(self, hook, *args, request):
+        """Call a hook with the request as a keyword argument. A hook without a
+        ``request`` parameter is called without it, with a deprecation
+        warning."""
+        method = getattr(self, hook)
+        if accepts_argument(method, "request"):
+            return method(*args, request=request)
+
+        self._warn_hook(
+            hook,
+            "does not accept a 'request' argument. In 1.11, it will always receive it.",
+        )
+        return method(*args)
+
+    def _warn_hook(self, hook, message):
+        """Warn once per hook that its signature is deprecated."""
+        if hook in self._hooks_warned:
+            return
+
+        self._hooks_warned.add(hook)
+        deprecate(f"'{type(self).__name__}.{hook}' {message}", stacklevel=5)
+
+
+def _takes_request(method):
+    """Tell whether the first parameter of a method is ``request``."""
+    try:
+        parameters = list(inspect.signature(method).parameters.values())
+    except (TypeError, ValueError):
+        return False
+
+    return bool(parameters) and parameters[0].name == "request"

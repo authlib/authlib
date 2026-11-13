@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from authlib.deprecate import AuthlibDeprecationWarning
+from authlib.oauth2.rfc6749 import AuthorizationServer
 from authlib.oauth2.rfc6749 import AuthorizationSessionMixin
 from authlib.oauth2.rfc6749 import OAuth2Token
 from authlib.oauth2.rfc6749 import authenticate_client
@@ -274,3 +275,28 @@ def test_error_redirect():
             "https://client.test/callback?error=invalid_request&state=s",
         )
     ]
+
+
+def test_generate_token_override_without_request():
+    """An AuthorizationServer.generate_token override without a request
+    parameter is deprecated but still works."""
+
+    class Server(AuthorizationServer):
+        def generate_token(
+            self,
+            grant_type,
+            client,
+            user=None,
+            scope=None,
+            expires_in=None,
+            include_refresh_token=True,
+        ):
+            return {"access_token": grant_type}
+
+    with pytest.warns(AuthlibDeprecationWarning, match="'request'"):
+        server = Server()
+
+    request = OAuth2Request("POST", "https://provider.test/token")
+    grant = BaseGrant(request, server)
+    grant.GRANT_TYPE = "client_credentials"
+    assert grant.generate_token() == {"access_token": "client_credentials"}

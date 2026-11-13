@@ -2,7 +2,9 @@ from functools import partial
 
 from authlib.common.errors import ContinueIteration
 from authlib.common.hooks import Hookable
+from authlib.deprecate import call_with_accepted_arguments
 from authlib.deprecate import deprecate
+from authlib.deprecate import deprecate_missing_arguments
 
 from .authenticate_client import ClientAuthentication
 from .endpoint import Endpoint
@@ -48,6 +50,7 @@ class AuthorizationServer(Hookable):
         self._endpoints = {}
         self._extensions = []
         self._authorization_parameters = {}
+        deprecate_missing_arguments("method", self.generate_token, ["request"])
 
     def query_client(self, client_id):
         """Query OAuth client by client_id. The client model class MUST
@@ -68,6 +71,7 @@ class AuthorizationServer(Hookable):
         scope=None,
         expires_in=None,
         include_refresh_token=True,
+        request=None,
     ):
         """Generate the token dict.
 
@@ -77,6 +81,7 @@ class AuthorizationServer(Hookable):
         :param expires_in: if provided, use this value as expires_in.
         :param scope: current requested scope.
         :param include_refresh_token: should refresh_token be included.
+        :param request: the current request.
         :return: Token dict
         """
         # generator for a specified grant type
@@ -87,13 +92,16 @@ class AuthorizationServer(Hookable):
         if not func:
             raise RuntimeError("No configured token generator")
 
-        return func(
+        return call_with_accepted_arguments(
+            func,
+            ["request"],
             grant_type=grant_type,
             client=client,
             user=user,
             scope=scope,
             expires_in=expires_in,
             include_refresh_token=include_refresh_token,
+            request=request,
         )
 
     def register_token_generator(self, grant_type, func):
@@ -108,6 +116,7 @@ class AuthorizationServer(Hookable):
                 scope=None,
                 expires_in=None,
                 include_refresh_token=True,
+                request=None,
             ):
                 token = {"token_type": "Bearer", "access_token": ...}
                 if include_refresh_token:
@@ -128,9 +137,13 @@ class AuthorizationServer(Hookable):
                 generate_bearer_token,
             )
 
+        The generator receives the current request as ``request``, or ``None``
+        when the token is generated outside a request.
+
         :param grant_type: string name of the grant type
         :param func: a function to generate token
         """
+        deprecate_missing_arguments("token generator", func, ["request"], stacklevel=5)
         self._token_generators[grant_type] = func
 
     def authenticate_client(self, request, methods, endpoint="token"):

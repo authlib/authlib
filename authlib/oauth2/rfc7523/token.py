@@ -113,6 +113,8 @@ class JWTBearerTokenGenerator:
         scope=None,
         expires_in=None,
         include_refresh_token=True,
+        request=None,
     ):
+        """Generate a bearer token. See :meth:`generate`."""
         # there is absolutely no refresh token in JWT format
         return self.generate(grant_type, client, user, scope, expires_in)

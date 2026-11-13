@@ -55,11 +55,11 @@ Return it from
 .. code-block:: python
 
     class MyJWTBearerTokenGenerator(JWTBearerTokenGenerator):
-        def get_audiences(self, client, user, scope):
+        def get_audiences(self, client, user, scope, request):
             return "https://api.example.org"
 
-The method can also choose the resources from the client, the user or the
-scope. The resource server gives the same identifier to
+The method can also choose the resources from the client, the user, the
+scope or the request. The resource server gives the same identifier to
 :class:`~authlib.oauth2.rfc9068.JWTBearerTokenValidator` as
 ``resource_server``.
 
@@ -96,7 +96,7 @@ of your other resource server:
 .. code-block:: python
 
     class MyJWTBearerTokenGenerator(JWTBearerTokenGenerator):
-        def get_audiences(self, client, user, scope):
+        def get_audiences(self, client, user, scope, request):
             audiences = [API_URL]
             if user and "openid" in (scope_to_list(scope) or []):
                 audiences.append(USERINFO_URL)

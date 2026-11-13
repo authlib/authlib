@@ -1,5 +1,5 @@
-from authlib.deprecate import accepts_argument
-from authlib.deprecate import deprecate
+from authlib.deprecate import call_with_accepted_arguments
+from authlib.deprecate import deprecate_missing_arguments
 
 from ..rfc6749.errors import InvalidScopeError
 
@@ -23,10 +23,12 @@ class BearerTokenGenerator:
         }
 
     :param access_token_generator: a function that returns the access token.
-        It receives ``client``, ``grant_type``, ``user``, ``scope`` and
-        ``expires_in``, the lifetime of the token in seconds.
+        It receives ``client``, ``grant_type``, ``user``, ``scope``,
+        ``expires_in``, the lifetime of the token in seconds, and ``request``,
+        the current request.
     :param refresh_token_generator: a function that returns the refresh token.
-        It receives ``client``, ``grant_type``, ``user`` and ``scope``.
+        It receives ``client``, ``grant_type``, ``user``, ``scope`` and
+        ``request``.
     :param expires_generator: the lifetime of the access tokens, as a number of
         seconds or a function that receives ``client`` and ``grant_type``.
     """
@@ -50,15 +52,13 @@ class BearerTokenGenerator:
         self.access_token_generator = access_token_generator
         self.refresh_token_generator = refresh_token_generator
         self.expires_generator = expires_generator
-        if access_token_generator is not None and not accepts_argument(
-            access_token_generator, "expires_in"
-        ):
-            name = getattr(access_token_generator, "__qualname__", None)
-            deprecate(
-                f"The access token generator {name or access_token_generator!r} "
-                "does not accept an 'expires_in' argument. "
-                "In 1.11, it will always receive it.",
-            )
+        deprecate_missing_arguments(
+            "access token generator", access_token_generator, ["expires_in", "request"]
+        )
+        deprecate_missing_arguments(
+            "refresh token generator", refresh_token_generator, ["request"]
+        )
+        deprecate_missing_arguments("method", self.generate, ["request"])
 
     def _get_expires_in(self, client, grant_type):
         if self.expires_generator is None:
@@ -99,6 +99,7 @@ class BearerTokenGenerator:
         scope=None,
         expires_in=None,
         include_refresh_token=True,
+        request=None,
     ):
         """Generate a bearer token for OAuth 2.0 authorization token endpoint.
 
@@ -108,22 +109,23 @@ class BearerTokenGenerator:
         :param expires_in: if provided, use this value as expires_in.
         :param scope: current requested scope.
         :param include_refresh_token: should refresh_token be included.
+        :param request: the current request.
         :return: Token dict
         """
         scope = self.get_allowed_scope(client, scope)
         if expires_in is None:
             expires_in = self._get_expires_in(client, grant_type)
 
-        kwargs = {
-            "client": client,
-            "grant_type": grant_type,
-            "user": user,
-            "scope": scope,
-        }
-        if accepts_argument(self.access_token_generator, "expires_in"):
-            kwargs["expires_in"] = expires_in
-
-        access_token = self.access_token_generator(**kwargs)
+        access_token = call_with_accepted_arguments(
+            self.access_token_generator,
+            ["expires_in", "request"],
+            client=client,
+            grant_type=grant_type,
+            user=user,
+            scope=scope,
+            expires_in=expires_in,
+            request=request,
+        )
         token = {
             "token_type": "Bearer",
             "access_token": access_token,
@@ -131,8 +133,14 @@ class BearerTokenGenerator:
         if expires_in:
             token["expires_in"] = expires_in
         if include_refresh_token and self.refresh_token_generator:
-            token["refresh_token"] = self.refresh_token_generator(
-                client=client, grant_type=grant_type, user=user, scope=scope
+            token["refresh_token"] = call_with_accepted_arguments(
+                self.refresh_token_generator,
+                ["request"],
+                client=client,
+                grant_type=grant_type,
+                user=user,
+                scope=scope,
+                request=request,
             )
         if scope:
             token["scope"] = scope
@@ -146,7 +154,17 @@ class BearerTokenGenerator:
         scope=None,
         expires_in=None,
         include_refresh_token=True,
+        request=None,
     ):
-        return self.generate(
-            grant_type, client, user, scope, expires_in, include_refresh_token
+        """Generate a bearer token. See :meth:`generate`."""
+        return call_with_accepted_arguments(
+            self.generate,
+            ["request"],
+            grant_type=grant_type,
+            client=client,
+            user=user,
+            scope=scope,
+            expires_in=expires_in,
+            include_refresh_token=include_refresh_token,
+            request=request,
         )

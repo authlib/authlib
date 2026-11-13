@@ -166,11 +166,12 @@ OAUTH2_ERROR_URIS                  A list of tuple for (``error``, ``error_uri``
 
     .. code-block:: python
 
-        def gen_access_token(client, grant_type, user, scope, expires_in):
+        def gen_access_token(client, grant_type, user, scope, expires_in, request):
             return create_some_random_string()
 
     ``expires_in`` is the lifetime of the token, in seconds. A self-contained
     token, such as a signed one, can use it to set its expiration time.
+    ``request`` is the current request.
     ``OAUTH2_REFRESH_TOKEN_GENERATOR`` accepts the same parameters, except
     ``expires_in``.
 

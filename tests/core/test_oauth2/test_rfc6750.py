@@ -144,7 +144,7 @@ class ScopeClient:
 def test_access_token_generator_receives_expires_in():
     """The access token generator receives the lifetime of the token."""
 
-    def access_token_generator(client, grant_type, user, scope, expires_in):
+    def access_token_generator(client, grant_type, user, scope, expires_in, request):
         return f"token-{expires_in}"
 
     generator = BearerTokenGenerator(access_token_generator)
@@ -196,6 +196,66 @@ def test_access_token_generator_without_signature():
 
     token = generator.generate("client_credentials", ScopeClient())
     assert token["access_token"] == "token"
+
+
+def test_generators_receive_request():
+    """The access and refresh token generators receive the request."""
+    request = OAuth2Request("POST", "https://provider.test/token")
+
+    def access_token_generator(client, grant_type, user, scope, expires_in, request):
+        return f"access-{request.method}"
+
+    def refresh_token_generator(client, grant_type, user, scope, request):
+        return f"refresh-{request.method}"
+
+    generator = BearerTokenGenerator(access_token_generator, refresh_token_generator)
+    token = generator("client_credentials", ScopeClient(), request=request)
+
+    assert token["access_token"] == "access-POST"
+    assert token["refresh_token"] == "refresh-POST"
+
+
+def test_generators_without_request():
+    """Generators without a request argument are deprecated but still work."""
+
+    def access_token_generator(client, grant_type, user, scope, expires_in):
+        return "access"
+
+    def refresh_token_generator(client, grant_type, user, scope):
+        return "refresh"
+
+    with pytest.warns(AuthlibDeprecationWarning, match="'request'") as record:
+        generator = BearerTokenGenerator(
+            access_token_generator, refresh_token_generator
+        )
+
+    assert len(record) == 2
+    token = generator.generate("client_credentials", ScopeClient())
+    assert token["access_token"] == "access"
+    assert token["refresh_token"] == "refresh"
+
+
+def test_generate_override_without_request():
+    """A BearerTokenGenerator.generate override without a request parameter is
+    deprecated but still works."""
+
+    class Generator(BearerTokenGenerator):
+        def generate(
+            self,
+            grant_type,
+            client,
+            user=None,
+            scope=None,
+            expires_in=None,
+            include_refresh_token=True,
+        ):
+            return {"access_token": grant_type}
+
+    with pytest.warns(AuthlibDeprecationWarning, match="'request'"):
+        generator = Generator(None)
+
+    token = generator("client_credentials", ScopeClient(), request=object())
+    assert token == {"access_token": "client_credentials"}
 
 
 def test_no_access_token_generator():
