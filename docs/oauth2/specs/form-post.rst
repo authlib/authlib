@@ -67,6 +67,22 @@ The redirect URI must use http or https. Otherwise, the server refuses the
 request with an ``invalid_request`` error, without redirection, and renders no
 form.
 
+Content Security Policy
+-----------------------
+
+An inline script submits the form. A Content Security Policy that restricts
+scripts, such as ``script-src 'self'``, blocks it. The page then shows a
+"Continue" button, and the user has to click it. To submit the form
+automatically, allow the script by its hash in the ``script-src`` directive of
+the authorization endpoint:
+
+.. code-block:: text
+
+    Content-Security-Policy: script-src 'self' 'sha256-nCsFrQ+Ja+vLpu6ciL1PmD4EK2itYPA9RvLUwMuU4uw='
+
+The ``form-action`` directive must also allow the redirect URIs of the
+clients.
+
 API Reference
 -------------
 
