@@ -44,6 +44,8 @@ HTTPX2 OAuth 2.0
         create_authorization_url,
         fetch_token,
         refresh_token,
+        fetch_device_authorization,
+        poll_device_token,
         revoke_token,
         introspect_token,
         register_compliance_hook
@@ -55,6 +57,8 @@ HTTPX2 OAuth 2.0
         create_authorization_url,
         fetch_token,
         refresh_token,
+        fetch_device_authorization,
+        poll_device_token,
         revoke_token,
         introspect_token,
         register_compliance_hook

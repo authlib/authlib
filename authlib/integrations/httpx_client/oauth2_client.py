@@ -1,16 +1,26 @@
 # ruff: noqa: I001
 # The import order below is intentional: httpx compatibility must be loaded
 # before anyio so import errors refer to httpx.
+import time
 from collections.abc import Generator
 from contextlib import asynccontextmanager
 
 from ._compat import httpx2
 from anyio import Lock  # Import after httpx so import errors refer to httpx
+from anyio import sleep
 
+from authlib.common.encoding import to_unicode
+from authlib.common.errors import AuthlibBaseError
 from authlib.oauth2.auth import ClientAuth
 from authlib.oauth2.auth import TokenAuth
+from authlib.oauth2.client import DEFAULT_HEADERS
 from authlib.oauth2.client import OAuth2Client as _OAuth2Client
 from authlib.oauth2.client import _form_data
+from authlib.oauth2.client import _load_token_response
+from authlib.oauth2.rfc8628 import DEVICE_CODE_GRANT_TYPE
+from authlib.oauth2.rfc8628 import prepare_device_authorization_request
+from authlib.oauth2.rfc8628.errors import AuthorizationPendingError
+from authlib.oauth2.rfc8628.errors import SlowDownError
 
 from ..base_client import InvalidTokenError
 from ..base_client import MissingTokenError
@@ -223,6 +233,109 @@ class AsyncOAuth2Client(_OAuth2Client, httpx2.AsyncClient):
         return self.post(
             url, data=_form_data(body), headers=headers, auth=auth, **kwargs
         )
+
+    async def fetch_device_authorization(
+        self,
+        url=None,
+        scope=None,
+        body="",
+        auth=None,
+        headers=None,
+        **kwargs,
+    ):
+        """Send a device authorization request, per :rfc:`8628#section-3.1`.
+
+        :param url: Device authorization endpoint URL. If omitted, the
+                    ``device_authorization_endpoint`` value from the client
+                    metadata is used.
+        :param scope: The scope of the access request, as a string or a list.
+                      Defaults to the scope of the client.
+        :param body: Optional application/x-www-form-urlencoded body to extend.
+        :param auth: An auth tuple or method as accepted by the session.
+        :param headers: Dict of default request headers.
+        :param kwargs: Extra parameters for the device authorization request.
+        :return: The device authorization response as a dict, containing
+                 ``device_code``, ``user_code``, ``verification_uri`` and
+                 optionally ``verification_uri_complete``, ``expires_in``
+                 and ``interval``.
+        """
+        if url is None:
+            url = self.metadata.get("device_authorization_endpoint")
+        if not url:
+            raise ValueError("Missing device authorization endpoint URL.")
+
+        session_kwargs = self._extract_session_request_params(kwargs)
+        if scope is None:
+            scope = self.scope
+        body = prepare_device_authorization_request(scope=scope, body=body, **kwargs)
+
+        if auth is None:
+            auth = self.client_auth(self.token_endpoint_auth_method)
+        if headers is None:
+            headers = DEFAULT_HEADERS
+
+        resp = await self.post(
+            to_unicode(url),
+            data=_form_data(body),
+            headers=headers,
+            auth=auth,
+            **session_kwargs,
+        )
+        data = _load_token_response(resp)
+        if "error" in data:
+            raise self.oauth_error_class(
+                error=data["error"], description=data.get("error_description")
+            )
+        return data
+
+    async def poll_device_token(
+        self, device_code, url=None, interval=5, timeout=None, **kwargs
+    ):
+        """Poll the token endpoint until the user completes or declines the
+        device authorization, per :rfc:`8628#section-3.5`.
+
+        The ``authorization_pending`` error is answered with another poll
+        after ``interval`` seconds; on ``slow_down`` the interval is
+        increased by 5 seconds, as the specification requires. The
+        ``expired_token`` and ``access_denied`` errors, and any other
+        error, are raised to the caller.
+
+        :param device_code: The device verification code returned by
+                            :meth:`fetch_device_authorization`.
+        :param url: Token endpoint URL. If omitted, the ``token_endpoint``
+                    value from the client metadata is used.
+        :param interval: Seconds to wait between polls; use the ``interval``
+                         value from the device authorization response.
+                         Defaults to 5.
+        :param timeout: Maximum seconds to poll before raising
+                        ``TimeoutError``. Unlimited by default: the server
+                        ends the session with an ``expired_token`` error
+                        once the device code expires.
+        :param kwargs: Extra parameters for the token request.
+        :return: A :class:`OAuth2Token` object (a dict too).
+        """
+        if url is None:
+            url = self.metadata.get("token_endpoint")
+        if not url:
+            raise ValueError("Missing token endpoint URL.")
+
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while True:
+            try:
+                return await self.fetch_token(
+                    url,
+                    grant_type=DEVICE_CODE_GRANT_TYPE,
+                    device_code=device_code,
+                    **kwargs,
+                )
+            except AuthlibBaseError as error:
+                if error.error == SlowDownError.error:
+                    interval += 5
+                elif error.error != AuthorizationPendingError.error:
+                    raise
+            if deadline is not None and time.monotonic() >= deadline:
+                raise TimeoutError("Device authorization timed out.")
+            await sleep(interval)
 
 
 class OAuth2Client(_OAuth2Client, httpx2.Client):
