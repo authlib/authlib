@@ -1,4 +1,5 @@
 import warnings
+from types import SimpleNamespace
 
 import pytest
 from joserfc import jwt
@@ -202,11 +203,8 @@ def test_generate_jwt_access_token_no_user(test_client, client, user, jwks):
     assert claims["sub"] == client.client_id
 
 
-def test_optional_fields(test_client, token_generator, user, client, jwks):
-    token_generator.get_auth_time = lambda *args: 1234
-    token_generator.get_amr = lambda *args: "amr"
-    token_generator.get_acr = lambda *args: "acr"
-
+def fetch_access_token(test_client, client, user):
+    """Run the authorization code flow and return the access token."""
     res = test_client.post(
         "/oauth/authorize",
         data={
@@ -217,27 +215,120 @@ def test_optional_fields(test_client, token_generator, user, client, jwks):
             "user_id": user.id,
         },
     )
-
     params = dict(url_decode(urlparse.urlparse(res.location).query))
-    code = params["code"]
     res = test_client.post(
         "/oauth/token",
         data={
             "grant_type": "authorization_code",
-            "code": code,
+            "code": params["code"],
             "client_id": client.client_id,
             "client_secret": client.client_secret,
             "scope": " ".join(client.scope),
             "redirect_uri": client.redirect_uris[0],
         },
     )
+    return res.json["access_token"]
 
-    access_token = res.json["access_token"]
+
+def test_authentication_hooks_receive_request(test_client, server, user, client, jwks):
+    """The auth_time, acr and amr hooks read the authentication of the token
+    from the request."""
+
+    class MyJWTBearerTokenGenerator(JWTBearerTokenGenerator):
+        def get_jwks(self):
+            return jwks
+
+        def get_audiences(self, client, user, scope):
+            return resource
+
+        def get_auth_time(self, request):
+            return request.authorization_code.issued_at
+
+        def get_acr(self, request):
+            return request.authorization_code.get_acr()
+
+        def get_amr(self, request):
+            return request.authorization_code.get_amr()
+
+    server.register_token_generator("default", MyJWTBearerTokenGenerator(issuer=issuer))
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", AuthlibDeprecationWarning)
+        access_token = fetch_access_token(test_client, client, user)
+
+    claims = jwt.decode(access_token, jwks).claims
+    assert isinstance(claims["auth_time"], int)
+    assert claims["acr"] == "urn:mace:incommon:iap:silver"
+    assert claims["amr"] == ["pwd", "otp"]
+
+
+def test_authentication_hooks_with_user(test_client, server, user, client, jwks):
+    """Hooks whose first parameter is not 'request' get the user. They are
+    deprecated but still work, also when they are set on the instance."""
+
+    class MyJWTBearerTokenGenerator(JWTBearerTokenGenerator):
+        def get_jwks(self):
+            return jwks
+
+        def get_audiences(self, client, user, scope):
+            return resource
+
+        def get_auth_time(self, user):
+            return 1234
+
+        def get_acr(self, user, request=None):
+            return f"acr-{user.id}"
+
+    token_generator = MyJWTBearerTokenGenerator(issuer=issuer)
+    token_generator.get_amr = lambda user: ["pwd"]
+    server.register_token_generator("default", token_generator)
+    with pytest.warns(AuthlibDeprecationWarning, match="receives the user") as record:
+        access_token = fetch_access_token(test_client, client, user)
+        fetch_access_token(test_client, client, user)
+
+    assert len(record) == 3
     claims = jwt.decode(access_token, jwks).claims
 
     assert claims["auth_time"] == 1234
-    assert claims["amr"] == "amr"
-    assert claims["acr"] == "acr"
+    assert claims["acr"] == f"acr-{user.id}"
+    assert claims["amr"] == ["pwd"]
+
+
+def test_authentication_hooks_signatures(client, user, jwks):
+    """A keyword-only request is given by keyword. A hook without a readable
+    signature gets the user, with a warning."""
+
+    class NoSignature:
+        """Callable whose signature cannot be read."""
+
+        __signature__ = "invalid"
+
+        def __call__(self, user):
+            return ["pwd"]
+
+    class MyJWTBearerTokenGenerator(JWTBearerTokenGenerator):
+        def get_jwks(self):
+            return jwks
+
+        def get_audiences(self, client, user, scope):
+            return resource
+
+        def get_acr(self, *, request):
+            return request.acr
+
+    token_generator = MyJWTBearerTokenGenerator(issuer=issuer)
+    token_generator.get_amr = NoSignature()
+    with pytest.warns(AuthlibDeprecationWarning, match="get_amr"):
+        access_token = token_generator.access_token_generator(
+            client,
+            "authorization_code",
+            user,
+            "profile",
+            request=SimpleNamespace(acr="silver"),
+        )
+
+    claims = jwt.decode(access_token, jwks).claims
+    assert claims["acr"] == "silver"
+    assert claims["amr"] == ["pwd"]
 
 
 def test_jwks_dict(client, user, jwks):

@@ -1,6 +1,7 @@
 import pytest
 from flask import json
 
+from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.oauth2.rfc6749.grants import ClientCredentialsGrant
 
 from .oauth2_server import create_basic_header
@@ -129,6 +130,42 @@ def test_token_generator(test_client, app, server):
     resp = json.loads(rv.data)
     assert "access_token" in resp
     assert "c-client_credentials." in resp["access_token"]
+
+
+def test_registered_generator_receives_request(test_client, server):
+    """A registered token generator receives the token request."""
+
+    def generate_token(request, **kwargs):
+        return {
+            "token_type": "Bearer",
+            "access_token": f"{request.payload.grant_type}-{request.client.client_id}",
+        }
+
+    server.register_token_generator("client_credentials", generate_token)
+    headers = create_basic_header("client-id", "client-secret")
+    rv = test_client.post(
+        "/oauth/token", data={"grant_type": "client_credentials"}, headers=headers
+    )
+    assert rv.json["access_token"] == "client_credentials-client-id"
+
+
+def test_registered_generator_without_request(test_client, server):
+    """A registered token generator without a request argument is deprecated
+    but still works."""
+
+    def generate_token(
+        grant_type, client, user, scope, expires_in, include_refresh_token
+    ):
+        return {"token_type": "Bearer", "access_token": "legacy"}
+
+    with pytest.warns(AuthlibDeprecationWarning, match="'request'"):
+        server.register_token_generator("client_credentials", generate_token)
+
+    headers = create_basic_header("client-id", "client-secret")
+    rv = test_client.post(
+        "/oauth/token", data={"grant_type": "client_credentials"}, headers=headers
+    )
+    assert rv.json["access_token"] == "legacy"
 
 
 def test_missing_scope_uses_default(test_client, client, monkeypatch):

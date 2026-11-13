@@ -3,6 +3,7 @@ import json
 
 from authlib.common.hooks import Hookable
 from authlib.consts import default_json_headers
+from authlib.deprecate import call_with_accepted_arguments
 from authlib.deprecate import deprecate
 
 from ..authenticate_client import _validate_client
@@ -77,13 +78,16 @@ class BaseGrant(Hookable):
     ):
         if grant_type is None:
             grant_type = self.GRANT_TYPE
-        return self.server.generate_token(
+        return call_with_accepted_arguments(
+            self.server.generate_token,
+            ["request"],
             client=self.request.client,
             grant_type=grant_type,
             user=user,
             scope=scope,
             expires_in=expires_in,
             include_refresh_token=include_refresh_token,
+            request=self.request,
         )
 
     def authenticate_token_endpoint_client(self):
