@@ -4,6 +4,7 @@ from ..rfc6749 import BaseGrant
 from ..rfc6749 import JsonResponse
 from ..rfc6749 import TokenEndpointMixin
 from ..rfc6749.errors import AccessDeniedError
+from ..rfc6749.errors import InvalidGrantError
 from ..rfc6749.errors import InvalidRequestError
 from ..rfc6749.errors import UnauthorizedClientError
 from .errors import AuthorizationPendingError
@@ -100,12 +101,11 @@ class DeviceCodeGrant(BaseGrant, TokenEndpointMixin):
                 f"The client is not authorized to use 'response_type={self.GRANT_TYPE}'",
             )
 
+        # RFC 6749 §5.2: an unknown device code, or one issued to another
+        # client, is an invalid grant.
         credential = self.query_device_credential(device_code)
-        if not credential:
-            raise InvalidRequestError("Invalid 'device_code' in payload")
-
-        if credential.get_client_id() != client.get_client_id():
-            raise UnauthorizedClientError()
+        if not credential or credential.get_client_id() != client.get_client_id():
+            raise InvalidGrantError("Invalid 'device_code' in payload")
 
         user = self.validate_device_credential(credential)
         self.request.user = user
