@@ -6,9 +6,14 @@ from ..rfc6749 import InvalidRequestError
 from ..rfc6749 import OAuth2Response
 
 FORM_TEMPLATE = (
-    "<html><head><title>Redirecting</title></head>"
-    '<body onload="javascript:document.forms[0].submit()">'
-    '<form method="post" action="{}">{}</form></body></html>'
+    "<!DOCTYPE html><html><head><title>Redirecting</title>"
+    '<meta name="viewport" content="width=device-width"></head><body>'
+    '<form method="post" action="{}">{}'
+    '<button type="submit">Continue</button></form>'
+    "<script>"
+    'document.querySelector("button").hidden=true;'
+    "HTMLFormElement.prototype.submit.call(document.forms[0])"
+    "</script></body></html>"
 )
 
 INPUT_TEMPLATE = '<input type="hidden" name="{}" value="{}"/>'
@@ -28,6 +33,10 @@ class FormPost(ResponseMode):
         server.register_extension(MyMultipleResponseTypes([FormPost()]))
 
     The redirect URI must use http or https.
+
+    An inline script submits the form. A Content Security Policy that
+    restricts scripts must allow it by its hash. If the script is blocked,
+    the page shows a "Continue" button that submits the form.
     """
 
     RESPONSE_MODES = ["form_post"]

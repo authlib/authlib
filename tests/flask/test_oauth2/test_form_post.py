@@ -1,3 +1,7 @@
+import base64
+import hashlib
+import re
+
 import pytest
 
 from authlib.deprecate import AuthlibDeprecationWarning
@@ -177,3 +181,20 @@ def test_create_response_mode_response_is_deprecated(response_mode, response_cls
         )
 
     assert type(response) is response_cls
+
+
+def test_form_post_script_hash(test_client, server):
+    """The form has a submit button, and a script whose hash is the one in
+    the documentation."""
+    server.register_grant(AuthorizationCodeGrant)
+    register_form_post(server)
+    rv = test_client.post(
+        f"{authorize_url}&response_type=code&response_mode=form_post",
+        data={"user_id": "1"},
+    )
+
+    body = rv.data.decode()
+    assert '<button type="submit">Continue</button>' in body
+    script = re.search(r"<script>(.*?)</script>", body).group(1)
+    digest = base64.b64encode(hashlib.sha256(script.encode()).digest()).decode()
+    assert digest == "nCsFrQ+Ja+vLpu6ciL1PmD4EK2itYPA9RvLUwMuU4uw="
