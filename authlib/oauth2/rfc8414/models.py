@@ -136,7 +136,7 @@ class AuthorizationServerMetadata(dict):
         Registration Protocol" [RFC7591].
         """
         response_types_supported = self.get("response_types_supported")
-        if not response_types_supported:
+        if response_types_supported is None:
             raise ValueError('"response_types_supported" is required')
         if not isinstance(response_types_supported, list):
             raise ValueError('"response_types_supported" MUST be JSON array')

@@ -169,6 +169,10 @@ def test_validate_response_types_supported():
     metadata = AuthorizationServerMetadata({"response_types_supported": ["code"]})
     metadata.validate_response_types_supported()
 
+    # empty, for a server without an authorization endpoint
+    metadata = AuthorizationServerMetadata({"response_types_supported": []})
+    metadata.validate_response_types_supported()
+
 
 def test_validate_response_modes_supported():
     metadata = AuthorizationServerMetadata()
