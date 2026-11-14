@@ -124,16 +124,20 @@ def test_invalid_request(test_client):
     resp = json.loads(rv.data)
     assert resp["error"] == "invalid_request"
 
+
+@pytest.mark.parametrize("device_code", ["missing", "invalid-client"])
+def test_invalid_grant(test_client, device_code):
+    """An unknown device code, or one issued to another client, is invalid_grant."""
     rv = test_client.post(
         "/oauth/token",
         data={
             "grant_type": DeviceCodeGrant.GRANT_TYPE,
-            "device_code": "missing",
+            "device_code": device_code,
             "client_id": "client-id",
         },
     )
     resp = json.loads(rv.data)
-    assert resp["error"] == "invalid_request"
+    assert resp["error"] == "invalid_grant"
 
 
 def test_unauthorized_client(test_client, db, client):
