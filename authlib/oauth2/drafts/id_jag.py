@@ -349,6 +349,13 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
             log.debug("Assertion Error: %r", e)
             raise InvalidGrantError(description=e.description) from e
 
+        # Per draft-ietf-oauth-identity-assertion-authz-grant-06 §4.4.1, an
+        # 'aud' array contains exactly one element.
+        if isinstance(claims["aud"], list) and len(claims["aud"]) != 1:
+            raise InvalidGrantError(
+                description="The 'aud' claim must contain exactly one audience."
+            )
+
         if "tenant" in claims and not isinstance(claims["tenant"], str):
             raise InvalidGrantError(description="Invalid 'tenant' claim in assertion")
 

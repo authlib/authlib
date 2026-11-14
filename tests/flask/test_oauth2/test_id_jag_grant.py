@@ -220,6 +220,38 @@ def test_audience_mismatch(test_client):
     assert resp["error"] == "invalid_grant"
 
 
+def test_single_audience_array(test_client):
+    """An 'aud' array with only this server is accepted."""
+    assertion = _sign(audience=["https://provider.test/token"])
+    rv = test_client.post(
+        "/oauth/token",
+        headers=create_basic_header("client-id", "client-secret"),
+        data={"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": assertion},
+    )
+    resp = json.loads(rv.data)
+    assert "access_token" in resp
+
+
+@pytest.mark.parametrize(
+    "audience",
+    [
+        ["https://provider.test/token", "https://other.test/token"],
+        ["https://other.test/token", "https://provider.test/token"],
+    ],
+)
+def test_several_audiences(test_client, audience):
+    """An 'aud' array with several audiences is rejected."""
+    assertion = _sign(audience=audience)
+    rv = test_client.post(
+        "/oauth/token",
+        headers=create_basic_header("client-id", "client-secret"),
+        data={"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": assertion},
+    )
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_grant"
+    assert "exactly one audience" in resp["error_description"]
+
+
 def test_unknown_client_claim(test_client):
     assertion = _sign(client_id="unknown-client")
     rv = test_client.post(
