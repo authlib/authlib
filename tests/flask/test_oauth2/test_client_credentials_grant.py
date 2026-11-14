@@ -49,6 +49,27 @@ def test_invalid_client(test_client):
     assert resp["error"] == "invalid_client"
 
 
+def test_invalid_client_basic_not_allowed(test_client, server):
+    """A client that uses an Authorization header the grant does not allow gets a 401."""
+
+    class PostClientCredentialsGrant(ClientCredentialsGrant):
+        TOKEN_ENDPOINT_AUTH_METHODS = ["client_secret_post"]
+
+    server._token_grants.clear()
+    server.register_grant(PostClientCredentialsGrant)
+    headers = create_basic_header("client-id", "client-secret")
+    rv = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "client_credentials",
+        },
+        headers=headers,
+    )
+    assert rv.status_code == 401
+    assert rv.headers["WWW-Authenticate"].startswith('Basic error="invalid_client"')
+    assert json.loads(rv.data)["error"] == "invalid_client"
+
+
 def test_non_ascii_client_secret(test_client, client):
     """A non-ASCII client secret is rejected as an invalid client."""
     headers = create_basic_header("client-id", "sécret")

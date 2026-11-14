@@ -41,7 +41,8 @@ class ClientAuthentication:
                 request.auth_method = method
                 return client
 
-        if "client_secret_basic" in methods:
+        # RFC 6749 §5.2: a client that used the Authorization header gets a 401.
+        if "client_secret_basic" in methods or request.headers.get("Authorization"):
             raise InvalidClientError(
                 status_code=401,
                 description=f"The client cannot authenticate with methods: {methods}",

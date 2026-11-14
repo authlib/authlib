@@ -1,0 +1,5 @@
+Fixed
+~~~~~
+
+- A client that authenticates with the ``Authorization`` header gets a 401 ``invalid_client`` with a ``WWW-Authenticate`` header, per :rfc:`6749#section-5.2`.
+  It used to get a 400 when the endpoint did not allow ``client_secret_basic``.
