@@ -8,6 +8,19 @@ Here you can see the full list of changes between each Authlib release.
 
 .. scriv-insert-here
 
+.. _changelog-1.9.6:
+
+Version 1.9.6 — 2026-11-14
+--------------------------
+
+Security
+~~~~~~~~
+
+- ``IDJAGGrant`` rejects an ID-JAG with a ``cnf`` claim. Authlib does not
+  support the DPoP and mTLS key bindings, and used to accept a bound ID-JAG
+  without proof of possession.
+  `GHSA-cg3f-7pqx-v33v <https://github.com/authlib/authlib/security/advisories/GHSA-cg3f-7pqx-v33v>`_
+
 .. _changelog-1.9.5:
 
 Version 1.9.5 — 2026-11-05
