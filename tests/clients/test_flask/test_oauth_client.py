@@ -1,3 +1,4 @@
+import base64
 import time
 from unittest import mock
 
@@ -909,6 +910,40 @@ def test_oauth2_access_token_with_post():
             send.return_value = mock_send_value(get_bearer_token())
             token = client.authorize_access_token()
             assert token["access_token"] == "a"
+
+
+@pytest.mark.parametrize(
+    "config,kwargs,credentials",
+    [
+        ({}, {}, b"dev:s%2B%2F%3D"),
+        ({}, {"encode_client_credentials": False}, b"dev:s+/="),
+        ({"DEV_ENCODE_CLIENT_CREDENTIALS": False}, {}, b"dev:s+/="),
+    ],
+    ids=["default", "register", "config"],
+)
+def test_oauth2_access_token_encoded_credentials(config, kwargs, credentials):
+    """The encoding of the client credentials can be disabled in register or
+    in the configuration.
+    """
+    app = Flask(__name__)
+    app.secret_key = "!"
+    app.config.update(DEV_CLIENT_ID="dev", DEV_CLIENT_SECRET="s+/=", **config)
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        access_token_url="https://provider.test/token",
+        authorize_url="https://provider.test/authorize",
+        **kwargs,
+    )
+    payload = {"code": "a", "state": "b"}
+    with app.test_request_context(data=payload, method="POST"):
+        session["_state_dev_b"] = {"data": payload}
+        with mock.patch("requests.sessions.Session.send") as send:
+            send.return_value = mock_send_value(get_bearer_token())
+            client.authorize_access_token()
+            request = send.call_args[0][0]
+            expected = base64.b64encode(credentials).decode()
+            assert request.headers["Authorization"] == f"Basic {expected}"
 
 
 def test_oauth2_access_denied_with_post():

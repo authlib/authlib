@@ -20,6 +20,7 @@ OAUTH_CLIENT_PARAMS = (
     "client_kwargs",
     "server_metadata_url",
     "issuer",
+    "encode_client_credentials",
 )
 
 
@@ -142,7 +143,9 @@ def _config_client(config, kwargs, overwrite):
     for k in OAUTH_CLIENT_PARAMS:
         v = config.get(k, None)
         if k not in kwargs:
-            kwargs[k] = v
+            if v is not None:
+                kwargs[k] = v
+
         elif overwrite and v:
             if isinstance(kwargs[k], dict):
                 kwargs[k] = {**kwargs[k], **v}
