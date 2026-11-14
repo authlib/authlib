@@ -188,6 +188,26 @@ def test_invalid_signature(test_client):
     assert resp["error"] == "invalid_grant"
 
 
+@pytest.mark.parametrize(
+    "cnf",
+    [
+        {"jkt": "0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I"},
+        {"x5t#S256": "bwcK0esc3ACC3DB2Y5_lESsXE8o9ltc05O89jdN-dg2"},
+    ],
+)
+def test_key_bound_assertion(test_client, cnf):
+    """An ID-JAG bound to a DPoP key or a certificate is rejected."""
+    assertion = _sign(claims={"cnf": cnf})
+    rv = test_client.post(
+        "/oauth/token",
+        headers=create_basic_header("client-id", "client-secret"),
+        data={"grant_type": IDJAGGrant.GRANT_TYPE, "assertion": assertion},
+    )
+    resp = json.loads(rv.data)
+    assert resp["error"] == "invalid_grant"
+    assert "cnf" in resp["error_description"]
+
+
 def test_audience_mismatch(test_client):
     assertion = _sign(audience="https://evil.test/token")
     rv = test_client.post(

@@ -203,6 +203,12 @@ Without a ``scope`` claim, the requested scope is used.
 ``check_id_jag_permission()`` receives the resulting scopes. The token
 generator still limits them to the scopes allowed for the client.
 
+Key Binding
+~~~~~~~~~~~
+
+Authlib does not support the DPoP and mTLS key bindings of the ID-JAG. An
+ID-JAG with a ``cnf`` claim is rejected with ``invalid_grant``.
+
 Creating ID-JAG Assertions
 ---------------------------
 

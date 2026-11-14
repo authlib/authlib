@@ -301,6 +301,14 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
             log.debug("Assertion Error: %r", e)
             raise InvalidGrantError(description=e.description) from e
 
+        # Per draft-ietf-oauth-identity-assertion-authz-grant-06 §9.11, a
+        # server that does not support the confirmation method in the 'cnf'
+        # claim rejects the request. Authlib supports neither DPoP nor mTLS.
+        if "cnf" in claims:
+            raise InvalidGrantError(
+                description="Unsupported confirmation method in the 'cnf' claim."
+            )
+
     # ------------------------------------------------------------------
     # Application hooks
     #

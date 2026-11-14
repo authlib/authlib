@@ -1,0 +1,7 @@
+Security
+~~~~~~~~
+
+- ``IDJAGGrant`` rejects an ID-JAG with a ``cnf`` claim. Authlib does not
+  support the DPoP and mTLS key bindings, and used to accept a bound ID-JAG
+  without proof of possession.
+  `GHSA-cg3f-7pqx-v33v <https://github.com/authlib/authlib/security/advisories/GHSA-cg3f-7pqx-v33v>`_
