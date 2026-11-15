@@ -47,7 +47,7 @@ class LegacyMixin:
                 }
 
         Per OpenID Connect Core §2, ``aud`` can be a single string or a list.
-        Without ``aud``, the ID token has ``[client_id]``.
+        Without ``aud``, the ID token has ``client_id`` as a single string.
         """
         raise NotImplementedError()
 
@@ -61,5 +61,5 @@ class LegacyMixin:
         claims.setdefault("iat", now)
         claims.setdefault("exp", now + self.DEFAULT_EXPIRES_IN)
         claims.setdefault("auth_time", now)
-        claims.setdefault("aud", [request.client.get_client_id()])
+        claims.setdefault("aud", request.client.get_client_id())
         return claims

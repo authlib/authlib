@@ -197,6 +197,14 @@ def test_auth_time_claim(test_client, server):
     assert claims["auth_time"] == 1000000000
 
 
+def test_default_aud_claim(test_client, server):
+    """Without aud from get_client_claims, the ID token aud is the client ID
+    as a single string, per OpenID Connect Core §2."""
+    register_oidc_code_grant(server)
+    claims = exchange_code_for_id_token(test_client)
+    assert claims["aud"] == "client-id"
+
+
 def test_unknown_auth_time_claim(test_client, server, monkeypatch):
     """When the login time is unknown, the ID token has no auth_time."""
     unknown_auth_time(monkeypatch)
