@@ -484,6 +484,6 @@ Find the `example of OpenID Connect server <https://github.com/authlib/example-o
 
     claims = jwt.decode(response.json["id_token"], public_jwks).claims
     assert claims["nonce"] == "n-0S6_WzA2Mj"
-    assert claims["aud"] == ["client-id"]
+    assert claims["aud"] == "client-id"
     assert claims["sub"] == str(user.id)
     assert claims["name"] == "Alice"
