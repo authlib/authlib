@@ -42,6 +42,9 @@ class JsonWebEncryption:
         ]
     )
 
+    #: Maximum number of recipients in a JWE JSON Serialization
+    MAX_RECIPIENTS: int = 16
+
     ALG_REGISTRY = {}
     ENC_REGISTRY = {}
     ZIP_REGISTRY = {}
@@ -522,6 +525,8 @@ class JsonWebEncryption:
         :return: dict with `header` and `payload` keys where `header` value is
             a dict containing `protected`, `unprotected`, `recipients` and/or
             `aad` keys
+        :raise ValueError: if there are more than :attr:`MAX_RECIPIENTS`
+            recipients
         """
         obj = ensure_dict(obj, "JWE")
         obj = deepcopy(obj)
@@ -534,6 +539,9 @@ class JsonWebEncryption:
         unprotected = obj.get("unprotected")
 
         recipients = obj["recipients"]
+        if len(recipients) > self.MAX_RECIPIENTS:
+            raise ValueError("Too many recipients.")
+
         for recipient in recipients:
             if "header" not in recipient:
                 recipient["header"] = {}
