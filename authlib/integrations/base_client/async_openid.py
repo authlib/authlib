@@ -10,6 +10,7 @@ from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core import UserInfo
 
 from .async_app import _get_requested_token
+from .sync_openid import _check_original_claims
 from .sync_openid import _check_userinfo_sub
 from .sync_openid import _get_claims_options
 from .sync_openid import _get_id_token_algorithms
@@ -91,9 +92,18 @@ class AsyncOpenIDMixin:
         return userinfo
 
     async def parse_id_token(
-        self, token, nonce, claims_options=None, claims_cls=None, leeway=120
+        self,
+        token,
+        nonce,
+        claims_options=None,
+        claims_cls=None,
+        leeway=120,
+        original=None,
     ):
-        """Return an instance of UserInfo from token's ``id_token``."""
+        """Return an instance of UserInfo from token's ``id_token``.
+
+        See the sync version for the ``original`` argument.
+        """
         if "id_token" not in token:
             return None
 
@@ -115,6 +125,8 @@ class AsyncOpenIDMixin:
         token = await self._decode_jwt(token["id_token"], metadata, alg_values)
         claims = claims_cls(token.claims, token.header, claims_options, claims_params)
         claims.validate(leeway=leeway)
+        if original is not None:
+            _check_original_claims(claims, original)
         return UserInfo(claims)
 
     async def create_logout_url(

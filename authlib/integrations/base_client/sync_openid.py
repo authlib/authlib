@@ -1,6 +1,7 @@
 import time
 
 from joserfc import jwt
+from joserfc.errors import InvalidClaimError
 from joserfc.errors import InvalidKeyIdError
 from joserfc.jwk import KeySet
 from joserfc.jws import JWSRegistry
@@ -23,6 +24,27 @@ class _SignedUserInfo(JWTClaims):
         for claim in UserInfo.REGISTERED_CLAIMS
         if claim not in JWTClaims.REGISTERED_CLAIMS
     ]
+
+
+def _check_original_claims(claims, original):
+    """Check a refreshed ID token against the original ID token claims.
+
+    OpenID Connect Core §12.2: iss, sub and aud MUST be the same, and
+    auth_time MUST be the same when the new ID token contains it.
+    """
+    for name in ("iss", "sub"):
+        if claims.get(name) != original.get(name):
+            raise InvalidClaimError(name)
+
+    new_aud = claims.get("aud")
+    old_aud = original.get("aud")
+    new_aud = [new_aud] if isinstance(new_aud, str) else new_aud
+    old_aud = [old_aud] if isinstance(old_aud, str) else old_aud
+    if sorted(new_aud or []) != sorted(old_aud or []):
+        raise InvalidClaimError("aud")
+
+    if "auth_time" in claims and claims["auth_time"] != original.get("auth_time"):
+        raise InvalidClaimError("auth_time")
 
 
 def _get_algorithms(metadata, name):
@@ -213,12 +235,23 @@ class OpenIDMixin:
         return userinfo
 
     def parse_id_token(
-        self, token, nonce, claims_options=None, claims_cls=None, leeway=120
+        self,
+        token,
+        nonce,
+        claims_options=None,
+        claims_cls=None,
+        leeway=120,
+        original=None,
     ):
         """Return UserInfo after validating the token's ``id_token``.
 
         The expected ``nonce`` is controlled by the application. Token claims
         such as ``nonce_supported`` cannot disable its validation.
+
+        To validate the ID token of a refresh token response, pass
+        ``nonce=None`` and the claims of the original ID token as ``original``.
+        Its ``iss``, ``sub`` and ``aud`` must be the same, and its
+        ``auth_time`` too when present (OpenID Connect Core §12.2).
         """
         if "id_token" not in token:
             return None
@@ -242,6 +275,8 @@ class OpenIDMixin:
         token = self._decode_jwt(token["id_token"], metadata, alg_values)
         claims = claims_cls(token.claims, token.header, claims_options, claims_params)
         claims.validate(leeway=leeway)
+        if original is not None:
+            _check_original_claims(claims, original)
         return UserInfo(claims)
 
     def create_logout_url(
