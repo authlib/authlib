@@ -8,6 +8,20 @@ Here you can see the full list of changes between each Authlib release.
 
 .. scriv-insert-here
 
+.. _changelog-1.9.7:
+
+Version 1.9.7 — 2026-11-15
+--------------------------
+
+Security
+~~~~~~~~
+
+- ``JsonWebEncryption.deserialize_json()`` rejects a JWE JSON Serialization
+  with more than 16 recipients. Set ``JsonWebEncryption.MAX_RECIPIENTS`` to
+  change the limit. A message with many recipients used to cost one
+  private-key operation per recipient.
+  `GHSA-8cj9-p42v-64gg <https://github.com/authlib/authlib/security/advisories/GHSA-8cj9-p42v-64gg>`_
+
 .. _changelog-1.9.6:
 
 Version 1.9.6 — 2026-11-14
