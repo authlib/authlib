@@ -12,6 +12,12 @@ class RevocationEndpoint(TokenEndpoint):
     #: Endpoint name to be registered
     ENDPOINT_NAME = "revocation"
 
+    #: Per :rfc:`RFC 7009 §2.1 <7009#section-2.1>`, the server authenticates
+    #: confidential clients, and per :rfc:`RFC 7009 §5 <7009#section-5>`,
+    #: public clients can revoke their tokens too. A client can restrict its
+    #: own method with ``check_endpoint_auth_method``.
+    CLIENT_AUTH_METHODS = ["client_secret_basic", "client_secret_post", "none"]
+
     def authenticate_token(self, request, client):
         """The client constructs the request by including the following
         parameters using the "application/x-www-form-urlencoded" format in
