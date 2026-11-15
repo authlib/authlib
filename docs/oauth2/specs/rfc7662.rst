@@ -49,6 +49,10 @@ Authorization Server whether the token is active:
    calls ``check_permission``. It returns ``{"active": false}`` if the
    token is unknown, expired or revoked, or if ``check_permission``
    refuses. Otherwise, it returns the result of ``introspect_token``.
+   When the request presents the refresh token, the expiration is checked
+   with the optional ``is_refresh_token_expired`` method of the token, so a
+   refresh token stays active after its access token expired. Without this
+   method, ``is_expired`` is used.
 4. The Resource Server answers depending on the introspection result:
 
    a. ``200 OK`` with the resource, if the token is active and has the
