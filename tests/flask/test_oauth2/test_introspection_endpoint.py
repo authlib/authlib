@@ -224,3 +224,17 @@ def test_introspect_access_token_ignores_refresh_token_expiry(test_client, token
 
     assert _introspect(test_client, "a1")["active"] is True
     assert _introspect(test_client, "a1", "access_token")["active"] is True
+
+
+def test_refresh_token_expiry_defaults():
+    from authlib.integrations.sqla_oauth2 import OAuth2TokenMixin
+    from authlib.oauth2.rfc6749 import TokenMixin
+
+    class PlainToken(TokenMixin):
+        def is_expired(self):
+            return True
+
+    # Without an override, the refresh token follows the access token.
+    assert PlainToken().is_refresh_token_expired() is True
+    # The SQLAlchemy mixin has no refresh token lifetime.
+    assert OAuth2TokenMixin.is_refresh_token_expired(Token()) is False
