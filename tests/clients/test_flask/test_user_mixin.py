@@ -99,7 +99,7 @@ def test_parse_id_token():
         ({"auth_time": None}, True),
         ({"sub": "456"}, False),
         ({"iss": "https://other.test"}, False),
-        ({"aud": "other"}, False),
+        ({"aud": ["dev", "other"], "azp": "dev"}, False),
         ({"auth_time": 2000}, False),
     ],
 )
