@@ -25,6 +25,7 @@ from .util import set_id_token_hint_sub
 from .util import set_silent
 from .util import validate_nonce
 from .util import validate_prompt_none
+from .util import validate_request_object_support
 from .util import validate_request_prompt
 from .util import validate_requested_sub
 from .util import validate_response_mode
@@ -100,6 +101,7 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
                 redirect_fragment=True,
             )
         try:
+            validate_request_object_support(self.request)
             validate_nonce(self.request, self.exists_nonce, required=True)
             set_id_token_hint_sub(self.request, self)
         except OAuth2Error as error:

@@ -24,6 +24,8 @@ from ..errors import AccountSelectionRequiredError
 from ..errors import ConsentRequiredError
 from ..errors import InteractionRequiredError
 from ..errors import LoginRequiredError
+from ..errors import RequestNotSupportedError
+from ..errors import RequestURINotSupportedError
 from ..util import create_half_hash
 
 _warned_servers = weakref.WeakSet()
@@ -247,6 +249,18 @@ def validate_response_mode(grant, redirect_uri):
 
     if response_mode == "form_post":
         FormPost().validate(grant, redirect_uri)
+
+
+def validate_request_object_support(request):
+    """Reject the ``request`` and ``request_uri`` parameters when no extension
+    supports them."""
+    # Per OpenID Connect Core §6.1 and §6.2, an OP that does not support
+    # these parameters returns an error.
+    if "request" in request.payload.data:
+        raise RequestNotSupportedError()
+
+    if "request_uri" in request.payload.data:
+        raise RequestURINotSupportedError()
 
 
 def validate_nonce(request, exists_nonce, required=False):

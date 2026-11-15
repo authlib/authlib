@@ -29,6 +29,7 @@ from .util import set_id_token_hint_sub
 from .util import set_silent
 from .util import validate_nonce
 from .util import validate_prompt_none
+from .util import validate_request_object_support
 from .util import validate_request_prompt
 from .util import validate_requested_sub
 
@@ -178,6 +179,7 @@ class OpenIDCode(OpenIDToken):
         raise NotImplementedError()
 
     def validate_openid_authorization_request(self, grant, redirect_uri):
+        validate_request_object_support(grant.request)
         validate_nonce(grant.request, self.exists_nonce, self.require_nonce)
         set_id_token_hint_sub(grant.request, self)
 

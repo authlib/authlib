@@ -133,6 +133,34 @@ def test_require_nonce(test_client):
     assert "nonce" in rv.location
 
 
+@pytest.mark.parametrize(
+    "parameter,error",
+    [
+        ("request", "request_not_supported"),
+        ("request_uri", "request_uri_not_supported"),
+    ],
+)
+def test_request_object_not_supported(test_client, parameter, error):
+    """Without the RFC 9101 extension, the request and request_uri
+    parameters are rejected."""
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "id_token",
+            "client_id": "client-id",
+            "scope": "openid profile",
+            "state": "bar",
+            "nonce": "abc",
+            "redirect_uri": "https://client.test/callback",
+            "user_id": "1",
+            parameter: "eyJhbGciOiJub25lIn0.e30.",
+        },
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    assert params["error"] == error
+    assert params["state"] == "bar"
+
+
 def test_multiple_nonce(test_client):
     """A repeated nonce gives an invalid_request error."""
     rv = test_client.get(

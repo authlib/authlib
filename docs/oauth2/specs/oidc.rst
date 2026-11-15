@@ -106,6 +106,12 @@ checked before the custom validation policy, so an override cannot bypass a
 provider's registration requirement. Inline ``request`` objects do not require
 URI registration.
 
+Without this extension, an OpenID request with a ``request`` or
+``request_uri`` parameter is rejected with ``request_not_supported`` or
+``request_uri_not_supported``. Per OpenID Connect Discovery §3,
+``request_uri_parameter_supported`` defaults to true, so set it to false in the
+provider metadata.
+
 .. autoclass:: OpenIDJWTAuthenticationRequest
     :show-inheritance:
     :members:

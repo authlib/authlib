@@ -11,6 +11,7 @@ from .implicit import OpenIDImplicitGrant
 from .util import is_openid_scope
 from .util import set_id_token_hint_sub
 from .util import validate_nonce
+from .util import validate_request_object_support
 from .util import validate_response_mode
 
 log = logging.getLogger(__name__)
@@ -64,6 +65,7 @@ class OpenIDHybridGrant(OpenIDImplicitGrant):
             )
 
         try:
+            validate_request_object_support(self.request)
             validate_nonce(self.request, self.exists_nonce, required=True)
         except OAuth2Error as error:
             error.redirect_uri = redirect_uri
