@@ -275,10 +275,10 @@ def test_server_require_request_object_alg_none(test_client, server, metadata):
     )
     rv = test_client.get(url)
     params = json.loads(rv.data)
-    assert params["error"] == "invalid_request"
+    assert params["error"] == "invalid_request_object"
     assert (
         params["error_description"]
-        == "Authorization requests must be signed with supported algorithms."
+        == "The 'alg' of the request object is not accepted."
     )
 
 
@@ -340,10 +340,10 @@ def test_client_require_signed_request_object_alg_none(test_client, client, serv
     )
     rv = test_client.get(url)
     params = json.loads(rv.data)
-    assert params["error"] == "invalid_request"
+    assert params["error"] == "invalid_request_object"
     assert (
         params["error_description"]
-        == "Authorization requests must be signed with supported algorithms."
+        == "The 'alg' of the request object is not accepted."
     )
 
 
@@ -597,9 +597,9 @@ def test_signature_requirement_with_explicit_algorithms(
         algorithm_source == "only_none" and algorithm == "RS256"
     ):
         assert response.status_code == 400
-        assert response.json["error"] == "invalid_request"
+        assert response.json["error"] == "invalid_request_object"
         assert response.json["error_description"] == (
-            "Authorization requests must be signed with supported algorithms."
+            "The 'alg' of the request object is not accepted."
         )
     else:
         assert response.data == b"login"

@@ -222,8 +222,8 @@ class JWTAuthenticationRequest:
             request_object = jwt.decode(raw_request_object, key, algorithms=algorithms)
             self.claims_validator.validate(request_object.claims)
         except UnsupportedAlgorithmError as error:
-            raise InvalidRequestError(
-                "Authorization requests must be signed with supported algorithms.",
+            raise InvalidRequestObjectError(
+                description="The 'alg' of the request object is not accepted.",
                 state=request.payload.state,
             ) from error
         except DecodeError as error:
