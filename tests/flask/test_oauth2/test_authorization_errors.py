@@ -110,8 +110,25 @@ def test_unsupported_response_type(test_client):
     assert rv.status_code == 400
     assert rv.json["error"] == "unsupported_response_type"
 
+    assert (
+        rv.json["error_description"]
+        == "The response type 'unknown' is not supported by the server."
+    )
+
     rv = test_client.get(url + "&user_id=1")
     assert query_params(rv)["error"] == "unsupported_response_type"
+
+
+def test_missing_response_type(test_client):
+    """Per RFC 6749 §4.1.2.1, a missing response_type is an invalid_request."""
+    url = "/oauth/authorize?client_id=client-id"
+    rv = test_client.get(url)
+    assert rv.status_code == 400
+    assert rv.json["error"] == "invalid_request"
+    assert rv.json["error_description"] == "Missing 'response_type' parameter."
+
+    rv = test_client.get(url + "&user_id=1")
+    assert query_params(rv)["error"] == "invalid_request"
 
 
 def test_defer_anonymous_errors_disabled(test_client, server):

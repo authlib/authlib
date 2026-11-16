@@ -9,6 +9,7 @@ from authlib.deprecate import deprecate_missing_arguments
 from .authenticate_client import ClientAuthentication
 from .endpoint import Endpoint
 from .endpoint import EndpointRequest
+from .errors import InvalidRequestError
 from .errors import InvalidScopeError
 from .errors import OAuth2Error
 from .errors import UnsupportedGrantTypeError
@@ -305,9 +306,15 @@ class AuthorizationServer(Hookable):
                 else:
                     redirect_uri = client.get_default_redirect_uri()
 
+        response_type = request.payload.response_type
+        if not response_type:
+            raise InvalidRequestError(
+                "Missing 'response_type' parameter.", redirect_uri=redirect_uri
+            )
+
         raise UnsupportedResponseTypeError(
-            f"The response type '{request.payload.response_type}' is not supported by the server.",
-            request.payload.response_type,
+            response_type,
+            description=f"The response type '{response_type}' is not supported by the server.",
             redirect_uri=redirect_uri,
         )
 
