@@ -168,6 +168,32 @@ def test_request_parameter_get(test_client, server):
     assert rv.data == b"login"
 
 
+@ignore_alg_none_warning
+def test_client_without_keys(test_client, server):
+    """A client without keys can send unsigned request objects only."""
+    extension = register_request_object_extension(server)
+    extension.resolve_client_public_key = lambda client: None
+    payload = {"response_type": "code", "client_id": "client-id"}
+
+    request_obj = jwt.encode({"alg": "none"}, payload, None, algorithms=["none"])
+    rv = test_client.get(
+        add_params_to_uri(
+            authorize_url, {"client_id": "client-id", "request": request_obj}
+        )
+    )
+    assert rv.data == b"login"
+
+    request_obj = jwt.encode(
+        {"alg": "RS256"}, payload, jwk.import_key(read_file_path("jwk_private.json"))
+    )
+    rv = test_client.get(
+        add_params_to_uri(
+            authorize_url, {"client_id": "client-id", "request": request_obj}
+        )
+    )
+    assert rv.json["error"] == "invalid_request_object"
+
+
 def test_denied_state_in_request_object(test_client, server):
     """When the user denies the request, the state comes from the request
     object."""

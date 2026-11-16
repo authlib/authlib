@@ -343,7 +343,13 @@ class JWTAuthenticationRequest:
                         data = requests.get(client.jwks_uri).json()
                         return KeySet.import_key_set(data)
 
-                    return KeySet.import_key_set(client.jwks)
+                    if client.jwks:
+                        return KeySet.import_key_set(client.jwks)
+
+                    return None
+
+        Return ``None`` for a client without keys. Then only unsigned request
+        objects are accepted, if ``none`` is an accepted algorithm.
         """
         raise NotImplementedError()
 
