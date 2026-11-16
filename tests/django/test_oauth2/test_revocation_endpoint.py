@@ -2,9 +2,13 @@ import json
 
 import pytest
 
+from authlib.common.errors import ContinueIteration
+from authlib.integrations.django_oauth2 import AuthorizationServer
 from authlib.integrations.django_oauth2 import RevocationEndpoint
+from authlib.oauth2.rfc6749 import Endpoint
 
 from .models import Client
+from .models import OAuth2Token
 from .oauth2_server import create_basic_auth
 
 ENDPOINT_NAME = RevocationEndpoint.ENDPOINT_NAME
@@ -117,6 +121,27 @@ def revoke_token(server, factory, data):
         "/oauth/revoke",
         data=data,
         HTTP_AUTHORIZATION=auth_header,
+    )
+    resp = server.create_endpoint_response(ENDPOINT_NAME, request)
+    assert resp.status_code == 200
+
+
+def test_revoke_token_after_another_endpoint(factory, token):
+    """The next endpoint gets the Django request."""
+
+    class SkippedEndpoint(Endpoint):
+        ENDPOINT_NAME = ENDPOINT_NAME
+
+        def __call__(self, request):
+            raise ContinueIteration()
+
+    server = AuthorizationServer(Client, OAuth2Token)
+    server.register_endpoint(SkippedEndpoint)
+    server.register_endpoint(RevocationEndpoint)
+    request = factory.post(
+        "/oauth/revoke",
+        data={"token": "a1"},
+        HTTP_AUTHORIZATION=create_basic_auth("client-id", "client-secret"),
     )
     resp = server.create_endpoint_response(ENDPOINT_NAME, request)
     assert resp.status_code == 200

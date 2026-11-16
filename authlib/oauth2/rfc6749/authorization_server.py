@@ -451,16 +451,17 @@ class AuthorizationServer(Hookable):
 
         # Otherwise, validate and respond (existing behavior)
         for endpoint in endpoints:
+            endpoint_request = request
             try:
-                request = endpoint.create_endpoint_request(request)
-                result = endpoint(request)
+                endpoint_request = endpoint.create_endpoint_request(request)
+                result = endpoint(endpoint_request)
                 if result is None:
                     return None
                 return self._send_response(result)
             except ContinueIteration:
                 continue
             except OAuth2Error as error:
-                return self.handle_error_response(request, error)
+                return self.handle_error_response(endpoint_request, error)
 
     def create_authorization_response(self, request=None, grant_user=None, grant=None):
         """Validate authorization request and create authorization response.
