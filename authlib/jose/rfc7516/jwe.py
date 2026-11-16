@@ -6,6 +6,7 @@ from authlib.common.encoding import to_bytes
 from authlib.common.encoding import to_unicode
 from authlib.common.encoding import urlsafe_b64encode
 from authlib.jose.errors import DecodeError
+from authlib.jose.errors import ExceededSizeError
 from authlib.jose.errors import InvalidAlgorithmForMultipleRecipientsMode
 from authlib.jose.errors import InvalidCritHeaderParameterNameError
 from authlib.jose.errors import InvalidHeaderParameterNameError
@@ -42,6 +43,9 @@ class JsonWebEncryption:
             "crit",
         ]
     )
+
+    #: Maximum number of recipients in a JWE JSON Serialization
+    MAX_RECIPIENTS: int = 16
 
     ALG_REGISTRY = {}
     ENC_REGISTRY = {}
@@ -527,6 +531,8 @@ class JsonWebEncryption:
         :return: dict with `header` and `payload` keys where `header` value is
             a dict containing `protected`, `unprotected`, `recipients` and/or
             `aad` keys
+        :raise ExceededSizeError: if there are more than :attr:`MAX_RECIPIENTS`
+            recipients
         """
         obj = ensure_dict(obj, "JWE")
         obj = deepcopy(obj)
@@ -539,6 +545,9 @@ class JsonWebEncryption:
         unprotected = obj.get("unprotected")
 
         recipients = obj["recipients"]
+        if len(recipients) > self.MAX_RECIPIENTS:
+            raise ExceededSizeError(description="Too many recipients.")
+
         for recipient in recipients:
             if "header" not in recipient:
                 recipient["header"] = {}

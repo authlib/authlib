@@ -1252,6 +1252,46 @@ def test_ecdh_1pu_encryption_fails_if_not_aes_cbc_hmac_sha2_enc_is_used_with_kw(
                 )
 
 
+@pytest.mark.parametrize(
+    "alg", ["ECDH-1PU+A128KW", "ECDH-1PU+A192KW", "ECDH-1PU+A256KW"]
+)
+def test_ecdh_1pu_decryption_fails_if_not_aes_cbc_hmac_sha2_enc_is_used_with_kw(alg):
+    jwe = JsonWebEncryption()
+    alice_key = ECKey.generate_key("P-256", is_private=True)
+    bob_key = ECKey.generate_key("P-256", is_private=True)
+    protected = {"alg": alg, "enc": "A128CBC-HS256"}
+    data = jwe.serialize_compact(protected, b"hello", bob_key, sender_key=alice_key)
+
+    header_segment, rest = data.split(b".", 1)
+    header = json_loads(urlsafe_b64decode(header_segment))
+    header["enc"] = "A256GCM"
+    data = json_b64encode(header) + b"." + rest
+
+    with pytest.raises(InvalidEncryptionAlgorithmForECDH1PUWithKeyWrappingError):
+        jwe.deserialize_compact(data, bob_key, sender_key=alice_key)
+
+
+def test_ecdh_1pu_json_decryption_fails_if_not_aes_cbc_hmac_sha2_enc_is_used_with_kw():
+    jwe = JsonWebEncryption()
+    alice_key = ECKey.generate_key("P-256", is_private=True)
+    bob_key = ECKey.generate_key("P-256", is_private=True)
+    charlie_key = ECKey.generate_key("P-256", is_private=True)
+    header_obj = {
+        "protected": {"alg": "ECDH-1PU+A128KW", "enc": "A128CBC-HS256"},
+        "recipients": [{"header": {"kid": "bob"}}, {"header": {"kid": "charlie"}}],
+    }
+    data = jwe.serialize_json(
+        header_obj, b"hello", [bob_key, charlie_key], sender_key=alice_key
+    )
+
+    header = json_loads(urlsafe_b64decode(to_bytes(data["protected"])))
+    header["enc"] = "A256GCM"
+    data["protected"] = json_b64encode(header).decode()
+
+    with pytest.raises(InvalidEncryptionAlgorithmForECDH1PUWithKeyWrappingError):
+        jwe.deserialize_json(data, ("charlie", charlie_key), sender_key=alice_key)
+
+
 def test_ecdh_1pu_encryption_with_public_sender_key_fails():
     jwe = JsonWebEncryption()
     protected = {"alg": "ECDH-1PU", "enc": "A256GCM"}

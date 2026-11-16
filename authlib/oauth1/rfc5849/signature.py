@@ -352,9 +352,13 @@ def sign_plaintext(client, request):
 
 
 def verify_hmac_sha1(request):
-    """Verify a HMAC-SHA1 signature."""
+    """Verify a HMAC-SHA1 signature. It fails without a client secret."""
+    client_secret = request.client_secret
+    if not client_secret:
+        return False
+
     base_string = generate_signature_base_string(request)
-    sig = hmac_sha1_signature(base_string, request.client_secret, request.token_secret)
+    sig = hmac_sha1_signature(base_string, client_secret, request.token_secret)
     return hmac.compare_digest(sig, request.signature)
 
 
@@ -368,6 +372,10 @@ def verify_rsa_sha1(request):
 
 
 def verify_plaintext(request):
-    """Verify a PLAINTEXT signature."""
-    sig = plaintext_signature(request.client_secret, request.token_secret)
+    """Verify a PLAINTEXT signature. It fails without a client secret."""
+    client_secret = request.client_secret
+    if not client_secret:
+        return False
+
+    sig = plaintext_signature(client_secret, request.token_secret)
     return hmac.compare_digest(sig, request.signature)

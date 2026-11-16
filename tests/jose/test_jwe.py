@@ -433,6 +433,37 @@ def test_serialize_json_ignores_additional_members_in_recipients_elements():
     assert rv["payload"] == b"hello"
 
 
+def test_deserialize_json_too_many_recipients():
+    jwe = JsonWebEncryption()
+    key = OKPKey.generate_key("X25519", is_private=True)
+    header_obj = {"protected": {"alg": "ECDH-ES+A128KW", "enc": "A128GCM"}}
+    data = jwe.serialize_json(header_obj, b"hello", key)
+    recipient = data["recipients"][0]
+    data["recipients"] = [
+        dict(recipient) for _ in range(JsonWebEncryption.MAX_RECIPIENTS + 1)
+    ]
+
+    with pytest.raises(errors.ExceededSizeError, match="Too many recipients"):
+        jwe.deserialize_json(data, key)
+
+    with pytest.raises(ValueError, match="Too many recipients"):
+        jwe.deserialize(json.dumps(data), key)
+
+
+def test_deserialize_json_max_recipients():
+    jwe = JsonWebEncryption()
+    key = OKPKey.generate_key("X25519", is_private=True)
+    header_obj = {"protected": {"alg": "ECDH-ES+A128KW", "enc": "A128GCM"}}
+    data = jwe.serialize_json(header_obj, b"hello", key)
+    recipient = data["recipients"][0]
+    data["recipients"] = [
+        dict(recipient) for _ in range(JsonWebEncryption.MAX_RECIPIENTS)
+    ]
+
+    rv = jwe.deserialize_json(data, key)
+    assert rv["payload"] == b"hello"
+
+
 def test_deserialize_json_fails_if_protected_header_contains_unknown_field_while_private_fields_restricted():
     jwe = JsonWebEncryption(private_headers=set())
     key = OKPKey.generate_key("X25519", is_private=True)

@@ -525,6 +525,38 @@ Fixed
   not the ``sub`` of the ID token returned by ``authorize_access_token``, per
   OpenID Connect Core §5.3.2. :issue:`1043`
 
+.. _changelog-1.9.8:
+
+Version 1.9.8 — 2026-11-16
+--------------------------
+
+Security
+~~~~~~~~
+
+- The OAuth 1.0 server rejects HMAC-SHA1 and PLAINTEXT signatures from a
+  client without a client secret. Anyone could compute these signatures, and
+  impersonate a client registered with an RSA key only.
+  `GHSA-4gjv-v7fq-ghfp <https://github.com/authlib/authlib/security/advisories/GHSA-4gjv-v7fq-ghfp>`_
+- ``JsonWebEncryption`` rejects a JWE in ECDH-1PU key wrapping mode whose
+  ``enc`` is not AES_CBC_HMAC_SHA2 on decryption, as it already did on
+  encryption. A recipient could forge messages that other recipients accepted
+  as sent by the original sender.
+  `GHSA-5mqf-4prf-9r2m <https://github.com/authlib/authlib/security/advisories/GHSA-5mqf-4prf-9r2m>`_
+
+.. _changelog-1.9.7:
+
+Version 1.9.7 — 2026-11-15
+--------------------------
+
+Security
+~~~~~~~~
+
+- ``JsonWebEncryption.deserialize_json()`` rejects a JWE JSON Serialization
+  with more than 16 recipients. Set ``JsonWebEncryption.MAX_RECIPIENTS`` to
+  change the limit. A message with many recipients used to cost one
+  private-key operation per recipient.
+  `GHSA-8cj9-p42v-64gg <https://github.com/authlib/authlib/security/advisories/GHSA-8cj9-p42v-64gg>`_
+
 .. _changelog-1.9.6:
 
 Version 1.9.6 — 2026-11-14
