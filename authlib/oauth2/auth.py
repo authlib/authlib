@@ -67,6 +67,11 @@ class ClientAuth:
 
         if auth_method in self.DEFAULT_AUTH_METHODS:
             auth_method = self.DEFAULT_AUTH_METHODS[auth_method]
+        elif isinstance(auth_method, str):
+            raise ValueError(
+                f"Unsupported client authentication method {auth_method!r}. "
+                "Register it with register_client_auth_method."
+            )
 
         self.auth_method = auth_method
 
