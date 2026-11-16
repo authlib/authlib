@@ -191,3 +191,31 @@ def _call_contains_invalid_value(key, invalid_value):
     metadata = OpenIDProviderMetadata({key: invalid_value})
     with pytest.raises(ValueError, match=f'"{key}" contains invalid values'):
         getattr(metadata, "validate_" + key)()
+
+
+VALID_METADATA = {
+    "issuer": "https://provider.test",
+    "authorization_endpoint": "https://provider.test/authorize",
+    "token_endpoint": "https://provider.test/token",
+    "jwks_uri": "https://provider.test/jwks.json",
+    "response_types_supported": ["code"],
+    "subject_types_supported": ["public"],
+    "id_token_signing_alg_values_supported": ["RS256"],
+}
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("revocation_endpoint", "http://provider.test/revoke"),
+        ("introspection_endpoint_auth_methods_supported", "client_secret_basic"),
+        ("code_challenge_methods_supported", "S256"),
+    ],
+)
+def test_validate_rfc8414_metadata(key, value):
+    """validate() checks the RFC 8414 metadata of the provider."""
+    OpenIDProviderMetadata(VALID_METADATA).validate()
+
+    metadata = OpenIDProviderMetadata({**VALID_METADATA, key: value})
+    with pytest.raises(ValueError):
+        metadata.validate()

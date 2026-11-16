@@ -53,14 +53,14 @@ class OpenIDProviderMetadata(AuthorizationServerMetadata):
         "request_parameter_supported",
         "request_uri_parameter_supported",
         "require_request_uri_registration",
-        # not defined by OpenID
-        # 'revocation_endpoint',
-        # 'revocation_endpoint_auth_methods_supported',
-        # 'revocation_endpoint_auth_signing_alg_values_supported',
-        # 'introspection_endpoint',
-        # 'introspection_endpoint_auth_methods_supported',
-        # 'introspection_endpoint_auth_signing_alg_values_supported',
-        # 'code_challenge_methods_supported',
+        # RFC 8414 §2
+        "revocation_endpoint",
+        "revocation_endpoint_auth_methods_supported",
+        "revocation_endpoint_auth_signing_alg_values_supported",
+        "introspection_endpoint",
+        "introspection_endpoint_auth_methods_supported",
+        "introspection_endpoint_auth_signing_alg_values_supported",
+        "code_challenge_methods_supported",
     ]
 
     def validate_jwks_uri(self):
