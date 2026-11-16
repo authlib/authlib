@@ -1,0 +1,5 @@
+Fixed
+~~~~~
+
+- ID tokens signed with ``Ed25519`` or ``ES256K`` now have an ``at_hash`` and
+  a ``c_hash``, and clients accept these claims.

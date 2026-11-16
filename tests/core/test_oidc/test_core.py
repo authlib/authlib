@@ -1,4 +1,5 @@
 import functools
+import hashlib
 import types
 import warnings
 
@@ -6,6 +7,7 @@ import pytest
 from joserfc.errors import InvalidClaimError
 from joserfc.errors import MissingClaimError
 
+from authlib.common.encoding import urlsafe_b64encode
 from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.oauth2 import rfc9470
 from authlib.oauth2.rfc6749 import AuthorizationServer
@@ -30,6 +32,7 @@ from authlib.oidc.core import get_requested_sub
 from authlib.oidc.core.errors import LoginRequiredError
 from authlib.oidc.core.grants.util import call_generate_user_info
 from authlib.oidc.core.grants.util import validate_request_prompt
+from authlib.oidc.core.util import create_half_hash
 from authlib.oidc.unmet_authentication_requirements import (
     UnmetAuthenticationRequirements,
 )
@@ -147,6 +150,44 @@ def test_validate_at_hash():
     claims.header = {"alg": "HS256"}
     with pytest.raises(InvalidClaimError):
         claims.validate(1000)
+
+
+@pytest.mark.parametrize(
+    "alg,hash_alg",
+    [
+        ("ES256K", hashlib.sha256),
+        ("EdDSA", hashlib.sha512),
+        ("Ed25519", hashlib.sha512),
+    ],
+)
+def test_create_half_hash(alg, hash_alg):
+    """The hash algorithm is the one of the ID Token alg."""
+    digest = hash_alg(b"a").digest()
+    assert create_half_hash("a", alg) == urlsafe_b64encode(digest[: len(digest) // 2])
+
+
+def test_create_half_hash_unknown_alg():
+    """An alg without a known hash algorithm gives no hash."""
+    assert create_half_hash("a", "none") is None
+    assert create_half_hash("a", "HS222") is None
+
+
+def test_validate_at_hash_ed25519():
+    """An Ed25519 ID Token with a valid at_hash is accepted."""
+    at_hash = create_half_hash("a", "Ed25519").decode()
+    claims = CodeIDToken(
+        {
+            "iss": "1",
+            "sub": "1",
+            "aud": "1",
+            "exp": 10000,
+            "iat": 100,
+            "at_hash": at_hash,
+        },
+        {"alg": "Ed25519"},
+        params={"access_token": "a"},
+    )
+    claims.validate(1000)
 
 
 def test_implicit_id_token():
