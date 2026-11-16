@@ -14,6 +14,8 @@ from joserfc import jwt
 from authlib._joserfc_helpers import import_any_key
 from authlib.oauth2.rfc6749 import OAuth2Request
 from authlib.oauth2.rfc6749 import OAuth2Response
+from authlib.oauth2.rfc6749.util import list_to_scope
+from authlib.oauth2.rfc6749.util import scope_to_list
 
 from ..models import AuthorizationCodeMixin
 from ._legacy import LegacyMixin
@@ -119,12 +121,15 @@ class OpenIDToken(LegacyMixin):
             token = response.body
         else:
             _, token, _ = response
-        scope = token.get("scope")
-        if not scope or not is_openid_scope(scope):
+        if not is_openid_scope(token.get("scope")):
             # standard authorization code flow
             return token
 
         request: OAuth2Request = grant.request
+        code = request.authorization_code
+        if code is not None and not is_openid_scope(code.get_scope()):
+            return token
+
         id_token = self.encode_id_token(token, request)
         token["id_token"] = id_token
         return token
@@ -208,6 +213,22 @@ class OpenIDCode(OpenIDToken):
         validate_requested_sub(grant, self, redirect_uri)
         resolve_authentication(grant, redirect_uri)
 
+    def remove_openid_scope(self, grant, redirect_uri):
+        """Remove ``openid`` from the scope of a request that does not ask for
+        it. The scope that ``get_allowed_scope`` gives for a request without
+        ``scope`` can contain ``openid``. Such a request then gets no ID token.
+
+        :param grant: the grant that validates the authorization request
+        :param redirect_uri: the redirect URI of the authorization request
+        """
+        # Per OpenID Connect Core §3.1.2.1, an OpenID Connect request contains
+        # the openid scope value.
+        if not is_openid_scope(grant.request.scope):
+            return
+
+        scopes = scope_to_list(grant.request.scope)
+        grant.request.scope = list_to_scope([s for s in scopes if s != "openid"])
+
     def validate_openid_prompt(self, grant, redirect_uri):
         """Validate the ``prompt`` and ``max_age`` parameters of the request.
         The user must also log in when the request asks for another user,
@@ -239,18 +260,24 @@ class OpenIDCode(OpenIDToken):
             self.set_request_authentication,
             before=grant.create_authorization_response,
         )
-        if is_openid_scope(grant.request.payload.scope):
-            grant.register_authorization_parameters(OPENID_AUTHORIZATION_PARAMETERS)
+        if not is_openid_scope(grant.request.payload.scope):
             grant.register_hook(
-                self.validate_openid_authorization_request,
+                self.remove_openid_scope,
                 after=grant.validate_authorization_request_payload,
             )
-            grant.register_hook(set_silent, before=grant.validate_consent_request)
-            grant.register_hook(
-                self.validate_openid_prompt,
-                after=grant.validate_consent_request,
-            )
-            grant.register_hook(
-                self.validate_openid_interactions,
-                after=grant.validate_interactions,
-            )
+            return
+
+        grant.register_authorization_parameters(OPENID_AUTHORIZATION_PARAMETERS)
+        grant.register_hook(
+            self.validate_openid_authorization_request,
+            after=grant.validate_authorization_request_payload,
+        )
+        grant.register_hook(set_silent, before=grant.validate_consent_request)
+        grant.register_hook(
+            self.validate_openid_prompt,
+            after=grant.validate_consent_request,
+        )
+        grant.register_hook(
+            self.validate_openid_interactions,
+            after=grant.validate_interactions,
+        )

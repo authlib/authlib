@@ -184,6 +184,10 @@ Now that you added the ``openid`` scope to your application, an OpenID token
 will be provided to this app whenever a client asks for a token with an
 ``openid`` scope.
 
+A request without the ``scope`` parameter is not an OpenID Connect request,
+even when ``client.get_allowed_scope()`` gives a default scope with ``openid``.
+The client gets no ID token for it.
+
 .. _flask_odic_implicit:
 
 Implicit Flow

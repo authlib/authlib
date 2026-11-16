@@ -241,6 +241,46 @@ def test_pure_code_flow(test_client, server):
     assert "id_token" not in resp
 
 
+@pytest.mark.parametrize(
+    ("scope", "allowed_scope"),
+    [
+        (None, "openid profile"),
+        ("profile", "openid profile"),
+        (None, "openid"),
+    ],
+)
+def test_default_openid_scope(
+    test_client, server, client, monkeypatch, scope, allowed_scope
+):
+    """A request without openid in its scope is not an OpenID request, even
+    when the client adds openid to its scope. It gets no ID token."""
+    monkeypatch.setattr(client, "get_allowed_scope", lambda scope: allowed_scope)
+    register_oidc_code_grant(server, require_nonce=True)
+    data = {
+        "response_type": "code",
+        "client_id": "client-id",
+        "redirect_uri": "https://client.test",
+        "user_id": "1",
+    }
+    if scope is not None:
+        data["scope"] = scope
+
+    rv = test_client.post("/oauth/authorize", data=data)
+    code = dict(url_decode(urlparse.urlparse(rv.location).query))["code"]
+    rv = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "redirect_uri": "https://client.test",
+            "code": code,
+        },
+        headers=create_basic_header("client-id", "client-secret"),
+    )
+    resp = json.loads(rv.data)
+    assert "access_token" in resp
+    assert "id_token" not in resp
+
+
 def test_require_nonce(test_client, server):
     register_oidc_code_grant(server, require_nonce=True)
     rv = test_client.post(
