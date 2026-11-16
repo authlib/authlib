@@ -80,3 +80,17 @@ def test_default_max_age():
     claims = ClientMetadataClaims({"default_max_age": "invalid"}, {})
     with pytest.raises(InvalidClaimError):
         claims.validate()
+
+
+@pytest.mark.parametrize("value", [0, 1.5])
+def test_default_max_age_valid(value):
+    """A non-negative number of seconds is accepted."""
+    ClientMetadataClaims({"default_max_age": value}, {}).validate()
+
+
+@pytest.mark.parametrize("value", [-1, float("nan"), float("inf")])
+def test_default_max_age_invalid_number(value):
+    """A negative or non-finite number is not a number of seconds."""
+    claims = ClientMetadataClaims({"default_max_age": value}, {})
+    with pytest.raises(InvalidClaimError):
+        claims.validate()

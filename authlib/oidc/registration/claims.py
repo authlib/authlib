@@ -1,3 +1,5 @@
+import math
+
 from joserfc.errors import InvalidClaimError
 
 from authlib.common.security import is_secure_transport
@@ -252,6 +254,12 @@ class ClientMetadataClaims(BaseClaims):
         request parameter overrides this default value. If omitted, no default Maximum
         Authentication Age is specified.
         """
+        value = self.get("default_max_age")
+        if value is None:
+            return
+
+        if not math.isfinite(value) or value < 0:
+            raise InvalidClaimError("default_max_age")
 
     def validate_require_auth_time(self):
         """Boolean value specifying whether the auth_time Claim in the ID Token is
