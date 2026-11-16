@@ -187,6 +187,12 @@ class ECDH1PUAlgorithm(JWEAlgorithmWithTagAwareKeyAgreement):
         if self.key_size is None:
             bit_size = enc_alg.CEK_SIZE
         else:
+            # Per draft-madden-jose-ecdh-1pu-04 §2.1, the key wrapping mode
+            # rejects content encryption algorithms other than
+            # AES_CBC_HMAC_SHA2.
+            if not isinstance(enc_alg, CBCHS2EncAlgorithm):
+                raise InvalidEncryptionAlgorithmForECDH1PUWithKeyWrappingError()
+
             bit_size = self.key_size
 
         sender_pubkey = sender_key.get_op_key("wrapKey")

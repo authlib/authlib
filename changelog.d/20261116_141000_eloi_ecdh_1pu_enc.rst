@@ -1,0 +1,8 @@
+Security
+~~~~~~~~
+
+- ``JsonWebEncryption`` rejects a JWE in ECDH-1PU key wrapping mode whose
+  ``enc`` is not AES_CBC_HMAC_SHA2 on decryption, as it already did on
+  encryption. A recipient could forge messages that other recipients accepted
+  as sent by the original sender.
+  `GHSA-5mqf-4prf-9r2m <https://github.com/authlib/authlib/security/advisories/GHSA-5mqf-4prf-9r2m>`_
