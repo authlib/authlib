@@ -1,4 +1,5 @@
 import pytest
+from flask import Request
 from flask import json
 
 from authlib.deprecate import AuthlibDeprecationWarning
@@ -267,3 +268,29 @@ def test_insecure_transport(test_client, monkeypatch):
         )
     assert rv.status_code == 400
     assert json.loads(rv.data)["error"] == "insecure_transport"
+
+
+def test_token_response_with_request_argument(app, server):
+    """The token endpoint processes the request given as argument."""
+    request = Request.from_values(
+        method="POST",
+        path="/oauth/token",
+        data={"grant_type": "client_credentials"},
+        headers=create_basic_header("client-id", "client-secret"),
+    )
+    with app.test_request_context("/"):
+        rv = server.create_token_response(request)
+
+    assert "access_token" in rv.get_json()
+
+
+def test_json_request_with_request_argument(app, server):
+    """The JSON request is created from the request given as argument."""
+    request = Request.from_values(
+        method="POST", path="/oauth/register", json={"client_name": "a"}
+    )
+    with app.test_request_context("/"):
+        json_request = server.create_json_request(request)
+
+    assert json_request.uri == "http://localhost/oauth/register"
+    assert json_request.payload.data == {"client_name": "a"}

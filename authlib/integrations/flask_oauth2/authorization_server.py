@@ -74,10 +74,14 @@ class AuthorizationServer(_AuthorizationServer):
             return uris.get(error.error)
 
     def create_oauth2_request(self, request):
-        return FlaskOAuth2Request(flask_req)
+        if request is None:
+            request = flask_req
+        return FlaskOAuth2Request(request)
 
     def create_json_request(self, request):
-        return FlaskJsonRequest(flask_req)
+        if request is None:
+            request = flask_req
+        return FlaskJsonRequest(request)
 
     def handle_response(self, status_code, payload, headers):
         if isinstance(payload, dict):
