@@ -471,6 +471,7 @@ def test_missing_client_id(test_client, server):
     url = add_params_to_uri(authorize_url, {"request": request_obj})
 
     rv = test_client.get(url)
+    assert rv.status_code == 400
     params = json.loads(rv.data)
     assert params["error"] == "invalid_client"
     assert params["error_description"] == "Missing 'client_id' parameter."
@@ -489,6 +490,7 @@ def test_invalid_client_id(test_client, server):
     )
 
     rv = test_client.get(url)
+    assert rv.status_code == 400
     params = json.loads(rv.data)
     assert params["error"] == "invalid_client"
     assert params["error_description"] == "The client does not exist on this server."

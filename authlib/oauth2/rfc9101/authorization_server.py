@@ -9,8 +9,8 @@ from authlib._joserfc_helpers import import_any_key
 
 from ..rfc6749 import AuthorizationServer
 from ..rfc6749 import ClientMixin
-from ..rfc6749 import InvalidClientError
 from ..rfc6749 import InvalidRequestError
+from ..rfc6749.authenticate_client import _validate_client
 from ..rfc6749.requests import BasicOAuth2Payload
 from ..rfc6749.requests import OAuth2Request
 from .errors import InvalidRequestObjectError
@@ -103,19 +103,9 @@ class JWTAuthenticationRequest:
     def parse_authorization_request(
         self, authorization_server: AuthorizationServer, request: OAuth2Request
     ):
-        client_id = request.payload.client_id
-        if client_id is None:
-            raise InvalidClientError(
-                status_code=404,
-                description="Missing 'client_id' parameter.",
-            )
-
-        client = authorization_server.query_client(client_id)
-        if not client:
-            raise InvalidClientError(
-                status_code=404,
-                description="The client does not exist on this server.",
-            )
+        client = _validate_client(
+            authorization_server.query_client, request.payload.client_id
+        )
 
         if not self._shoud_proceed_with_request_object(request, client):
             return
