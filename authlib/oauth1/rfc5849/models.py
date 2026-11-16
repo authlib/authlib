@@ -16,6 +16,10 @@ class ClientMixin:
 
             def get_client_secret(self):
                 return self.client_secret
+
+        A client without a secret, such as a client that only has an RSA
+        public key, returns ``None`` or an empty string. It cannot use the
+        HMAC-SHA1 and PLAINTEXT signature methods.
         """
         raise NotImplementedError()
 

@@ -258,6 +258,42 @@ def test_hmac_sha1_signature(app, test_client, use_cache):
     assert data["error"] == "invalid_nonce"
 
 
+@pytest.mark.parametrize("client_secret", ["", None])
+def test_empty_client_secret(app, test_client, monkeypatch, client_secret):
+    """A client without a secret cannot use HMAC-SHA1 or PLAINTEXT."""
+    monkeypatch.setattr(Client, "get_client_secret", lambda self: client_secret)
+    create_authorization_server(app, True)
+    url = "/oauth/initiate"
+
+    rv = test_client.post(
+        url,
+        data={
+            "oauth_consumer_key": "client",
+            "oauth_callback": "oob",
+            "oauth_signature_method": "PLAINTEXT",
+            "oauth_signature": "&",
+        },
+    )
+    assert decode_response(rv.data)["error"] == "invalid_signature"
+
+    params = [
+        ("oauth_consumer_key", "client"),
+        ("oauth_callback", "oob"),
+        ("oauth_signature_method", "HMAC-SHA1"),
+        ("oauth_timestamp", str(int(time.time()))),
+        ("oauth_nonce", "empty-secret-nonce"),
+    ]
+    base_string = signature.construct_base_string(
+        "POST", "http://localhost/oauth/initiate", params
+    )
+    params.append(
+        ("oauth_signature", signature.hmac_sha1_signature(base_string, "", None))
+    )
+    auth_header = "OAuth " + ",".join([f'{k}="{v}"' for k, v in params])
+    rv = test_client.post(url, headers={"Authorization": auth_header})
+    assert decode_response(rv.data)["error"] == "invalid_signature"
+
+
 @pytest.mark.parametrize("use_cache", [True, False])
 def test_rsa_sha1_signature(app, test_client, use_cache):
     create_authorization_server(app, use_cache)
