@@ -324,7 +324,7 @@ def generate_id_token(
         if at_hash is not None:
             payload["at_hash"] = to_native(at_hash)
 
-    payload.update(user_info)
+    payload = {**user_info, **payload}
     if alg == "none":
         private_key = None
     else:

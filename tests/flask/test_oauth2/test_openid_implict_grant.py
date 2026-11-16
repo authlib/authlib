@@ -25,6 +25,7 @@ from tests.util import HMAC_SECRET
 from tests.util import parse_form
 
 from .models import AuthorizationSession
+from .models import User
 from .models import exists_nonce
 from .oauth2_server import SupportedPromptValues
 from .oauth2_server import register_form_post
@@ -1006,3 +1007,32 @@ def test_id_token_hint(test_client, sub, error):
     params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
     assert params.get("error") == error
     assert params["state"] == "bar"
+
+
+def test_user_info_does_not_replace_protocol_claims(test_client, monkeypatch):
+    """The claims of the user info do not replace the claims set by the
+    server."""
+    generate_user_info = User.generate_user_info
+
+    def forged_user_info(self, scopes=None):
+        info = generate_user_info(self, scopes)
+        info.update({"iss": "forged", "nonce": "forged", "at_hash": "forged"})
+        return info
+
+    monkeypatch.setattr(User, "generate_user_info", forged_user_info)
+    rv = test_client.post(
+        "/oauth/authorize",
+        data={
+            "response_type": "id_token token",
+            "client_id": "client-id",
+            "scope": "openid profile",
+            "nonce": "n",
+            "redirect_uri": "https://client.test/callback",
+            "user_id": "1",
+        },
+    )
+    params = dict(url_decode(urlparse.urlparse(rv.location).fragment))
+    claims = validate_claims(params["id_token"], params)
+    assert claims["iss"] == "Authlib"
+    assert claims["nonce"] == "n"
+    assert claims["name"] == "foo"

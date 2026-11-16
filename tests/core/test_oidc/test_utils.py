@@ -1,4 +1,5 @@
 import pytest
+from joserfc import jwt
 from joserfc.jwk import ECKey
 from joserfc.jwk import OctKey
 from joserfc.jwk import OKPKey
@@ -57,3 +58,22 @@ def test_generate_id_token(alg, key):
         alg=alg,
     )
     assert result is not None
+
+
+def test_generate_id_token_keeps_protocol_claims():
+    """The claims of the user info do not replace the claims set by the
+    server."""
+    user_info = UserInfo({"sub": "123", "iss": "forged", "nonce": "forged"})
+    result = generate_id_token(
+        token={},
+        user_info=user_info,
+        key=hmac_key,
+        iss="https://provider.test",
+        aud="client_id",
+        alg="HS256",
+        nonce="n",
+    )
+    claims = jwt.decode(result, hmac_key).claims
+    assert claims["iss"] == "https://provider.test"
+    assert claims["nonce"] == "n"
+    assert claims["sub"] == "123"

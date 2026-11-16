@@ -35,6 +35,7 @@ from tests.util import read_file_path
 from .models import AuthorizationCode
 from .models import AuthorizationSession
 from .models import CodeGrantMixin
+from .models import User
 from .models import exists_nonce
 from .models import save_authorization_code
 from .oauth2_server import SupportedPromptValues
@@ -195,6 +196,25 @@ def test_auth_time_claim(test_client, server):
     register_oidc_code_grant(server)
     claims = exchange_code_for_id_token(test_client, {"auth_time": "1000000000"})
     assert claims["auth_time"] == 1000000000
+
+
+def test_user_info_does_not_replace_protocol_claims(test_client, server, monkeypatch):
+    """The claims of the user info do not replace the claims set by the
+    server."""
+    generate_user_info = User.generate_user_info
+
+    def forged_user_info(self, scopes=None):
+        info = generate_user_info(self, scopes)
+        info.update({"iss": "forged", "aud": "forged", "nonce": "forged"})
+        return info
+
+    monkeypatch.setattr(User, "generate_user_info", forged_user_info)
+    register_oidc_code_grant(server)
+    claims = exchange_code_for_id_token(test_client, {"nonce": "n"})
+    assert claims["iss"] == "Authlib"
+    assert claims["aud"] == ["client-id"]
+    assert claims["nonce"] == "n"
+    assert claims["name"] == "foo"
 
 
 def test_unknown_auth_time_claim(test_client, server, monkeypatch):

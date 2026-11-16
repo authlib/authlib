@@ -106,7 +106,7 @@ class OpenIDToken(LegacyMixin):
             token["scope"],
             get_requested_claims(claims_request, "id_token"),
         )
-        claims.update(user_info)
+        claims = {**user_info, **claims}
 
         if alg == "none":
             private_key = None

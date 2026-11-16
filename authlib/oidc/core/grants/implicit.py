@@ -220,7 +220,7 @@ class OpenIDImplicitGrant(LegacyMixin, ImplicitGrant):
                 getattr(self.request, "claims_request", None), "id_token"
             ),
         )
-        claims.update(user_info)
+        claims = {**user_info, **claims}
         key = self.resolve_client_private_key(self.request.client)
         private_key = import_any_key(key)
         header = self.get_encode_header(self.request.client)
