@@ -37,9 +37,17 @@ class ClientAuthentication:
         for method in methods:
             func = self._methods[method]
             client = func(self.query_client, request)
-            if client and client.check_endpoint_auth_method(method, endpoint):
-                request.auth_method = method
-                return client
+            if not client or not client.check_endpoint_auth_method(method, endpoint):
+                continue
+
+            # RFC 6749 §3.2.1: confidential clients MUST authenticate.
+            if method == "none" and not client.check_endpoint_auth_method(
+                "none", "token"
+            ):
+                continue
+
+            request.auth_method = method
+            return client
 
         if "client_secret_basic" in methods:
             raise InvalidClientError(

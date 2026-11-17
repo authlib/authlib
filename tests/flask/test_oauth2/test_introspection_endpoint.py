@@ -155,3 +155,28 @@ def test_introspect_token_without_hint(test_client, token):
     assert rv.status_code == 200
     resp = json.loads(rv.data)
     assert resp["client_id"] == "client-id"
+
+
+def test_confidential_client_without_secret(test_client, token, client, monkeypatch):
+    """A confidential client cannot authenticate with its client_id only."""
+    monkeypatch.setattr(
+        MyIntrospectionEndpoint,
+        "CLIENT_AUTH_METHODS",
+        ["client_secret_basic", "none"],
+    )
+    rv = test_client.post(
+        "/oauth/introspect", data={"token": "a1", "client_id": "client-id"}
+    )
+    assert rv.status_code == 401
+    assert json.loads(rv.data)["error"] == "invalid_client"
+
+    client.set_client_metadata(
+        {"scope": "profile", "token_endpoint_auth_method": "none"}
+    )
+    db.session.add(client)
+    db.session.commit()
+    rv = test_client.post(
+        "/oauth/introspect", data={"token": "a1", "client_id": "client-id"}
+    )
+    assert rv.status_code == 200
+    assert json.loads(rv.data)["active"] is True

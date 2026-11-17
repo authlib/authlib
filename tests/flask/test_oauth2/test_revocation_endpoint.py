@@ -2,6 +2,7 @@ import pytest
 from flask import json
 
 from authlib.integrations.sqla_oauth2 import create_revocation_endpoint
+from authlib.oauth2.rfc7009 import RevocationEndpoint as BaseRevocationEndpoint
 
 from .models import Client
 from .models import Token
@@ -143,3 +144,38 @@ def test_revoke_token_bound_to_client(test_client, token):
     assert rv.status_code == 400
     resp = json.loads(rv.data)
     assert resp["error"] == "invalid_grant"
+
+
+def test_confidential_client_without_secret(test_client, token, client, monkeypatch):
+    """A confidential client cannot authenticate with its client_id only."""
+    monkeypatch.setattr(
+        BaseRevocationEndpoint, "CLIENT_AUTH_METHODS", ["client_secret_basic", "none"]
+    )
+    rv = test_client.post(
+        "/oauth/revoke", data={"token": "a1", "client_id": "client-id"}
+    )
+    assert rv.status_code == 401
+    assert json.loads(rv.data)["error"] == "invalid_client"
+
+    client.set_client_metadata(
+        {"scope": "profile", "token_endpoint_auth_method": "none"}
+    )
+    db.session.add(client)
+    db.session.commit()
+    rv = test_client.post(
+        "/oauth/revoke", data={"token": "a1", "client_id": "client-id"}
+    )
+    assert rv.status_code == 200
+
+
+def test_client_secret_post_client_with_basic_auth(test_client, token, client):
+    """A client registered with client_secret_post can revoke with HTTP Basic."""
+    client.set_client_metadata(
+        {"scope": "profile", "token_endpoint_auth_method": "client_secret_post"}
+    )
+    db.session.add(client)
+    db.session.commit()
+
+    headers = create_basic_header("client-id", "client-secret")
+    rv = test_client.post("/oauth/revoke", data={"token": "a1"}, headers=headers)
+    assert rv.status_code == 200
