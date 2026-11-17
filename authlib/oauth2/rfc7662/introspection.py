@@ -1,6 +1,13 @@
+from contextvars import ContextVar
+
 from ..rfc6749 import InvalidRequestError
 from ..rfc6749 import JsonResponse
 from ..rfc6749 import TokenEndpoint
+
+# Whether the token string of the current request is the refresh token. A
+# context variable keeps ``create_introspection_payload(token)`` compatible
+# with existing subclasses, and safe when an endpoint instance is shared.
+_refresh_token_presented = ContextVar("refresh_token_presented", default=False)
 
 
 class IntrospectionEndpoint(TokenEndpoint):
@@ -62,8 +69,24 @@ class IntrospectionEndpoint(TokenEndpoint):
         token = self.authenticate_token(request, client)
 
         # the authorization server invalidates the token
-        body = self.create_introspection_payload(token)
+        reset = _refresh_token_presented.set(
+            self.is_refresh_token_presented(token, request.form["token"])
+        )
+        try:
+            body = self.create_introspection_payload(token)
+        finally:
+            _refresh_token_presented.reset(reset)
         return JsonResponse(body)
+
+    def is_refresh_token_presented(self, token, token_string):
+        """Tell if the request introspects the refresh token of ``token``,
+        and not its access token. The default compares ``token_string`` with
+        the ``refresh_token`` and ``access_token`` attributes of the token.
+        Override it when the token model stores them under other names.
+        """
+        if not token or token_string == getattr(token, "access_token", None):
+            return False
+        return token_string == getattr(token, "refresh_token", None)
 
     def create_introspection_payload(self, token):
         # the token is not active, does not exist on this server, or the
@@ -72,12 +95,21 @@ class IntrospectionEndpoint(TokenEndpoint):
         # response with the "active" field set to "false"
         if not token:
             return {"active": False}
-        if token.is_expired() or token.is_revoked():
+        if self._is_expired(token) or token.is_revoked():
             return {"active": False}
         payload = self.introspect_token(token)
         if "active" not in payload:
             payload["active"] = True
         return payload
+
+    def _is_expired(self, token):
+        # A refresh token has its own lifetime, which may outlive the access
+        # token stored in the same record (RFC 7662 §2.1).
+        if _refresh_token_presented.get():
+            is_expired = getattr(token, "is_refresh_token_expired", None)
+            if is_expired is not None:
+                return is_expired()
+        return token.is_expired()
 
     def check_permission(self, token, client, request):
         """Check if the request has permission to introspect the token. Developers

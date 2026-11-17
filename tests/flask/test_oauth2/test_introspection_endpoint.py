@@ -1,3 +1,5 @@
+import time
+
 import pytest
 from flask import json
 
@@ -182,3 +184,57 @@ def test_introspect_token_with_unknown_hint(test_client, token):
     assert rv.status_code == 200
     resp = json.loads(rv.data)
     assert resp["active"]
+
+
+def _introspect(test_client, token_string, hint=None):
+    data = {"token": token_string}
+    if hint:
+        data["token_type_hint"] = hint
+    headers = create_basic_header("client-id", "client-secret")
+    rv = test_client.post("/oauth/introspect", data=data, headers=headers)
+    assert rv.status_code == 200
+    return json.loads(rv.data)
+
+
+@pytest.mark.parametrize("hint", [None, "refresh_token"])
+def test_introspect_refresh_token_with_expired_access_token(
+    test_client, token, db, hint
+):
+    """The refresh token has its own lifetime (RFC 7662 §2.1)."""
+    token.issued_at = int(time.time()) - 7200
+    token.refresh_token_expires_at = int(time.time()) + 3600
+    db.session.commit()
+
+    assert _introspect(test_client, "r1", hint)["active"] is True
+    assert _introspect(test_client, "a1", "access_token") == {"active": False}
+
+
+def test_introspect_expired_refresh_token(test_client, token, db):
+    token.issued_at = int(time.time()) - 7200
+    token.refresh_token_expires_at = int(time.time()) - 60
+    db.session.commit()
+
+    assert _introspect(test_client, "r1", "refresh_token") == {"active": False}
+    assert _introspect(test_client, "r1") == {"active": False}
+
+
+def test_introspect_access_token_ignores_refresh_token_expiry(test_client, token, db):
+    token.refresh_token_expires_at = int(time.time()) - 60
+    db.session.commit()
+
+    assert _introspect(test_client, "a1")["active"] is True
+    assert _introspect(test_client, "a1", "access_token")["active"] is True
+
+
+def test_refresh_token_expiry_defaults():
+    from authlib.integrations.sqla_oauth2 import OAuth2TokenMixin
+    from authlib.oauth2.rfc6749 import TokenMixin
+
+    class PlainToken(TokenMixin):
+        def is_expired(self):
+            return True
+
+    # Without an override, the refresh token follows the access token.
+    assert PlainToken().is_refresh_token_expired() is True
+    # The SQLAlchemy mixin has no refresh token lifetime.
+    assert OAuth2TokenMixin.is_refresh_token_expired(Token()) is False

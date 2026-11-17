@@ -75,3 +75,8 @@ class OAuth2TokenMixin(TokenMixin):
 
         expires_at = self.issued_at + self.expires_in
         return expires_at < time.time()
+
+    def is_refresh_token_expired(self):
+        # ``expires_in`` is the lifetime of the access token only. Override
+        # this method when refresh tokens expire too.
+        return False

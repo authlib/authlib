@@ -80,6 +80,12 @@ class Token(db.Model, OAuth2TokenMixin):
     user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete="CASCADE"))
     user = db.relationship("User")
     claims_request = db.Column(db.JSON)
+    refresh_token_expires_at = db.Column(db.Integer, nullable=False, default=0)
+
+    def is_refresh_token_expired(self):
+        if not self.refresh_token_expires_at:
+            return False
+        return self.refresh_token_expires_at < time.time()
 
     def is_refresh_token_active(self):
         return not self.refresh_token_revoked_at

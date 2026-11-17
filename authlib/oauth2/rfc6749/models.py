@@ -222,6 +222,20 @@ class TokenMixin:
         """
         raise NotImplementedError()
 
+    def is_refresh_token_expired(self):
+        """A method to define if the refresh token of this record is expired,
+        whatever the state of the access token. The introspection endpoint
+        calls it when the request presents the refresh token. It is optional:
+        the default falls back to :meth:`is_expired`. For instance, there is
+        a column ``refresh_token_expires_at`` in the table::
+
+            def is_refresh_token_expired(self):
+                return self.refresh_token_expires_at < now
+
+        :return: boolean
+        """
+        return self.is_expired()
+
     def is_revoked(self):
         """A method to define if this token is revoked. For instance,
         there is a boolean column ``revoked`` in the table::
