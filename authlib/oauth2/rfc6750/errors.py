@@ -86,3 +86,19 @@ class InsufficientScopeError(OAuth2Error):
         "The request requires higher privileges than provided by the access token."
     )
     status_code = 403
+
+    def get_headers(self):
+        """The resource server MUST include the "WWW-Authenticate" header
+        when the access token does not enable access to the resource.
+
+        :rfc:`6750#section-3`
+        """
+        headers = super().get_headers()
+        error_description = self.get_error_description()
+        headers.append(
+            (
+                "WWW-Authenticate",
+                f'Bearer error="{self.error}", error_description="{error_description}"',
+            )
+        )
+        return headers

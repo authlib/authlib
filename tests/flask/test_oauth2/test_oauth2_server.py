@@ -133,6 +133,9 @@ def test_insufficient_token(test_client, token):
     assert rv.status_code == 403
     resp = json.loads(rv.data)
     assert resp["error"] == "insufficient_scope"
+    assert rv.headers["WWW-Authenticate"].startswith(
+        'Bearer error="insufficient_scope"'
+    )
 
 
 def test_access_resource(test_client, token):
