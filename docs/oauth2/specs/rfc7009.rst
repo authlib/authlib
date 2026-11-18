@@ -61,6 +61,13 @@ one. If no token is found with the hint, the endpoint calls ``query_token``
 again with ``None``. Per :rfc:`RFC 7009 §2.1 <7009#section-2.1>`, the hint may be wrong, so
 ``revoke_token`` must not trust it to know which token was presented.
 
+By default, clients can authenticate with ``client_secret_basic``,
+``client_secret_post`` or ``none``, so public clients can revoke their tokens.
+Set ``CLIENT_AUTH_METHODS`` on the subclass to allow fewer methods::
+
+    class MyRevocationEndpoint(RevocationEndpoint):
+        CLIENT_AUTH_METHODS = ["client_secret_basic"]
+
 
 API Reference
 -------------

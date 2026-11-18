@@ -190,3 +190,82 @@ def test_revoke_with_wrong_hint(test_client, token):
     )
     assert rv.status_code == 200
     assert not token.is_refresh_token_active()
+
+
+def test_revoke_with_client_secret_post(test_client, token):
+    rv = test_client.post(
+        "/oauth/revoke",
+        data={
+            "token": "a1",
+            "client_id": "client-id",
+            "client_secret": "client-secret",
+        },
+    )
+    assert rv.status_code == 200
+    assert token.is_revoked()
+
+
+def test_revoke_with_invalid_client_secret_post(test_client, token):
+    rv = test_client.post(
+        "/oauth/revoke",
+        data={
+            "token": "a1",
+            "client_id": "client-id",
+            "client_secret": "invalid-secret",
+        },
+    )
+    assert json.loads(rv.data)["error"] == "invalid_client"
+    assert not token.is_revoked()
+
+
+def test_revoke_with_public_client(test_client, db):
+    """Per RFC 7009 §5, public clients can revoke their tokens."""
+    public_client = Client(user_id=1, client_id="public-client")
+    public_client.set_client_metadata(
+        {
+            "scope": "profile",
+            "redirect_uris": ["https://client.test/authorized"],
+            "token_endpoint_auth_method": "none",
+        }
+    )
+    public_token = Token(
+        user_id=1,
+        client_id="public-client",
+        token_type="bearer",
+        access_token="public-a1",
+        refresh_token="public-r1",
+        scope="profile",
+        expires_in=3600,
+    )
+    db.session.add_all([public_client, public_token])
+    db.session.commit()
+
+    rv = test_client.post(
+        "/oauth/revoke",
+        data={"token": "public-a1", "client_id": "public-client"},
+    )
+    assert rv.status_code == 200
+    assert public_token.is_revoked()
+
+
+def test_restricted_client_auth_methods(server, app, test_client, token):
+    class BasicOnlyRevocationEndpoint(create_revocation_endpoint(db.session, Token)):
+        ENDPOINT_NAME = "basic_only_revocation"
+        CLIENT_AUTH_METHODS = ["client_secret_basic"]
+
+    server.register_endpoint(BasicOnlyRevocationEndpoint)
+
+    @app.route("/oauth/revoke-basic-only", methods=["POST"])
+    def revoke_basic_only():
+        return server.create_endpoint_response("basic_only_revocation")
+
+    rv = test_client.post(
+        "/oauth/revoke-basic-only",
+        data={
+            "token": "a1",
+            "client_id": "client-id",
+            "client_secret": "client-secret",
+        },
+    )
+    assert json.loads(rv.data)["error"] == "invalid_client"
+    assert not token.is_revoked()
