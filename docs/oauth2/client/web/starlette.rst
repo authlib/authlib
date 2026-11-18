@@ -13,7 +13,7 @@ Starlette Integration
 Starlette_ is a lightweight ASGI framework/toolkit, which is ideal for
 building high performance asyncio services.
 
-.. _Starlette: https://www.starlette.io/
+.. _Starlette: https://starlette.dev/
 
 This documentation covers OAuth 2.0 and OpenID Connect Client support for
 Starlette. Because all the frameworks integrations share the same API, it is
