@@ -525,6 +525,24 @@ Fixed
   not the ``sub`` of the ID token returned by ``authorize_access_token``, per
   OpenID Connect Core §5.3.2. :issue:`1043`
 
+.. _changelog-1.9.9:
+
+Version 1.9.9 — 2026-11-17
+--------------------------
+
+Security
+~~~~~~~~
+
+- A confidential client can no longer authenticate with its ``client_id``
+  only on the revocation, introspection and device authorization endpoints.
+  These endpoints accepted the ``none`` method from any client. This affected
+  the revocation and introspection endpoints when ``none`` was in their
+  ``CLIENT_AUTH_METHODS``, and the device authorization endpoint by default.
+  A confidential client whose method is missing from ``CLIENT_AUTH_METHODS``
+  now gets an ``invalid_client`` error on these endpoints. Add its method to
+  ``CLIENT_AUTH_METHODS``.
+  `GHSA-xjwv-fw68-2chh <https://github.com/authlib/authlib/security/advisories/GHSA-xjwv-fw68-2chh>`_
+
 .. _changelog-1.9.8:
 
 Version 1.9.8 — 2026-11-16

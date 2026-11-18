@@ -145,3 +145,26 @@ def test_revoke_token_after_another_endpoint(factory, token):
     )
     resp = server.create_endpoint_response(ENDPOINT_NAME, request)
     assert resp.status_code == 200
+
+
+def test_confidential_client_without_secret(
+    factory, server, token, client, monkeypatch
+):
+    """A confidential client cannot authenticate with its client_id only."""
+    monkeypatch.setattr(
+        RevocationEndpoint, "CLIENT_AUTH_METHODS", ["client_secret_basic", "none"]
+    )
+    request = factory.post(
+        "/oauth/revoke", data={"token": "a1", "client_id": "client-id"}
+    )
+    resp = server.create_endpoint_response(ENDPOINT_NAME, request)
+    assert resp.status_code == 401
+    assert json.loads(resp.content)["error"] == "invalid_client"
+
+    client.token_endpoint_auth_method = "none"
+    client.save()
+    request = factory.post(
+        "/oauth/revoke", data={"token": "a1", "client_id": "client-id"}
+    )
+    resp = server.create_endpoint_response(ENDPOINT_NAME, request)
+    assert resp.status_code == 200

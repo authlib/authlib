@@ -271,6 +271,25 @@ def test_client_secret_basic_saves_authenticated_client_id(test_client, db, clie
     assert saved_credentials[-1]["client_id"] == "client-id"
 
 
+def test_confidential_client_without_secret(test_client, db, client):
+    """A confidential client cannot authenticate with its client_id only."""
+    client.set_client_metadata(
+        {
+            "scope": "profile",
+            "grant_types": [DeviceCodeGrant.GRANT_TYPE],
+            "token_endpoint_auth_method": "client_secret_basic",
+        }
+    )
+    db.session.add(client)
+    db.session.commit()
+
+    rv = test_client.post(
+        "/device_authorize", data={"scope": "profile", "client_id": "client-id"}
+    )
+    assert rv.status_code == 401
+    assert json.loads(rv.data)["error"] == "invalid_client"
+
+
 def test_create_authorization_response(test_client):
     client = Client(
         user_id=1,
