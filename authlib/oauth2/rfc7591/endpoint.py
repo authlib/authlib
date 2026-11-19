@@ -8,6 +8,8 @@ from joserfc.errors import JoseError
 from authlib._joserfc_helpers import audience_matches
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.security import generate_token
+from authlib.deprecate import accepts_argument
+from authlib.deprecate import deprecate_missing_arguments
 
 from ..rfc6749 import InvalidRequestError
 from ..rfc6749 import JsonResponse
@@ -37,6 +39,12 @@ class ClientRegistrationEndpoint:
     def __init__(self, server=None, claims_classes=None):
         self.server = server
         self.claims_classes = claims_classes or [ClientMetadataClaims]
+        deprecate_missing_arguments(
+            "method", self.generate_client_info, ["client_metadata"]
+        )
+        deprecate_missing_arguments(
+            "method", self.generate_client_secret, ["client_metadata"]
+        )
 
     def __call__(self, request):
         return self.create_registration_response(request)
@@ -53,7 +61,9 @@ class ClientRegistrationEndpoint:
         request.credential = token
 
         client_metadata = self.extract_client_metadata(request)
-        client_info = self.generate_client_info(request)
+        client_info = _call_with_metadata(
+            self.generate_client_info, request, client_metadata
+        )
         body = {}
         body.update(client_metadata)
         body.update(client_info)
@@ -119,18 +129,26 @@ class ClientRegistrationEndpoint:
 
         return token.claims
 
-    def generate_client_info(self, request):
-        # https://tools.ietf.org/html/rfc7591#section-3.2.1
-        client_id = self.generate_client_id(request)
-        client_secret = self.generate_client_secret(request)
-        client_id_issued_at = int(time.time())
-        client_secret_expires_at = 0
-        return dict(
-            client_id=client_id,
-            client_secret=client_secret,
-            client_id_issued_at=client_id_issued_at,
-            client_secret_expires_at=client_secret_expires_at,
+    def generate_client_info(self, request, client_metadata=None):
+        """Generate the ``client_id`` and ``client_secret`` of a new client,
+        with their issue and expiration times. A client without secret gets
+        neither ``client_secret`` nor ``client_secret_expires_at``.
+        """
+        # Per RFC 7591 §3.2.1, client_secret_expires_at is only required if a
+        # client_secret is issued.
+        client_info = {
+            "client_id": self.generate_client_id(request),
+            "client_id_issued_at": int(time.time()),
+        }
+        client_secret = _call_with_metadata(
+            self.generate_client_secret, request, client_metadata
         )
+        if not client_secret:
+            return client_info
+
+        client_info["client_secret"] = client_secret
+        client_info["client_secret_expires_at"] = 0
+        return client_info
 
     def generate_client_registration_info(self, client, request):
         """Generate ```registration_client_uri`` and ``registration_access_token``
@@ -148,11 +166,29 @@ class ClientRegistrationEndpoint:
         """
         return generate_token(42)
 
-    def generate_client_secret(self, request):
+    def generate_client_secret(self, request, client_metadata=None):
         """Generate ``client_secret`` value. Developers MAY rewrite this method
         to use their own way to generate ``client_secret``.
+
+        By default, it returns ``None`` when :meth:`needs_client_secret` is
+        false. The client is then registered without secret.
         """
+        if client_metadata is not None and not self.needs_client_secret(
+            client_metadata
+        ):
+            return None
+
         return binascii.hexlify(os.urandom(24)).decode("ascii")
+
+    def needs_client_secret(self, client_metadata):
+        """Tell whether a client with these metadata needs a ``client_secret``.
+
+        Each class of ``claims_classes`` with a ``needs_client_secret``
+        class method answers ``True``, ``False``, or ``None`` to leave the
+        decision to the other classes. The client needs a secret if one class
+        answers ``True``, or if no class answers ``True`` or ``False``.
+        """
+        return _needs_client_secret(self.claims_classes, client_metadata)
 
     def get_server_metadata(self):
         """Return server metadata which includes supported grant types,
@@ -216,7 +252,7 @@ class ClientRegistrationEndpoint:
             def save_client(self, client_info, client_metadata, request):
                 client = OAuthClient(
                     client_id=client_info['client_id'],
-                    client_secret=client_info['client_secret'],
+                    client_secret=client_info.get('client_secret', ''),
                     ...
                 )
                 client.save()
@@ -232,3 +268,25 @@ def _get_json_object(request):
         raise InvalidRequestError()
 
     return data
+
+
+def _needs_client_secret(claims_classes, client_metadata):
+    """Ask the claims classes whether a client needs a ``client_secret``."""
+    answers = [
+        claims_class.needs_client_secret(client_metadata)
+        for claims_class in claims_classes
+        if hasattr(claims_class, "needs_client_secret")
+    ]
+    answers = [answer for answer in answers if answer is not None]
+    if not answers:
+        return True
+
+    return any(answers)
+
+
+def _call_with_metadata(method, request, client_metadata):
+    """Call a method with the client metadata, if it accepts them."""
+    if accepts_argument(method, "client_metadata"):
+        return method(request, client_metadata=client_metadata)
+
+    return method(request)

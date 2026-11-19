@@ -7,6 +7,13 @@ from authlib.oauth2.claims import BaseClaims
 
 from ..rfc6749 import scope_to_list
 
+_AUTH_METHODS_WITHOUT_SECRET = {
+    "none",
+    "private_key_jwt",
+    "tls_client_auth",
+    "self_signed_tls_client_auth",
+}
+
 
 class ClientMetadataClaims(BaseClaims):
     # https://tools.ietf.org/html/rfc7591#section-2
@@ -236,6 +243,17 @@ class ClientMetadataClaims(BaseClaims):
             uri = self.get(key)
         if uri and not is_valid_url(uri, fragments_allowed=False):
             raise InvalidClaimError(key)
+
+    @classmethod
+    def needs_client_secret(cls, client_metadata):
+        """Tell whether the ``token_endpoint_auth_method`` of a client uses a
+        ``client_secret``. Unknown methods are considered to use one.
+        """
+        # Per RFC 7591 §2, the default method is client_secret_basic.
+        method = client_metadata.get(
+            "token_endpoint_auth_method", "client_secret_basic"
+        )
+        return method not in _AUTH_METHODS_WITHOUT_SECRET
 
     @classmethod
     def get_claims_options(cls, metadata):

@@ -74,6 +74,9 @@ the missing methods of :class:`~authlib.oauth2.rfc6749.ClientMixin`:
             return redirect_uri in self.redirect_uris.split()
 
         def check_client_secret(self, client_secret):
+            if not self.client_secret:
+                return False
+
             return secrets.compare_digest(
                 to_bytes(self.client_secret), to_bytes(client_secret)
             )

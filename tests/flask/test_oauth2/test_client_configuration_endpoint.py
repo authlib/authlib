@@ -97,6 +97,23 @@ def test_read_client(test_client, client, token):
     )
     assert resp["registration_access_token"] == token.access_token
 
+    assert resp["client_secret"] == client.client_secret
+    assert resp["client_secret_expires_at"] == 0
+
+
+def test_read_client_without_secret(test_client, client, token):
+    """Per RFC 7591 §3.2.1, a client without secret has neither client_secret
+    nor client_secret_expires_at."""
+    client.client_secret = None
+    db.session.add(client)
+    db.session.commit()
+    headers = {"Authorization": f"bearer {token.access_token}"}
+    rv = test_client.get("/configure_client/client-id", headers=headers)
+    resp = json.loads(rv.data)
+    assert rv.status_code == 200
+    assert "client_secret" not in resp
+    assert "client_secret_expires_at" not in resp
+
 
 def test_read_without_valid_token(test_client):
     rv = test_client.get("/configure_client/client-id")
@@ -456,6 +473,68 @@ def test_update_token_endpoint_auth_methods_supported(test_client, metadata, tok
     rv = test_client.put("/configure_client/client-id", json=body, headers=headers)
     resp = json.loads(rv.data)
     assert resp["error"] in "invalid_client_metadata"
+
+
+def test_update_client_without_secret(test_client, client, token):
+    """Per RFC 7592 §2.2, a client without secret cannot switch to a method
+    that needs one."""
+    client.client_secret = None
+    client.set_client_metadata(
+        {"client_name": "Authlib", "token_endpoint_auth_method": "none"}
+    )
+    db.session.add(client)
+    db.session.commit()
+    headers = {"Authorization": f"bearer {token.access_token}"}
+
+    body = {
+        "client_id": "client-id",
+        "client_name": "Authlib",
+        "token_endpoint_auth_method": "client_secret_basic",
+    }
+    rv = test_client.put("/configure_client/client-id", json=body, headers=headers)
+    assert rv.status_code == 400
+    assert json.loads(rv.data)["error"] == "invalid_client_metadata"
+    assert client.client_metadata["token_endpoint_auth_method"] == "none"
+
+    body = {
+        "client_id": "client-id",
+        "client_name": "Updated",
+        "token_endpoint_auth_method": "none",
+    }
+    rv = test_client.put("/configure_client/client-id", json=body, headers=headers)
+    assert rv.status_code == 200
+    assert json.loads(rv.data)["client_name"] == "Updated"
+
+
+def test_update_confidential_client_without_secret_in_client_info(
+    test_client, client, token
+):
+    """A confidential client whose client_info hides the secret, for instance
+    a hashed secret, can still be updated."""
+    client.client_secret = None
+    client.set_client_metadata(
+        {"client_name": "Authlib", "token_endpoint_auth_method": "client_secret_basic"}
+    )
+    db.session.add(client)
+    db.session.commit()
+    headers = {"Authorization": f"bearer {token.access_token}"}
+    body = {"client_id": "client-id", "client_name": "Updated"}
+    rv = test_client.put("/configure_client/client-id", json=body, headers=headers)
+    assert rv.status_code == 200
+    assert json.loads(rv.data)["client_name"] == "Updated"
+
+
+def test_update_client_with_secret_to_public(test_client, client, token):
+    """A client with a secret can switch to a method without secret."""
+    headers = {"Authorization": f"bearer {token.access_token}"}
+    body = {
+        "client_id": "client-id",
+        "client_name": "Authlib",
+        "token_endpoint_auth_method": "none",
+    }
+    rv = test_client.put("/configure_client/client-id", json=body, headers=headers)
+    assert rv.status_code == 200
+    assert json.loads(rv.data)["token_endpoint_auth_method"] == "none"
 
 
 def test_delete_client(test_client, client, token):

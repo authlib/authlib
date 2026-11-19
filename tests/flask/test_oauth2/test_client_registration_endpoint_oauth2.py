@@ -10,6 +10,7 @@ from authlib.deprecate import AuthlibDeprecationWarning
 from authlib.oauth2.rfc7591 import (
     ClientRegistrationEndpoint as _ClientRegistrationEndpoint,
 )
+from authlib.oauth2.rfc9101 import ClientMetadataClaims as RFC9101ClientMetadataClaims
 from tests.util import INVALID_JSON_BODIES
 from tests.util import read_file_path
 
@@ -139,6 +140,112 @@ def test_create_client(test_client):
     resp = json.loads(rv.data)
     assert "client_id" in resp
     assert resp["client_name"] == "Authlib"
+    assert resp["client_secret"]
+    assert resp["client_secret_expires_at"] == 0
+
+
+@pytest.mark.parametrize(
+    "method",
+    ["none", "private_key_jwt", "tls_client_auth", "self_signed_tls_client_auth"],
+)
+def test_client_without_secret(test_client, method):
+    """Per RFC 7591 §3.2.1, a client that does not use a secret gets neither
+    client_secret nor client_secret_expires_at."""
+    headers = {"Authorization": "bearer abc"}
+    body = {"client_name": "Authlib", "token_endpoint_auth_method": method}
+    rv = test_client.post("/create_client", json=body, headers=headers)
+    resp = json.loads(rv.data)
+    assert rv.status_code == 201
+    assert "client_secret" not in resp
+    assert "client_secret_expires_at" not in resp
+    client = Client.query.filter_by(client_id=resp["client_id"]).first()
+    assert client.client_secret is None
+
+
+@pytest.mark.parametrize(
+    "method",
+    ["client_secret_basic", "client_secret_post", "client_secret_jwt", "custom"],
+)
+def test_client_with_secret(test_client, method):
+    """A client that authenticates with a secret, or with an unknown method,
+    gets one."""
+    headers = {"Authorization": "bearer abc"}
+    body = {"client_name": "Authlib", "token_endpoint_auth_method": method}
+    rv = test_client.post("/create_client", json=body, headers=headers)
+    resp = json.loads(rv.data)
+    assert rv.status_code == 201
+    assert resp["client_secret"]
+    assert resp["client_secret_expires_at"] == 0
+
+
+def test_generate_client_secret_without_metadata(test_client, app, server):
+    """A generate_client_secret method without client_metadata argument still
+    works, with a deprecation warning."""
+
+    class LegacyClientRegistration(ClientRegistrationEndpoint):
+        ENDPOINT_NAME = "legacy_client_registration"
+
+        def get_server_metadata(self):
+            return {}
+
+        def generate_client_secret(self, request):
+            return "legacy-secret"
+
+    with pytest.warns(AuthlibDeprecationWarning, match="client_metadata"):
+        server.register_endpoint(LegacyClientRegistration)
+
+    @app.route("/legacy_create_client", methods=["POST"])
+    def legacy_create_client():
+        return server.create_endpoint_response("legacy_client_registration")
+
+    headers = {"Authorization": "bearer abc"}
+    body = {"client_name": "Authlib", "token_endpoint_auth_method": "none"}
+    rv = test_client.post("/legacy_create_client", json=body, headers=headers)
+    resp = json.loads(rv.data)
+    assert rv.status_code == 201
+    assert resp["client_secret"] == "legacy-secret"
+
+
+def test_generate_client_secret_with_metadata(test_client, app, server):
+    """generate_client_secret receives the client metadata."""
+
+    class CustomClientRegistration(ClientRegistrationEndpoint):
+        ENDPOINT_NAME = "custom_client_registration"
+
+        def get_server_metadata(self):
+            return {}
+
+        def generate_client_secret(self, request, client_metadata=None):
+            return f"secret-for-{client_metadata['client_name']}"
+
+    server.register_endpoint(CustomClientRegistration)
+
+    @app.route("/custom_create_client", methods=["POST"])
+    def custom_create_client():
+        return server.create_endpoint_response("custom_client_registration")
+
+    headers = {"Authorization": "bearer abc"}
+    body = {"client_name": "Authlib"}
+    rv = test_client.post("/custom_create_client", json=body, headers=headers)
+    resp = json.loads(rv.data)
+    assert resp["client_secret"] == "secret-for-Authlib"
+
+
+def test_claims_classes_without_secret_rule():
+    """Without claims class that tells whether a secret is needed, a client
+    always gets one."""
+    endpoint = ClientRegistrationEndpoint(claims_classes=[RFC9101ClientMetadataClaims])
+    assert endpoint.needs_client_secret({"token_endpoint_auth_method": "none"})
+
+
+def test_check_client_secret_without_secret(test_client):
+    """A client without secret rejects any secret."""
+    headers = {"Authorization": "bearer abc"}
+    body = {"client_name": "Authlib", "token_endpoint_auth_method": "none"}
+    rv = test_client.post("/create_client", json=body, headers=headers)
+    client_id = json.loads(rv.data)["client_id"]
+    client = Client.query.filter_by(client_id=client_id).first()
+    assert not client.check_client_secret("anything")
 
 
 def test_software_statement(test_client):

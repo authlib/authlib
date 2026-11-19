@@ -9,6 +9,7 @@ from ..rfc6750 import InvalidTokenError
 from ..rfc7591 import InvalidClientMetadataError
 from ..rfc7591.claims import ClientMetadataClaims
 from ..rfc7591.endpoint import _get_json_object
+from ..rfc7591.endpoint import _needs_client_secret
 
 
 class ClientConfigurationEndpoint:
@@ -112,6 +113,17 @@ class ClientConfigurationEndpoint:
                 raise InvalidRequestError()
 
         client_metadata = self.extract_client_metadata(request)
+
+        # Per RFC 7592 §2.2, the server may reject the new metadata.
+        if (
+            self.needs_client_secret(client_metadata)
+            and not self.needs_client_secret(client.client_metadata)
+            and not client.client_info.get("client_secret")
+        ):
+            raise InvalidClientMetadataError(
+                "The client has no client_secret. Register a new client instead."
+            )
+
         client = self.update_client(client, client_metadata, request)
         return self.create_read_client_response(client, request)
 
@@ -133,6 +145,15 @@ class ClientConfigurationEndpoint:
 
             client_metadata.update(**claims.get_registered_claims())
         return client_metadata
+
+    def needs_client_secret(self, client_metadata):
+        """Tell whether a client with these metadata needs a ``client_secret``.
+        It works like
+        :meth:`~authlib.oauth2.rfc7591.ClientRegistrationEndpoint.needs_client_secret`.
+        An update is rejected when the new metadata need a secret, the current
+        metadata do not, and ``client_info`` has no ``client_secret``.
+        """
+        return _needs_client_secret(self.claims_classes, client_metadata)
 
     def introspect_client(self, client):
         return {**client.client_info, **client.client_metadata}
