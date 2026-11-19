@@ -6,10 +6,12 @@ from joserfc import jwk
 from joserfc import jws
 from joserfc import jwt
 from joserfc.errors import JoseError
+from joserfc.jwk import OctKey
 from joserfc.util import to_bytes
 
 from authlib._joserfc_helpers import import_any_key
 from authlib.common.encoding import json_loads
+from authlib.deprecate import deprecate
 
 from ..rfc6749 import InvalidClientError
 
@@ -20,14 +22,31 @@ log = logging.getLogger(__name__)
 class JWTBearerClientAssertion:
     """Implementation of Using JWTs for Client Authentication, which is
     defined by RFC7523.
+
+    Using this class directly, or subclassing it, is deprecated. Use
+    :class:`ClientSecretJWTAuthentication` or :class:`PrivateKeyJWTAuthentication`
+    instead.
     """
 
     #: Value of ``client_assertion_type`` of JWTs
     CLIENT_ASSERTION_TYPE = ASSERTION_TYPE
     #: Name of the client authentication method
     CLIENT_AUTH_METHOD = "client_assertion_jwt"
+    #: Allowed signing algorithms. ``None`` allows the algorithms that joserfc
+    #: recommends.
+    ALGORITHMS: list[str] | None = None
 
     def __init__(self, *, validate_jti=True, leeway=60):
+        if not isinstance(
+            self, (ClientSecretJWTAuthentication, PrivateKeyJWTAuthentication)
+        ):
+            deprecate(
+                "'JWTBearerClientAssertion' accepts both client_secret_jwt and "
+                "private_key_jwt assertions. Use 'ClientSecretJWTAuthentication' "
+                "or 'PrivateKeyJWTAuthentication' instead.",
+                version="2.0.0",
+            )
+
         self._validate_jti = validate_jti
         # A small allowance of time, typically no more than a few minutes,
         # to account for clock skew. The default is 60 seconds.
@@ -53,6 +72,12 @@ class JWTBearerClientAssertion:
                 raise InvalidClientError(
                     description="The client does not exist on this server."
                 )
+
+            # Per RFC 7591 §2, token_endpoint_auth_method is the authentication
+            # method of the client at the token endpoint.
+            if not client.check_endpoint_auth_method(self.CLIENT_AUTH_METHOD, "token"):
+                log.debug("Authenticate via %r failed", self.CLIENT_AUTH_METHOD)
+                return None
 
             key = import_any_key(self.resolve_client_public_key(client))
 
@@ -120,7 +145,7 @@ class JWTBearerClientAssertion:
         :raise: InvalidClientError
         """
         try:
-            token = jwt.decode(assertion, resolve_key)
+            token = jwt.decode(assertion, resolve_key, algorithms=self.ALGORITHMS)
         except JoseError as e:
             log.debug("Assertion Error: %r", e)
             raise InvalidClientError(description=e.description) from e
@@ -176,3 +201,89 @@ class JWTBearerClientAssertion:
                 return KeySet.import_key_set(client.public_jwks)
         """
         raise NotImplementedError()
+
+
+class ClientSecretJWTAuthentication(JWTBearerClientAssertion):
+    """The ``client_secret_jwt`` client authentication method. The client
+    signs the JWT with its secret, using an HMAC algorithm.
+
+    Only clients registered with ``client_secret_jwt`` can use it::
+
+        class MyClientSecretJWTAuthentication(ClientSecretJWTAuthentication):
+            def get_audiences(self): ...
+
+            def validate_jti(self, claims, jti): ...
+
+            def resolve_client_secret(self, client):
+                return client.client_secret
+
+
+        authorization_server.register_client_auth_method(
+            MyClientSecretJWTAuthentication.CLIENT_AUTH_METHOD,
+            MyClientSecretJWTAuthentication(),
+        )
+    """
+
+    CLIENT_AUTH_METHOD = "client_secret_jwt"
+    ALGORITHMS = ["HS256", "HS384", "HS512"]
+
+    def resolve_client_secret(self, client) -> str | bytes:
+        """Return the secret of the client, in plain text. Developers MUST
+        implement this method::
+
+            def resolve_client_secret(self, client):
+                return client.client_secret
+
+        The server must be able to read the secret, so it cannot be stored as
+        a hash.
+        """
+        raise NotImplementedError()
+
+    def resolve_client_public_key(self, client):
+        """Return the secret of the client as an ``OctKey``."""
+        try:
+            return OctKey.import_key(self.resolve_client_secret(client))
+        except (TypeError, ValueError) as error:
+            raise InvalidClientError(
+                description="The client has no usable secret."
+            ) from error
+
+
+class PrivateKeyJWTAuthentication(JWTBearerClientAssertion):
+    """The ``private_key_jwt`` client authentication method. The client signs
+    the JWT with its private key, and the server verifies it with the public
+    key of the client.
+
+    Only clients registered with ``private_key_jwt`` can use it, and only with
+    asymmetric algorithms::
+
+        class MyPrivateKeyJWTAuthentication(PrivateKeyJWTAuthentication):
+            def get_audiences(self): ...
+
+            def validate_jti(self, claims, jti): ...
+
+            def resolve_client_public_key(self, client):
+                return KeySet.import_key_set(client.jwks)
+
+
+        authorization_server.register_client_auth_method(
+            MyPrivateKeyJWTAuthentication.CLIENT_AUTH_METHOD,
+            MyPrivateKeyJWTAuthentication(),
+        )
+    """
+
+    CLIENT_AUTH_METHOD = "private_key_jwt"
+    ALGORITHMS = [
+        "RS256",
+        "RS384",
+        "RS512",
+        "PS256",
+        "PS384",
+        "PS512",
+        "ES256",
+        "ES384",
+        "ES512",
+        "Ed25519",
+        "Ed448",
+        "EdDSA",
+    ]

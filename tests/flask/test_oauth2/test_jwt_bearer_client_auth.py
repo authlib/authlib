@@ -17,6 +17,10 @@ from tests.util import read_file_path
 
 secret_key = OctKey.import_key(HMAC_SECRET)
 
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:'JWTBearerClientAssertion' accepts both:authlib.deprecate.AuthlibDeprecationWarning"
+)
+
 
 @pytest.fixture(autouse=True)
 def server(server):
