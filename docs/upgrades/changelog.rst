@@ -8,6 +8,17 @@ Here you can see the full list of changes between each Authlib release.
 
 .. scriv-insert-here
 
+.. _changelog-1.9.10:
+
+Version 1.9.10 — 2026-11-19
+---------------------------
+
+Security
+~~~~~~~~
+
+- The client registration endpoint rejects a ``jwks`` that contains a private
+  key. A crafted RSA private key could use tens of seconds of CPU at import.
+
 .. _changelog-1.9.9:
 
 Version 1.9.9 — 2026-11-17
