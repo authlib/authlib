@@ -283,4 +283,5 @@ class OpenIDMixin:
 
         url = add_params_to_uri(end_session_endpoint, params)
         return {"url": url, "state": state}
-        
+
+
