@@ -7,6 +7,7 @@ from joserfc.jwk import KeySet
 from joserfc.jwk import RSAKey
 
 from authlib.deprecate import AuthlibDeprecationWarning
+from authlib.oauth2.rfc7591 import ClientMetadataClaims
 from authlib.oauth2.rfc7591 import (
     ClientRegistrationEndpoint as _ClientRegistrationEndpoint,
 )
@@ -246,6 +247,38 @@ def test_check_client_secret_without_secret(test_client):
     client_id = json.loads(rv.data)["client_id"]
     client = Client.query.filter_by(client_id=client_id).first()
     assert not client.check_client_secret("anything")
+
+
+def test_default_scope(test_client, app, server):
+    """Per RFC 7591 §2, the server may register a default set of scopes."""
+
+    class DefaultScopeClaims(ClientMetadataClaims):
+        def validate_scope(self):
+            self.setdefault("scope", "openid profile")
+            super().validate_scope()
+
+    class DefaultScopeRegistration(ClientRegistrationEndpoint):
+        ENDPOINT_NAME = "default_scope_registration"
+
+        def get_server_metadata(self):
+            return {}
+
+    server.register_endpoint(
+        DefaultScopeRegistration(claims_classes=[DefaultScopeClaims])
+    )
+
+    @app.route("/default_scope_create_client", methods=["POST"])
+    def default_scope_create_client():
+        return server.create_endpoint_response("default_scope_registration")
+
+    headers = {"Authorization": "bearer abc"}
+    rv = test_client.post(
+        "/default_scope_create_client", json={"client_name": "Authlib"}, headers=headers
+    )
+    resp = json.loads(rv.data)
+    assert resp["scope"] == "openid profile"
+    client = Client.query.filter_by(client_id=resp["client_id"]).first()
+    assert client.get_allowed_scope("openid email") == "openid"
 
 
 def test_software_statement(test_client):

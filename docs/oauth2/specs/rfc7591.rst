@@ -82,6 +82,25 @@ should be implemented:
             # can be a string, bytes, jwk and jwk set
             return request.user.public_jwk_set
 
+A client registered without ``scope`` has an empty scope with
+:class:`~authlib.integrations.sqla_oauth2.OAuth2ClientMixin`, so its
+authorization requests get no scope. With OpenID Connect, it never gets an ID
+token. Per :rfc:`7591#section-2`, the server MAY register a default set of
+scopes. Set it in a claims class:
+
+.. code-block:: python
+
+    from authlib.oauth2 import rfc7591
+
+    class DefaultScopeClaims(rfc7591.ClientMetadataClaims):
+        def validate_scope(self):
+            self.setdefault("scope", "openid profile")
+            super().validate_scope()
+
+    endpoint = MyClientRegistrationEndpoint(claims_classes=[DefaultScopeClaims])
+
+The registration response then contains the default scope.
+
 Register this endpoint and use this endpoint in routes:
 
 .. code-block:: python
