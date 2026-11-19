@@ -780,3 +780,53 @@ def test_oidc_claims_alone():
         "id_token_signed_response_alg": "RS256",
     }
     assert endpoint.needs_client_secret(metadata)
+
+
+@pytest.mark.parametrize(
+    "body,valid",
+    [
+        (
+            {
+                "subject_type": "pairwise",
+                "redirect_uris": ["https://a.test/cb", "https://b.test/cb"],
+            },
+            False,
+        ),
+        (
+            {
+                "subject_type": "pairwise",
+                "redirect_uris": ["https://a.test/cb", "https://b.test/cb"],
+                "sector_identifier_uri": "https://a.test/sector.json",
+            },
+            True,
+        ),
+        (
+            {
+                "subject_type": "pairwise",
+                "redirect_uris": ["https://a.test/cb", "https://a.test/other"],
+            },
+            True,
+        ),
+        (
+            {
+                "subject_type": "public",
+                "redirect_uris": ["https://a.test/cb", "https://b.test/cb"],
+            },
+            True,
+        ),
+    ],
+)
+def test_pairwise_redirect_uris_hosts(test_client, metadata, body, valid):
+    """Per OpenID Connect Core §8.1, a pairwise client with several hosts in its
+    redirect_uris must register a sector_identifier_uri."""
+    metadata["subject_types_supported"] = ["public", "pairwise"]
+    rv = test_client.post(
+        "/create_client",
+        json={"client_name": "Authlib", **body},
+        headers={"Authorization": "bearer abc"},
+    )
+    resp = json.loads(rv.data)
+    if valid:
+        assert rv.status_code == 201, resp
+    else:
+        assert resp["error"] == "invalid_client_metadata"

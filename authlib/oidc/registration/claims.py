@@ -1,4 +1,5 @@
 import math
+from urllib.parse import urlparse
 
 from joserfc.errors import InvalidClaimError
 
@@ -216,6 +217,15 @@ class ClientMetadataClaims(BaseClaims):
         The subject_types_supported discovery parameter contains a list of the supported
         subject_type values for the OP. Valid types include pairwise and public.
         """
+        if self.get("subject_type") != "pairwise" or self.get("sector_identifier_uri"):
+            return
+
+        # Per OpenID Connect Core §8.1, if there are multiple hostnames in the
+        # registered redirect_uris, the Client MUST register a
+        # sector_identifier_uri.
+        redirect_uris = self.get("redirect_uris") or []
+        if len({urlparse(uri).hostname for uri in redirect_uris}) > 1:
+            raise InvalidClaimError("sector_identifier_uri")
 
     def validate_id_token_signed_response_alg(self):
         """JWS alg algorithm [JWA] REQUIRED for signing the ID Token issued to this
