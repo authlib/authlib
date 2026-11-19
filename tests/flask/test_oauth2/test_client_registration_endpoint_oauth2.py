@@ -251,3 +251,18 @@ def test_validate_jwks(test_client):
     rv = test_client.post("/create_client", json=body, headers=headers)
     resp = json.loads(rv.data)
     assert "jwks" in resp["error_description"]
+
+
+def test_validate_jwks_private_key(test_client):
+    """A jwks that contains a private key is rejected."""
+    headers = {"Authorization": "bearer abc"}
+    private_key = RSAKey.generate_key(2048, private=True).as_dict(private=True)
+    for key in (
+        private_key,
+        {"kty": "RSA", "n": private_key["n"], "e": "AQAB", "d": private_key["d"]},
+    ):
+        body = {"client_name": "Authlib", "jwks": {"keys": [key]}}
+        rv = test_client.post("/create_client", json=body, headers=headers)
+        resp = json.loads(rv.data)
+        assert resp["error"] == "invalid_client_metadata"
+        assert "jwks" in resp["error_description"]

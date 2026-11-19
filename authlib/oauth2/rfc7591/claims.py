@@ -177,6 +177,13 @@ class ClientMetadataClaims(BaseClaims):
                 raise InvalidClaimError("jwks")
 
             jwks = self["jwks"]
+            # Per RFC 7591 §2, "jwks" contains the client's public keys.
+            keys = jwks.get("keys") if isinstance(jwks, dict) else None
+            if isinstance(keys, list) and any(
+                isinstance(key, dict) and "d" in key for key in keys
+            ):
+                raise InvalidClaimError("jwks")
+
             try:
                 KeySet.import_key_set(jwks)
             except (JoseError, ValueError) as exc:
