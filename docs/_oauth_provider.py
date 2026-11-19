@@ -19,7 +19,6 @@ from flask import jsonify
 from flask import request as flask_request
 from flask_sqlalchemy import SQLAlchemy
 from joserfc.jwk import KeySet
-from joserfc.jwk import OctKey
 from joserfc.jwk import RSAKey
 from requests.adapters import HTTPAdapter
 from requests.structures import CaseInsensitiveDict
@@ -46,7 +45,7 @@ from authlib.oauth1 import TokenCredentialMixin
 from authlib.oauth1.rfc5849.models import TemporaryCredential
 from authlib.oauth2 import AuthorizationSession
 from authlib.oauth2.rfc6749 import grants
-from authlib.oauth2.rfc7523 import JWTBearerClientAssertion
+from authlib.oauth2.rfc7523 import ClientSecretJWTAuthentication
 from authlib.oauth2.rfc7636 import CodeChallenge
 from authlib.oauth2.rfc7662 import IntrospectionEndpoint
 from authlib.oidc.core import UserInfo
@@ -343,17 +342,15 @@ class OAuthProvider(_Provider):
         class ClientCredentialsGrant(grants.ClientCredentialsGrant):
             TOKEN_ENDPOINT_AUTH_METHODS = _AUTH_METHODS
 
-        class ClientSecretJWTAuth(JWTBearerClientAssertion):
-            CLIENT_AUTH_METHOD = "client_secret_jwt"
-
+        class ClientSecretJWTAuth(ClientSecretJWTAuthentication):
             def get_audiences(self):
                 return [flask_request.base_url]
 
             def validate_jti(self, claims, jti):
                 return True
 
-            def resolve_client_public_key(self, client):
-                return OctKey.import_key(client.client_secret)
+            def resolve_client_secret(self, client):
+                return client.client_secret
 
         server.register_grant(ClientCredentialsGrant)
         server.register_client_auth_method(
