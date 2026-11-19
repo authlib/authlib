@@ -77,7 +77,8 @@ def test_rsa_private_key():
     assert base64_to_int(new_obj["qi"]) == base64_to_int(obj["qi"])
 
 
-def test_rsa_private_key2():
+def test_rsa_private_key_without_prime_factors():
+    """An RSA private key without p, q, dp, dq and qi is rejected."""
     rsa_obj = read_file_path("jwk_private.json")
     obj = {
         "kty": "RSA",
@@ -87,16 +88,8 @@ def test_rsa_private_key2():
         "d": rsa_obj["d"],
         "e": "AQAB",
     }
-    key = RSAKey.import_key(obj)
-    new_obj = key.as_dict(is_private=True)
-    assert base64_to_int(new_obj["n"]) == base64_to_int(obj["n"])
-    assert base64_to_int(new_obj["e"]) == base64_to_int(obj["e"])
-    assert base64_to_int(new_obj["d"]) == base64_to_int(obj["d"])
-    assert base64_to_int(new_obj["p"]) == base64_to_int(rsa_obj["p"])
-    assert base64_to_int(new_obj["q"]) == base64_to_int(rsa_obj["q"])
-    assert base64_to_int(new_obj["dp"]) == base64_to_int(rsa_obj["dp"])
-    assert base64_to_int(new_obj["dq"]) == base64_to_int(rsa_obj["dq"])
-    assert base64_to_int(new_obj["qi"]) == base64_to_int(rsa_obj["qi"])
+    with pytest.raises(ValueError, match="must include p, q, dp, dq and qi"):
+        RSAKey.import_key(obj)
 
 
 def test_invalid_rsa():
@@ -112,7 +105,7 @@ def test_invalid_rsa():
         "p": rsa_obj["p"],
         "e": "AQAB",
     }
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="must include p, q, dp, dq and qi"):
         RSAKey.import_key(obj)
 
 

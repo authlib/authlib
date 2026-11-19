@@ -4,10 +4,6 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKeyWithSeria
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateNumbers
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicKey
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPublicNumbers
-from cryptography.hazmat.primitives.asymmetric.rsa import rsa_crt_dmp1
-from cryptography.hazmat.primitives.asymmetric.rsa import rsa_crt_dmq1
-from cryptography.hazmat.primitives.asymmetric.rsa import rsa_crt_iqmp
-from cryptography.hazmat.primitives.asymmetric.rsa import rsa_recover_prime_factors
 
 from authlib.common.encoding import base64_to_int
 from authlib.common.encoding import int_to_base64
@@ -55,28 +51,15 @@ class RSAKey(AsymmetricKey):
             base64_to_int(obj["e"]), base64_to_int(obj["n"])
         )
 
-        if has_all_prime_factors(obj):
-            numbers = RSAPrivateNumbers(
-                d=base64_to_int(obj["d"]),
-                p=base64_to_int(obj["p"]),
-                q=base64_to_int(obj["q"]),
-                dmp1=base64_to_int(obj["dp"]),
-                dmq1=base64_to_int(obj["dq"]),
-                iqmp=base64_to_int(obj["qi"]),
-                public_numbers=public_numbers,
-            )
-        else:
-            d = base64_to_int(obj["d"])
-            p, q = rsa_recover_prime_factors(public_numbers.n, d, public_numbers.e)
-            numbers = RSAPrivateNumbers(
-                d=d,
-                p=p,
-                q=q,
-                dmp1=rsa_crt_dmp1(d, p),
-                dmq1=rsa_crt_dmq1(d, q),
-                iqmp=rsa_crt_iqmp(p, q),
-                public_numbers=public_numbers,
-            )
+        numbers = RSAPrivateNumbers(
+            d=base64_to_int(obj["d"]),
+            p=base64_to_int(obj["p"]),
+            q=base64_to_int(obj["q"]),
+            dmp1=base64_to_int(obj["dp"]),
+            dmq1=base64_to_int(obj["dq"]),
+            iqmp=base64_to_int(obj["qi"]),
+            public_numbers=public_numbers,
+        )
 
         return numbers.private_key(default_backend())
 
@@ -106,22 +89,14 @@ class RSAKey(AsymmetricKey):
         cls.check_required_fields(raw)
         key = cls(options=options)
         key._dict_data = raw
-        if "d" in raw and not has_all_prime_factors(raw):
-            # reload dict key
-            key.load_raw_key()
-            key.load_dict_key()
+        if "d" in raw:
+            _check_prime_factors(raw)
+
         return key
 
 
-def has_all_prime_factors(obj):
-    props = ["p", "q", "dp", "dq", "qi"]
-    props_found = [prop in obj for prop in props]
-    if all(props_found):
-        return True
-
-    if any(props_found):
-        raise ValueError(
-            "RSA key must include all parameters if any are present besides d"
-        )
-
-    return False
+def _check_prime_factors(obj):
+    """Raise ValueError when an RSA private key lacks a prime factor member."""
+    # Per RFC 7518 §6.3.2, producers SHOULD include the parameters other than "d".
+    if not all(prop in obj for prop in ("p", "q", "dp", "dq", "qi")):
+        raise ValueError("RSA private key must include p, q, dp, dq and qi")
