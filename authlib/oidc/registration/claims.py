@@ -6,6 +6,31 @@ from authlib.common.security import is_secure_transport
 from authlib.common.urls import is_valid_url
 from authlib.oauth2.claims import BaseClaims
 
+_SIGNING_ALG_CLAIMS = [
+    "id_token_signed_response_alg",
+    "userinfo_signed_response_alg",
+    "request_object_signing_alg",
+]
+
+_ENCRYPTION_ALG_CLAIMS = [
+    "id_token_encrypted_response_alg",
+    "userinfo_encrypted_response_alg",
+    "request_object_encryption_alg",
+]
+
+_SYMMETRIC_ENCRYPTION_ALGS = {
+    "dir",
+    "A128KW",
+    "A192KW",
+    "A256KW",
+    "A128GCMKW",
+    "A192GCMKW",
+    "A256GCMKW",
+    "PBES2-HS256+A128KW",
+    "PBES2-HS384+A192KW",
+    "PBES2-HS512+A256KW",
+}
+
 
 class ClientMetadataClaims(BaseClaims):
     REGISTERED_CLAIMS = [
@@ -77,6 +102,30 @@ class ClientMetadataClaims(BaseClaims):
         for uri in uris:
             if uri and not is_valid_url(uri):
                 raise InvalidClaimError(key)
+
+    @classmethod
+    def needs_client_secret(cls, client_metadata):
+        """Return ``True`` when a client uses a symmetric algorithm, whose key
+        comes from its ``client_secret``. Otherwise, return ``None`` to leave
+        the decision to the other claims classes.
+        """
+        # Per OpenID Connect Core §10.1, HMAC signatures use the client_secret
+        # as the key.
+        if any(
+            str(client_metadata.get(claim, "")).startswith("HS")
+            for claim in _SIGNING_ALG_CLAIMS
+        ):
+            return True
+
+        # Per OpenID Connect Core §10.2, symmetric encryption keys are derived
+        # from the client_secret.
+        if any(
+            client_metadata.get(claim) in _SYMMETRIC_ENCRYPTION_ALGS
+            for claim in _ENCRYPTION_ALG_CLAIMS
+        ):
+            return True
+
+        return None
 
     @classmethod
     def get_claims_options(cls, metadata):

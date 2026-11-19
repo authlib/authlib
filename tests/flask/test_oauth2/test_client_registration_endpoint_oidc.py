@@ -714,3 +714,69 @@ def test_null_response_types(test_client):
     }
     rv = test_client.post("/create_client", json=body, headers=headers)
     assert rv.status_code == 201
+
+
+def test_public_client_with_hmac_alg(test_client, metadata):
+    """Per OpenID Connect Core §10.1, a client that requests an HMAC algorithm
+    gets a secret, even without client authentication."""
+    metadata["id_token_signing_alg_values_supported"] = ["RS256", "HS256"]
+    body = {
+        "client_name": "Authlib",
+        "token_endpoint_auth_method": "none",
+        "id_token_signed_response_alg": "HS256",
+    }
+    rv = test_client.post(
+        "/create_client", json=body, headers={"Authorization": "bearer abc"}
+    )
+    resp = json.loads(rv.data)
+    assert rv.status_code == 201
+    assert resp["client_secret"]
+    assert resp["client_secret_expires_at"] == 0
+
+
+@pytest.mark.parametrize("alg", ["dir", "A128KW", "A256GCMKW", "PBES2-HS256+A128KW"])
+def test_public_client_with_symmetric_encryption(test_client, metadata, alg):
+    """Per OpenID Connect Core §10.2, a client that requests a symmetric
+    encryption algorithm gets a secret, even without client authentication."""
+    metadata["id_token_encryption_alg_values_supported"] = [alg]
+    body = {
+        "client_name": "Authlib",
+        "token_endpoint_auth_method": "none",
+        "id_token_encrypted_response_alg": alg,
+    }
+    rv = test_client.post(
+        "/create_client", json=body, headers={"Authorization": "bearer abc"}
+    )
+    resp = json.loads(rv.data)
+    assert rv.status_code == 201
+    assert resp["client_secret"]
+
+
+def test_public_client_with_asymmetric_alg(test_client, metadata):
+    """A client that uses neither a secret nor an HMAC algorithm gets no
+    secret."""
+    metadata["id_token_signing_alg_values_supported"] = ["RS256", "HS256"]
+    body = {
+        "client_name": "Authlib",
+        "token_endpoint_auth_method": "none",
+        "id_token_signed_response_alg": "RS256",
+        "id_token_encrypted_response_alg": "RSA-OAEP",
+    }
+    metadata["id_token_encryption_alg_values_supported"] = ["RSA-OAEP"]
+    rv = test_client.post(
+        "/create_client", json=body, headers={"Authorization": "bearer abc"}
+    )
+    resp = json.loads(rv.data)
+    assert rv.status_code == 201
+    assert "client_secret" not in resp
+
+
+def test_oidc_claims_alone():
+    """Without the RFC 7591 claims, a confidential client still gets a
+    secret: the OpenID Connect claims only ask for one."""
+    endpoint = ClientRegistrationEndpoint(claims_classes=[OIDCClientMetadataClaims])
+    metadata = {
+        "token_endpoint_auth_method": "client_secret_basic",
+        "id_token_signed_response_alg": "RS256",
+    }
+    assert endpoint.needs_client_secret(metadata)

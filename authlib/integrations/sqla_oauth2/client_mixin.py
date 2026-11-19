@@ -26,12 +26,18 @@ class OAuth2ClientMixin(ClientMixin):
         """Implementation for Client Info in OAuth 2.0 Dynamic Client
         Registration Protocol via :rfc:`7591#section-3.2.1`.
         """
-        return dict(
-            client_id=self.client_id,
-            client_secret=self.client_secret,
-            client_id_issued_at=self.client_id_issued_at,
-            client_secret_expires_at=self.client_secret_expires_at,
-        )
+        client_info = {
+            "client_id": self.client_id,
+            "client_id_issued_at": self.client_id_issued_at,
+        }
+        # Per RFC 7591 §3.2.1, client_secret_expires_at is only required if a
+        # client_secret is issued.
+        if not self.client_secret:
+            return client_info
+
+        client_info["client_secret"] = self.client_secret
+        client_info["client_secret_expires_at"] = self.client_secret_expires_at
+        return client_info
 
     @property
     def client_metadata(self):
@@ -136,6 +142,9 @@ class OAuth2ClientMixin(ClientMixin):
         return redirect_uri in self.redirect_uris
 
     def check_client_secret(self, client_secret):
+        if not self.client_secret:
+            return False
+
         return secrets.compare_digest(
             to_bytes(self.client_secret), to_bytes(client_secret)
         )

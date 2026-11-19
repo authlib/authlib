@@ -77,6 +77,9 @@ class ClientMixin:
 
 
             def check_client_secret(self, client_secret):
+                if not self.client_secret:
+                    return False
+
                 return secrets.compare_digest(
                     to_bytes(self.client_secret), to_bytes(client_secret)
                 )
