@@ -221,6 +221,49 @@ uses another algorithm and does not publish this metadata, set it when you
 register the client. For ``HS256``, also add the client secret as an ``oct``
 key in ``jwks``.
 
+Testing with a Mock Provider
+----------------------------
+
+To test a Flask sign-in flow outside production, register the same client with
+a mock provider in your development or test configuration. For example,
+`Mockatoo`_ provides a shared client and provider-shaped OAuth endpoints:
+
+.. code-block:: python
+
+    MOCKATOO = "https://app.mockatoo.globalunderdog.com"
+
+    oauth.register(
+        "google",
+        client_id="mockatoo",
+        client_secret="mockatoo-secret",
+        server_metadata_url=(
+            f"{MOCKATOO}/google/.well-known/openid-configuration"
+        ),
+        client_kwargs={"scope": "openid email profile"},
+    )
+
+For an OAuth 2 provider without discovery, register its endpoints instead:
+
+.. code-block:: python
+
+    oauth.register(
+        "github",
+        client_id="mockatoo",
+        client_secret="mockatoo-secret",
+        authorize_url=f"{MOCKATOO}/github/login/oauth/authorize",
+        access_token_url=f"{MOCKATOO}/github/login/oauth/access_token",
+        api_base_url=f"{MOCKATOO}/github/api/v3/",
+        client_kwargs={"scope": "read:user user:email"},
+    )
+
+Keep this registration behind your application's development or test switch.
+The callback route and ``authorize_access_token`` call remain unchanged. Sign in
+on the mock provider's page with a test account, click **Authorize**, then read
+the returned user information as usual. Do not use the mock client credentials
+in production.
+
+.. _Mockatoo: https://mockatoo.globalunderdog.com
+
 RP-Initiated Logout
 -------------------
 
