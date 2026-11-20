@@ -525,6 +525,18 @@ Fixed
   not the ``sub`` of the ID token returned by ``authorize_access_token``, per
   OpenID Connect Core §5.3.2. :issue:`1043`
 
+.. _changelog-1.9.10:
+
+Version 1.9.10 — 2026-11-19
+---------------------------
+
+Security
+~~~~~~~~
+
+- The client registration endpoint rejects a ``jwks`` that contains a private
+  key. A crafted RSA private key could use tens of seconds of CPU at import.
+  `GHSA-7wgf-r6fq-5h3c <https://github.com/authlib/authlib/security/advisories/GHSA-7wgf-r6fq-5h3c>`_
+
 .. _changelog-1.9.9:
 
 Version 1.9.9 — 2026-11-17

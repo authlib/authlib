@@ -200,12 +200,21 @@ class ClientMetadataClaims(BaseClaims):
             #  The "jwks_uri" and "jwks" parameters MUST NOT both  be present
             raise InvalidClaimError("jwks")
 
+        # Per RFC 7591 §2, jwks contains the public keys of the client.
+        # Per RFC 7518 §6.2.2.1 and §6.3.2.1, and RFC 8037 §2, asymmetric
+        # private keys have a "d" member.
+        jwks = self["jwks"]
+        keys = jwks.get("keys") if isinstance(jwks, dict) else None
+        if isinstance(keys, list) and any(
+            isinstance(key, dict) and "d" in key for key in keys
+        ):
+            raise InvalidClaimError("jwks")
+
         try:
-            key_set = KeySet.import_key_set(self["jwks"])
+            key_set = KeySet.import_key_set(jwks)
         except (JoseError, ValueError, KeyError, TypeError) as exc:
             raise InvalidClaimError("jwks") from exc
 
-        # Per RFC 7591 §2, jwks contains the public keys of the client.
         # Symmetric keys are private keys.
         if any(key.is_private for key in key_set):
             raise InvalidClaimError("jwks")

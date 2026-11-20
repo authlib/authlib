@@ -654,3 +654,18 @@ def test_software_statement_custom_audiences(test_client, server, metadata):
     body = {"software_statement": jwt.encode({"alg": "RS256"}, payload, key)}
     rv = test_client.post("/create_client", json=body, headers=headers)
     assert json.loads(rv.data)["error"] == "invalid_software_statement"
+
+
+def test_validate_jwks_private_key(test_client):
+    """A jwks that contains a private key is rejected."""
+    headers = {"Authorization": "bearer abc"}
+    private_key = RSAKey.generate_key(2048, private=True).as_dict(private=True)
+    for key in (
+        private_key,
+        {"kty": "RSA", "n": private_key["n"], "e": "AQAB", "d": private_key["d"]},
+    ):
+        body = {"client_name": "Authlib", "jwks": {"keys": [key]}}
+        rv = test_client.post("/create_client", json=body, headers=headers)
+        resp = json.loads(rv.data)
+        assert resp["error"] == "invalid_client_metadata"
+        assert "jwks" in resp["error_description"]
