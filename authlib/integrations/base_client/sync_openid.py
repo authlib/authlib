@@ -1,7 +1,7 @@
 import time
 
 from joserfc import jwt
-from joserfc.errors import InvalidKeyIdError
+from joserfc.errors import InvalidKeyIdError, JoseError
 from joserfc.jwk import KeySet
 from joserfc.jws import JWSRegistry
 
@@ -12,7 +12,7 @@ from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core import UserInfo
 
-from .errors import OAuthError
+from .errors import InvalidTokenError, OAuthError
 
 
 class _SignedUserInfo(JWTClaims):
@@ -239,9 +239,12 @@ class OpenIDMixin:
         claims_options = _get_claims_options(claims_options, metadata)
         alg_values = _get_id_token_algorithms(metadata)
 
-        token = self._decode_jwt(token["id_token"], metadata, alg_values)
-        claims = claims_cls(token.claims, token.header, claims_options, claims_params)
-        claims.validate(leeway=leeway)
+        try:
+            token = self._decode_jwt(token["id_token"], metadata, alg_values)
+            claims = claims_cls(token.claims, token.header, claims_options, claims_params)
+            claims.validate(leeway=leeway)
+        except JoseError as e:
+            raise InvalidTokenError(str(e)) from e
         return UserInfo(claims)
 
     def create_logout_url(
@@ -280,3 +283,5 @@ class OpenIDMixin:
 
         url = add_params_to_uri(end_session_endpoint, params)
         return {"url": url, "state": state}
+
+
