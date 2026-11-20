@@ -687,6 +687,14 @@ def test_client_secret_jwt2(token):
     assert token == token
 
 
+def test_unregistered_client_auth_method():
+    sess = OAuth2Session(
+        "id", HMAC_SECRET, token_endpoint_auth_method="client_secret_jwt"
+    )
+    with pytest.raises(ValueError, match="client_secret_jwt"):
+        sess.fetch_token("https://provider.test/token")
+
+
 def test_private_key_jwt(token):
     client_secret = read_key_file("rsa_private.pem")
     sess = OAuth2Session(
