@@ -1,3 +1,5 @@
+import time
+
 from ..rfc6749 import TokenMixin
 
 
@@ -15,6 +17,17 @@ class IntrospectionToken(dict, TokenMixin):
 
     def get_expires_at(self):
         return self.get("exp", 0)
+
+    def check_client(self, client):
+        return self.get("client_id") == client.get_client_id()
+
+    def is_expired(self):
+        # "exp" is optional, a token without it does not expire
+        exp = self.get("exp")
+        return exp is not None and exp < time.time()
+
+    def is_revoked(self):
+        return not self.get("active")
 
     def __getattr__(self, key):
         # https://tools.ietf.org/html/rfc7662#section-2.2

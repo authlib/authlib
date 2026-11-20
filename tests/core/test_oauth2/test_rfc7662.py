@@ -1,3 +1,5 @@
+import time
+
 import pytest
 
 from authlib.oauth2.rfc7662 import IntrospectionToken
@@ -59,3 +61,37 @@ def test_invalid_attr():
     token = IntrospectionToken()
     with pytest.raises(AttributeError):
         token.invalid  # noqa:B018
+
+
+def test_is_expired():
+    token = IntrospectionToken()
+    assert token.is_expired() is False
+
+    token = IntrospectionToken({"exp": time.time() + 3600})
+    assert token.is_expired() is False
+
+    token = IntrospectionToken({"exp": time.time() - 3600})
+    assert token.is_expired() is True
+
+
+def test_is_revoked():
+    token = IntrospectionToken({"active": True})
+    assert token.is_revoked() is False
+
+    token = IntrospectionToken({"active": False})
+    assert token.is_revoked() is True
+
+    token = IntrospectionToken()
+    assert token.is_revoked() is True
+
+
+def test_check_client():
+    class Client:
+        def get_client_id(self):
+            return "foo"
+
+    token = IntrospectionToken({"client_id": "foo"})
+    assert token.check_client(Client()) is True
+
+    token = IntrospectionToken({"client_id": "bar"})
+    assert token.check_client(Client()) is False
