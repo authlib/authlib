@@ -237,6 +237,18 @@ with ``token_endpoint_auth_method``:
 
     >>> client = OAuth2Session(token_endpoint_auth_method='client_secret_post')
 
+With ``client_secret_basic``, the client ID and secret are encoded with the
+``application/x-www-form-urlencoded`` algorithm before they are sent
+(:rfc:`RFC 6749 §2.3.1 <6749#section-2.3.1>`). For instance, a ``+`` becomes
+``%2B``. Some servers do not decode them, and refuse the secrets that contain
+such characters. Disable the encoding for these servers:
+
+.. code-block:: pycon
+
+    >>> client = OAuth2Session(client_id, client_secret, encode_client_credentials=False)
+
+The web clients take the same parameter in ``register``.
+
 If the authorization server requires other means of authentication, you can
 construct an ``auth`` for your own need, and pass it to ``fetch_token``:
 

@@ -1,3 +1,4 @@
+import base64
 import time
 from copy import deepcopy
 from unittest import mock
@@ -220,6 +221,36 @@ def test_token_auth_method_client_secret_post():
         "foo",
         "bar",
         token_endpoint_auth_method="client_secret_post",
+        transport=transport,
+    ) as client:
+        token = client.fetch_token(url, code="v")
+
+    assert token == default_token
+
+
+@pytest.mark.parametrize(
+    "encode_client_credentials,credentials",
+    [
+        (True, "demo%3Afoo:s%2B%2F%3D"),
+        (False, "demo:foo:s+/="),
+    ],
+    ids=["encoded", "not-encoded"],
+)
+def test_token_auth_method_client_secret_basic(encode_client_credentials, credentials):
+    """Per RFC 6749 §2.3.1, the credentials are encoded before they are
+    sent, unless the encoding is disabled.
+    """
+    url = "https://provider.test/token"
+    expected = "Basic " + base64.b64encode(credentials.encode()).decode()
+
+    def assert_func(request):
+        assert request.headers["Authorization"] == expected
+
+    transport = WSGITransport(MockDispatch(default_token, assert_func=assert_func))
+    with OAuth2Client(
+        "demo:foo",
+        "s+/=",
+        encode_client_credentials=encode_client_credentials,
         transport=transport,
     ) as client:
         token = client.fetch_token(url, code="v")

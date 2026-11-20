@@ -94,6 +94,9 @@ class OAuth2Client:
         ``audience``. They are also sent when a new token is fetched
         automatically, but not when a token is refreshed with a refresh token.
         The keyword arguments of ``fetch_token`` take precedence.
+    :param encode_client_credentials: Encode the client ID and secret before
+        they are sent with ``client_secret_basic``, as RFC 6749 §2.3.1
+        requires. Set it to ``False`` for a server that does not decode them.
     """
 
     client_auth_class = ClientAuth
@@ -119,6 +122,7 @@ class OAuth2Client:
         update_token=None,
         leeway=60,
         access_token_params=None,
+        encode_client_credentials=True,
         **metadata,
     ):
         self.session = session
@@ -141,6 +145,7 @@ class OAuth2Client:
                 revocation_endpoint_auth_method = "none"
 
         self.revocation_endpoint_auth_method = revocation_endpoint_auth_method
+        self.encode_client_credentials = encode_client_credentials
 
         self.scope = scope
         self.redirect_uri = redirect_uri
@@ -182,11 +187,13 @@ class OAuth2Client:
     def client_auth(self, auth_method):
         if isinstance(auth_method, str) and auth_method in self._auth_methods:
             auth_method = self._auth_methods[auth_method]
-        return self.client_auth_class(
+        auth = self.client_auth_class(
             client_id=self.client_id,
             client_secret=self.client_secret,
             auth_method=auth_method,
         )
+        auth.encode_client_credentials = self.encode_client_credentials
+        return auth
 
     @property
     def redirect_uri(self):

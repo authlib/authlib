@@ -1,3 +1,4 @@
+import base64
 import time
 from copy import deepcopy
 from unittest import mock
@@ -313,6 +314,39 @@ def test_token_auth_method_client_secret_post(token):
     sess.send = fake_send
     token = sess.fetch_token(url, code="v")
     assert token == token
+
+
+@pytest.mark.parametrize(
+    "encode_client_credentials,credentials",
+    [
+        (True, "demo%3Afoo:s%2B%2F%3D%25%20"),
+        (False, "demo:foo:s+/=% "),
+    ],
+    ids=["encoded", "not-encoded"],
+)
+def test_token_auth_method_client_secret_basic(
+    token, encode_client_credentials, credentials
+):
+    """Per RFC 6749 §2.3.1, the credentials are encoded before they are
+    sent, unless the encoding is disabled.
+    """
+    url = "https://provider.test/token"
+    expected = "Basic " + base64.b64encode(credentials.encode()).decode()
+
+    def fake_send(r, **kwargs):
+        assert r.headers["Authorization"] == expected
+        resp = mock.MagicMock()
+        resp.status_code = 200
+        resp.json = lambda: token
+        return resp
+
+    sess = OAuth2Session(
+        client_id="demo:foo",
+        client_secret="s+/=% ",
+        encode_client_credentials=encode_client_credentials,
+    )
+    sess.send = fake_send
+    assert sess.fetch_token(url, code="v") == token
 
 
 def test_access_token_response_hook(token):

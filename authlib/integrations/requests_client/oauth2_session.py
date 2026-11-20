@@ -57,6 +57,9 @@ class OAuth2Session(OAuth2Client, Session):
         revocation endpoint.
     :param revocation_endpoint_auth_method: client authentication method for
         revocation endpoint.
+    :param encode_client_credentials: Encode the client ID and secret before
+        they are sent with ``client_secret_basic``, as RFC 6749 §2.3.1
+        requires. Set it to ``False`` for a server that does not decode them.
     :param scope: Scope that you needed to access user resources.
     :param state: Shared secret to prevent CSRF attack.
     :param redirect_uri: Redirect URI you registered as callback.
