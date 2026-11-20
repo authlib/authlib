@@ -2,6 +2,7 @@ import time
 
 from joserfc import jwt
 from joserfc.errors import InvalidKeyIdError
+from joserfc.errors import JoseError
 from joserfc.jwk import KeySet
 from joserfc.jws import JWSRegistry
 
@@ -12,6 +13,7 @@ from authlib.oidc.core import CodeIDToken
 from authlib.oidc.core import ImplicitIDToken
 from authlib.oidc.core import UserInfo
 
+from .errors import InvalidIDTokenError
 from .errors import OAuthError
 
 
@@ -175,7 +177,7 @@ class OpenIDMixin:
         try:
             return jwt.decode(value, key=key_set, registry=registry)
         except InvalidKeyIdError:
-            if metadata.get("jwks_uri") and not _may_refresh_jwk_set(self):
+            if not metadata.get("jwks_uri") or not _may_refresh_jwk_set(self):
                 raise
 
         key_set = KeySet.import_key_set(self.fetch_jwk_set(force=True))
@@ -239,9 +241,15 @@ class OpenIDMixin:
         claims_options = _get_claims_options(claims_options, metadata)
         alg_values = _get_id_token_algorithms(metadata)
 
-        token = self._decode_jwt(token["id_token"], metadata, alg_values)
-        claims = claims_cls(token.claims, token.header, claims_options, claims_params)
-        claims.validate(leeway=leeway)
+        try:
+            token = self._decode_jwt(token["id_token"], metadata, alg_values)
+            claims = claims_cls(
+                token.claims, token.header, claims_options, claims_params
+            )
+            claims.validate(leeway=leeway)
+        except JoseError as error:
+            raise InvalidIDTokenError(error.error or None, error.description) from error
+
         return UserInfo(claims)
 
     def create_logout_url(

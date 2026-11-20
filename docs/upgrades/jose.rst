@@ -41,6 +41,10 @@ update it to catch the corresponding exceptions from ``joserfc`` instead.
      except JoseError:
          pass
 
+Since 1.10, the client integrations raise ``InvalidIDTokenError``, an
+``OAuthError``, when an ID token is invalid. They no longer raise ``joserfc``
+errors for ID tokens.
+
 JWTAuthenticationRequest
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
