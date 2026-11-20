@@ -1,0 +1,5 @@
+Added
+~~~~~
+
+- RFC 8693 Token Exchange on the server side, with ``TokenExchangeGrant``.
+  :issue:`821`

@@ -1,0 +1,134 @@
+.. _specs/rfc8693:
+
+RFC 8693: OAuth 2.0 Token Exchange
+==================================
+
+.. meta::
+    :description: API references on RFC 8693 OAuth 2.0 Token Exchange of
+        Python implementation, guide on how to create a server that exchanges
+        a security token for another one.
+
+This section contains the generic Python implementation of :rfc:`8693`.
+
+.. module:: authlib.oauth2.rfc8693
+
+
+How Token Exchange Works
+------------------------
+
+A client holds a token of a user, and needs another token for the same user,
+for example of another type or for another service.
+
+.. mermaid::
+
+    sequenceDiagram
+        autonumber
+        participant Client
+        box rgba(80, 120, 220, 0.12) TokenExchangeGrant
+            participant AS as Authorization Server
+        end
+        participant RS as Resource Server
+
+        Client->>AS: POST /token (token-exchange + subject_token)
+        AS-->>Client: 200 OK + issued token
+        Client->>RS: GET /api (bearer token)
+        RS-->>Client: 200 OK + resource
+
+1. The client authenticates and sends
+   ``grant_type=urn:ietf:params:oauth:grant-type:token-exchange``, its token
+   as ``subject_token`` and the type of the token as ``subject_token_type``.
+2. The authorization server returns the issued token and its
+   ``issued_token_type``. By default, it is an access token, without a refresh
+   token.
+3. The client calls the API with the issued token.
+4. The Resource Server returns the protected resource.
+
+The ``/token`` and ``/api`` paths are examples.
+
+
+Using TokenExchangeGrant
+------------------------
+
+Subclass :class:`TokenExchangeGrant`, implement the hooks, and register it
+with :meth:`~authlib.oauth2.rfc6749.AuthorizationServer.register_grant`:
+
+.. code-block:: python
+
+    from authlib.oauth2.rfc8693 import ACCESS_TOKEN_TYPE
+    from authlib.oauth2.rfc8693 import TokenExchangeGrant as _TokenExchangeGrant
+
+    class TokenExchangeGrant(_TokenExchangeGrant):
+        def authenticate_subject_token(self, subject_token, subject_token_type):
+            if subject_token_type != ACCESS_TOKEN_TYPE:
+                return None
+            token = Token.query.filter_by(access_token=subject_token).first()
+            if token and not token.is_expired() and not token.is_revoked():
+                return token
+
+        def authenticate_user(self, subject_token):
+            return subject_token.user
+
+        def check_permission(self, client, subject_token, actor_token, scopes):
+            return subject_token.client_id == client.get_client_id()
+
+    authorization_server.register_grant(TokenExchangeGrant)
+
+The client must have ``urn:ietf:params:oauth:grant-type:token-exchange`` in
+its ``grant_types``, and authenticate with ``client_secret_basic``, unless
+``TOKEN_ENDPOINT_AUTH_METHODS`` is changed.
+
+When the subject token is a :class:`~authlib.oauth2.rfc6749.TokenMixin`, the
+issued token gets its scope, and a requested scope must be within it.
+Otherwise :meth:`~TokenExchangeGrant.check_permission` decides on the
+requested scope.
+
+Per :rfc:`RFC 8693 §2.2.2 <8693#section-2.2.2>`, an invalid subject or actor
+token, or one that :meth:`~TokenExchangeGrant.check_permission` refuses,
+gets an ``invalid_request`` error.
+
+.. invisible-code-block: python
+
+    client = create_client(grant_types=[TokenExchangeGrant.GRANT_TYPE])
+    user = User(username="alice")
+    db.session.add(user)
+    db.session.commit()
+    token = create_token(client, user_id=user.id)
+    response = app.test_client().post(
+        "/test/token",
+        data={
+            "grant_type": TokenExchangeGrant.GRANT_TYPE,
+            "subject_token": token.access_token,
+            "subject_token_type": ACCESS_TOKEN_TYPE,
+        },
+        auth=("client-id", "client-secret"),
+    )
+    assert response.status_code == 200, response.json
+    assert response.json["issued_token_type"] == ACCESS_TOKEN_TYPE
+    assert response.json["scope"] == "profile"
+
+Actor Tokens
+~~~~~~~~~~~~
+
+Implement :meth:`TokenExchangeGrant.authenticate_actor_token` to accept an
+``actor_token``. :meth:`~TokenExchangeGrant.check_permission` receives it, or
+``None``. By default, a request with an actor token is rejected, and the
+issued access token does not name the actor.
+
+Issued Tokens
+~~~~~~~~~~~~~
+
+The default :meth:`~TokenExchangeGrant.issue_token` rejects a ``resource`` or
+an ``audience`` with ``invalid_target``, and gives the issued access token the
+lifetime of the token generator. Override it to issue a token for a target,
+another type of token, or a token that does not outlive the subject token.
+A token that is not an access token has the ``"N_A"`` token type.
+
+
+API Reference
+-------------
+
+.. autoclass:: TokenExchangeGrant
+    :member-order: bysource
+    :members:
+
+.. autoclass:: InvalidTargetError
