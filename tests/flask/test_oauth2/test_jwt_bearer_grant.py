@@ -421,3 +421,67 @@ def test_jwt_bearer_token_generator_deprecated():
         JWTBearerTokenGenerator(
             KeySet.import_key_set(read_file_path("jwks_private.json"))
         )
+
+
+@pytest.mark.filterwarnings(
+    "ignore:'authlib.oauth2.rfc7523.JWTBearerTokenGenerator' is deprecated"
+)
+@pytest.mark.parametrize("use_jwt_generator", [False, True])
+def test_scope_resolved_once(
+    test_client, server, client, monkeypatch, use_jwt_generator
+):
+    """JWTBearerGrant resolves scope once without re-resolving in the token
+    generator."""
+    if use_jwt_generator:
+        private_key = KeySet.import_key_set(read_file_path("jwks_private.json"))
+        server.register_token_generator(
+            JWTBearerGrant.GRANT_TYPE,
+            JWTBearerTokenGenerator(private_key),
+        )
+
+    calls = []
+
+    def get_allowed_scope(scope):
+        calls.append(scope)
+        if not scope:
+            return "openid profile"
+        return "" if scope == "disallowed" else scope
+
+    monkeypatch.setattr(client, "get_allowed_scope", get_allowed_scope)
+
+    assertion = JWTBearerGrant.sign(
+        foo_key,
+        issuer="client-id",
+        audience="https://provider.test/token",
+        subject=None,
+        header={"alg": "HS256", "kid": "1"},
+    )
+
+    rv = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": JWTBearerGrant.GRANT_TYPE,
+            "assertion": assertion,
+            "scope": "disallowed",
+        },
+    )
+    resp = json.loads(rv.data)
+    assert "access_token" in resp
+    assert "scope" not in resp
+    assert calls == ["disallowed"]
+
+    calls.clear()
+    rv = test_client.post(
+        "/oauth/token",
+        data={"grant_type": JWTBearerGrant.GRANT_TYPE, "assertion": assertion},
+    )
+    resp = json.loads(rv.data)
+    assert resp["scope"] == "openid profile"
+    assert calls == [None]
+
+    monkeypatch.setattr(client, "get_allowed_scope", lambda scope: None)
+    rv = test_client.post(
+        "/oauth/token",
+        data={"grant_type": JWTBearerGrant.GRANT_TYPE, "assertion": assertion},
+    )
+    assert json.loads(rv.data)["error"] == "invalid_scope"

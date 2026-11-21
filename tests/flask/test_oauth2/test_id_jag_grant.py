@@ -557,6 +557,70 @@ def test_requested_scope_without_scope_claim(test_client, read_write_client):
     assert response.json["scope"] == "read write"
 
 
+@pytest.mark.parametrize("claim_scope", ["", "   "])
+def test_empty_scope_claim_not_expanded_to_default(
+    test_client, read_write_client, monkeypatch, claim_scope
+):
+    """An empty or whitespace-only scope claim must not be expanded to the
+    client's default scope."""
+    calls = []
+
+    def get_allowed_scope(scope):
+        calls.append(scope)
+        if not scope or not scope.strip():
+            return "openid profile"
+        return scope
+
+    monkeypatch.setattr(read_write_client, "get_allowed_scope", get_allowed_scope)
+
+    response = _request_token(test_client, _sign(claims={"scope": claim_scope}))
+    assert response.status_code == 200
+    assert "scope" not in response.json
+    assert calls == []
+
+
+def test_disallowed_scope_claim_resolved_once(
+    test_client, read_write_client, monkeypatch
+):
+    """When the claim scope is not allowed for the client, it resolves once to
+    empty and is not expanded to the default scope."""
+    calls = []
+
+    def get_allowed_scope(scope):
+        calls.append(scope)
+        if not scope:
+            return "openid profile"
+        return ""
+
+    monkeypatch.setattr(read_write_client, "get_allowed_scope", get_allowed_scope)
+
+    response = _request_token(test_client, _sign(claims={"scope": "admin"}))
+    assert response.status_code == 200
+    assert "scope" not in response.json
+    assert calls == ["admin"]
+
+
+def test_without_scope_claim_filters_to_client_allowed_scope(
+    test_client, server, read_write_client
+):
+    """Without a scope claim, the requested scope is filtered by
+    client.get_allowed_scope() before check_id_jag_permission()."""
+    received = []
+
+    class RecordingGrant(IDJAGGrant):
+        def check_id_jag_permission(self, client, user, scopes, claims):
+            received.append(scopes)
+            return True
+
+    server._token_grants.clear()
+    server.register_grant(RecordingGrant)
+
+    response = _request_token(test_client, _sign(), "read admin")
+    assert response.status_code == 200
+    assert response.json["scope"] == "read"
+    assert received == [["read"]]
+
+
 @pytest.mark.parametrize("claim", [["read"], 42, None])
 def test_invalid_scope_claim_type(test_client, read_write_client, claim):
     """A scope claim that is not a string is rejected."""

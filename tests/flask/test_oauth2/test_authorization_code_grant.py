@@ -515,6 +515,41 @@ def test_missing_scope_rejected(test_client, client, monkeypatch):
     assert "error=invalid_scope" in rv.location
 
 
+def test_scope_resolved_once_with_empty_default(test_client, client, monkeypatch):
+    """When get_allowed_scope() returns a default scope for an empty value,
+    an authorization that resolves to an empty scope must not gain the default
+    scope at the token endpoint."""
+    calls = []
+
+    def get_allowed_scope(scope):
+        calls.append(scope)
+        if not scope:
+            return "openid profile"
+        return "" if scope == "disallowed" else scope
+
+    monkeypatch.setattr(client, "get_allowed_scope", get_allowed_scope)
+
+    rv = test_client.post(authorize_url + "&scope=disallowed", data={"user_id": "1"})
+    assert "code=" in rv.location
+    assert "" not in calls
+    calls.clear()
+
+    params = dict(url_decode(urlparse.urlparse(rv.location).query))
+    headers = create_basic_header("client-id", "client-secret")
+    rv = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "authorization_code",
+            "code": params["code"],
+        },
+        headers=headers,
+    )
+    resp = json.loads(rv.data)
+    assert "access_token" in resp
+    assert "scope" not in resp
+    assert calls == []
+
+
 def test_create_authorization_response_requires_grant(server):
     """The authorization response needs the grant of the consent page."""
     with pytest.raises(TypeError, match="get_consent_grant"):

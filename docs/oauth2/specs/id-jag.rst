@@ -205,9 +205,9 @@ the claim is present:
   that is not in the claim is rejected with ``invalid_scope``.
 * A ``scope`` claim that is not a string is rejected with ``invalid_grant``.
 
-Without a ``scope`` claim, the requested scope is used.
-``check_id_jag_permission()`` receives the resulting scopes. The token
-generator still limits them to the scopes allowed for the client.
+Without a ``scope`` claim, the requested scope is used. The grant limits
+the resulting scopes to those allowed for the client before calling
+``check_id_jag_permission()``.
 
 Key Binding
 ~~~~~~~~~~~

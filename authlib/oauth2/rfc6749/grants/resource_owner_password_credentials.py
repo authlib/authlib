@@ -108,6 +108,7 @@ class ResourceOwnerPasswordCredentialsGrant(BaseGrant, TokenEndpointMixin):
         self.request.client = client
         self.request.user = user
         self.validate_requested_scope()
+        self.request.scope = self.resolve_scope(self.request.payload.scope)
 
     def create_token_response(self):
         """If the access token request is valid and authorized, the
@@ -136,7 +137,7 @@ class ResourceOwnerPasswordCredentialsGrant(BaseGrant, TokenEndpointMixin):
         :returns: an :class:`~authlib.oauth2.rfc6749.OAuth2Response`
         """
         user = self.request.user
-        scope = self.request.payload.scope
+        scope = self.request.scope
         token = self.generate_token(user=user, scope=scope)
         log.debug("Issue token %r to %r", token, self.client)
         self.save_token(token)
