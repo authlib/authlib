@@ -227,6 +227,7 @@ class JWTAuthenticationRequest:
         ):
             # Algorithm customization must not weaken the signature requirement.
             algorithms = [algorithm for algorithm in algorithms if algorithm != "none"]
+        algorithms = self._restrict_signing_algorithms(client, algorithms)
 
         try:
             if not algorithms:
@@ -278,6 +279,13 @@ class JWTAuthenticationRequest:
             )
 
         return request_object
+
+    def _restrict_signing_algorithms(
+        self, client: ClientMixin, algorithms: list[str]
+    ) -> list[str]:
+        """Narrow the accepted signing algorithms for this client. Extensions
+        for other specifications can override it to add their own rules."""
+        return algorithms
 
     def validate_request_uri(self, request_uri: str, client: ClientMixin) -> bool:
         """Return whether ``request_uri`` may be retrieved for this client.
