@@ -106,6 +106,21 @@ checked before the custom validation policy, so an override cannot bypass a
 provider's registration requirement. Inline ``request`` objects do not require
 URI registration.
 
+Per OpenID Connect Core §6.3.2, a request object must be signed with the
+``request_object_signing_alg`` that the client registered. Implement
+``get_client_request_object_signing_alg(client)`` to enforce it. Other
+algorithms, including ``none``, are then rejected with ``invalid_request_object``.
+The registered algorithm must still be accepted by
+``get_request_object_signing_algorithms()``, and ``none`` is still rejected when
+a signature is required. Clients that did not register an algorithm, for which
+the method returns ``None``, can use any algorithm the server accepts:
+
+.. code-block:: python
+
+    class MyAuthenticationRequest(OpenIDJWTAuthenticationRequest):
+        def get_client_request_object_signing_alg(self, client):
+            return client.request_object_signing_alg
+
 Without this extension, an OpenID request with a ``request`` or
 ``request_uri`` parameter is rejected with ``request_not_supported`` or
 ``request_uri_not_supported``. Per OpenID Connect Discovery §3,

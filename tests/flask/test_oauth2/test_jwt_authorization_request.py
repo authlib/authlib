@@ -1096,3 +1096,114 @@ def test_callable_public_key(test_client, server):
     )
     rv = test_client.get(url)
     assert rv.data == b"login"
+
+
+def _signed_or_unsigned_request(test_client, alg):
+    payload = {"response_type": "code", "client_id": "client-id"}
+    if alg == "none":
+        request_obj = jwt.encode({"alg": "none"}, payload, None, algorithms=["none"])
+    elif alg == "RS256":
+        request_obj = jwt.encode(
+            {"alg": alg}, payload, jwk.import_key(read_file_path("jwk_private.json"))
+        )
+    else:
+        request_obj = jwt.encode(
+            {"alg": alg}, payload, jwk.import_key(HMAC_SECRET, "oct"), algorithms=[alg]
+        )
+    return test_client.get(
+        add_params_to_uri(
+            authorize_url, {"client_id": "client-id", "request": request_obj}
+        )
+    )
+
+
+class _RegisteredAlgExtension(_OpenIDSecretExtension):
+    registered_alg = None
+
+    def get_client_request_object_signing_alg(self, client):
+        return self.registered_alg
+
+
+def _register_registered_alg_extension(server, registered_alg, metadata=None):
+    class Extension(_RegisteredAlgExtension):
+        pass
+
+    Extension.registered_alg = registered_alg
+    return register_request_object_extension(
+        server, metadata=metadata, extension_cls=Extension
+    )
+
+
+@ignore_alg_none_warning
+@pytest.mark.parametrize("alg", ["none", "RS256", "HS256"])
+def test_oidc_request_object_without_registered_alg(test_client, server, alg):
+    """Without a registered alg, any algorithm accepted by the server works."""
+    _register_registered_alg_extension(server, None)
+    assert _signed_or_unsigned_request(test_client, alg).data == b"login"
+
+
+@ignore_alg_none_warning
+def test_oidc_request_object_default_hook(test_client, server):
+    """The default hook does not restrict the algorithms."""
+    register_request_object_extension(server, extension_cls=_OpenIDSecretExtension)
+    assert _signed_or_unsigned_request(test_client, "none").data == b"login"
+    assert _signed_or_unsigned_request(test_client, "RS256").data == b"login"
+
+
+def test_oidc_request_object_matching_registered_alg(test_client, server):
+    _register_registered_alg_extension(server, "RS256")
+    assert _signed_or_unsigned_request(test_client, "RS256").data == b"login"
+
+
+@ignore_alg_none_warning
+@pytest.mark.parametrize("alg", ["none", "HS256"])
+def test_oidc_request_object_mismatching_registered_alg(test_client, server, alg):
+    """A request object signed with another alg than the registered one,
+    including an unsigned one, is rejected."""
+    _register_registered_alg_extension(server, "RS256")
+    rv = _signed_or_unsigned_request(test_client, alg)
+    assert rv.status_code == 400
+    assert rv.json["error"] == "invalid_request_object"
+    assert rv.json["error_description"] == (
+        "The 'alg' of the request object is not accepted."
+    )
+
+
+@ignore_alg_none_warning
+def test_oidc_request_object_registered_alg_none(test_client, server):
+    """A client that registered the none alg can only send unsigned objects."""
+    _register_registered_alg_extension(server, "none")
+    assert _signed_or_unsigned_request(test_client, "none").data == b"login"
+    rv = _signed_or_unsigned_request(test_client, "RS256")
+    assert rv.json["error"] == "invalid_request_object"
+
+
+@ignore_alg_none_warning
+def test_oidc_request_object_registered_alg_none_when_signature_required(
+    test_client, server
+):
+    """Registering none does not bypass a signature requirement."""
+    _register_registered_alg_extension(
+        server, "none", metadata={"require_signed_request_object": True}
+    )
+    rv = _signed_or_unsigned_request(test_client, "none")
+    assert rv.json["error"] == "invalid_request_object"
+
+
+def test_oidc_request_object_registered_alg_not_supported_by_server(
+    test_client, server
+):
+    """The registered alg cannot widen the algorithms of the server."""
+    _register_registered_alg_extension(
+        server,
+        "RS256",
+        metadata={"request_object_signing_alg_values_supported": ["ES256"]},
+    )
+    rv = _signed_or_unsigned_request(test_client, "RS256")
+    assert rv.json["error"] == "invalid_request_object"
+
+
+def test_jar_ignores_registered_alg(test_client, server):
+    """The generic JAR extension has no OpenID registered alg."""
+    register_request_object_extension(server)
+    assert _signed_or_unsigned_request(test_client, "RS256").data == b"login"
