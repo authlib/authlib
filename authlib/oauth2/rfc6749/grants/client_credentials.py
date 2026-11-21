@@ -74,6 +74,7 @@ class ClientCredentialsGrant(BaseGrant, TokenEndpointMixin):
 
         self.request.client = client
         self.validate_requested_scope()
+        self.request.scope = self.resolve_scope(self.request.payload.scope)
 
     def create_token_response(self):
         """If the access token request is valid and authorized, the
@@ -101,7 +102,7 @@ class ClientCredentialsGrant(BaseGrant, TokenEndpointMixin):
         :returns: an :class:`~authlib.oauth2.rfc6749.OAuth2Response`
         """
         token = self.generate_token(
-            scope=self.request.payload.scope, include_refresh_token=False
+            scope=self.request.scope, include_refresh_token=False
         )
         log.debug("Issue token %r to %r", token, self.client)
         self.save_token(token)

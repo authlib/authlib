@@ -259,6 +259,7 @@ def test_pure_code_flow(test_client, server):
     resp = json.loads(rv.data)
     assert "access_token" in resp
     assert "id_token" not in resp
+    assert "openid" not in resp.get("scope", "").split()
 
 
 @pytest.mark.parametrize(
@@ -299,6 +300,7 @@ def test_default_openid_scope(
     resp = json.loads(rv.data)
     assert "access_token" in resp
     assert "id_token" not in resp
+    assert "openid" not in resp.get("scope", "").split()
 
 
 def test_require_nonce(test_client, server):

@@ -258,6 +258,30 @@ def test_missing_scope_rejected(test_client, client, monkeypatch):
     assert resp["error"] == "invalid_scope"
 
 
+def test_scope_resolved_once_with_empty_default(test_client, client, monkeypatch):
+    """Client credentials grant resolves scope once via get_allowed_scope()."""
+    calls = []
+
+    def get_allowed_scope(scope):
+        calls.append(scope)
+        if not scope:
+            return "openid profile"
+        return "" if scope == "disallowed" else scope
+
+    monkeypatch.setattr(client, "get_allowed_scope", get_allowed_scope)
+    headers = create_basic_header("client-id", "client-secret")
+
+    rv = test_client.post(
+        "/oauth/token",
+        data={"grant_type": "client_credentials", "scope": "disallowed"},
+        headers=headers,
+    )
+    resp = json.loads(rv.data)
+    assert "access_token" in resp
+    assert "scope" not in resp
+    assert calls == ["disallowed"]
+
+
 def test_insecure_transport(test_client, monkeypatch):
     with monkeypatch.context() as m:
         m.delenv("AUTHLIB_INSECURE_TRANSPORT")

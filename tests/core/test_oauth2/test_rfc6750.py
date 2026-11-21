@@ -262,3 +262,33 @@ def test_no_access_token_generator():
     """A generator without access token generator can be created."""
     generator = BearerTokenGenerator(None)
     assert generator.access_token_generator is None
+
+
+def test_generator_does_not_resolve_scope():
+    """BearerTokenGenerator uses the already-resolved scope without calling
+    client.get_allowed_scope()."""
+
+    class StrictClient:
+        def get_allowed_scope(self, scope):
+            raise AssertionError("get_allowed_scope should not be called")
+
+    received = []
+
+    def access_token_generator(client, grant_type, user, scope, expires_in, request):
+        received.append(scope)
+        return "token"
+
+    generator = BearerTokenGenerator(access_token_generator)
+    token = generator.generate("authorization_code", StrictClient(), scope="")
+    assert received == [""]
+    assert "scope" not in token
+
+    token = generator.generate("authorization_code", StrictClient(), scope="profile")
+    assert received == ["", "profile"]
+    assert token["scope"] == "profile"
+
+
+def test_get_allowed_scope_deprecated():
+    """BearerTokenGenerator.get_allowed_scope is deprecated."""
+    with pytest.warns(AuthlibDeprecationWarning, match="get_allowed_scope"):
+        assert BearerTokenGenerator.get_allowed_scope(ScopeClient(), "read") == "read"

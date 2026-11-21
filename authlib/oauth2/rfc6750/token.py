@@ -1,4 +1,5 @@
 from authlib.deprecate import call_with_accepted_arguments
+from authlib.deprecate import deprecate
 from authlib.deprecate import deprecate_missing_arguments
 
 from ..rfc6749.errors import InvalidScopeError
@@ -77,15 +78,20 @@ class BearerTokenGenerator:
     def get_allowed_scope(client, scope):
         """Get the allowed scope for token generation.
 
-        Per RFC 6749 Section 3.3, if the client omits the scope parameter,
-        the authorization server MUST either process the request using a
-        pre-defined default value or fail the request indicating an invalid scope.
+        .. deprecated:: 1.10
+            Grants resolve the scope with ``client.get_allowed_scope()``
+            before calling the token generator.
 
         :param client: the client making the request
         :param scope: the requested scope (may be None if omitted)
         :return: the allowed scope string
         :raises InvalidScopeError: if client.get_allowed_scope returns None
         """
+        deprecate(
+            "'BearerTokenGenerator.get_allowed_scope' is deprecated. "
+            "Grants resolve the scope before calling the token generator.",
+            version="1.11",
+        )
         scope = client.get_allowed_scope(scope)
         if scope is None:
             raise InvalidScopeError()
@@ -107,12 +113,11 @@ class BearerTokenGenerator:
         :param grant_type: current requested grant_type.
         :param user: current authorized user.
         :param expires_in: if provided, use this value as expires_in.
-        :param scope: current requested scope.
+        :param scope: granted scope, already resolved by the grant.
         :param include_refresh_token: should refresh_token be included.
         :param request: the current request.
         :return: Token dict
         """
-        scope = self.get_allowed_scope(client, scope)
         if expires_in is None:
             expires_in = self._get_expires_in(client, grant_type)
 

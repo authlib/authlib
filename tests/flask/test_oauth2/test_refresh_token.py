@@ -260,3 +260,35 @@ def test_token_generator(test_client, token, app, server):
     resp = json.loads(rv.data)
     assert "access_token" in resp
     assert "c-refresh_token.1." in resp["access_token"]
+
+
+def test_refresh_empty_scope_not_re_resolved(test_client, client, token, monkeypatch):
+    """Refreshing a token with an empty scope must not call get_allowed_scope()
+    again and expand it to the client's default scope."""
+    token.scope = ""
+    db.session.add(token)
+    db.session.commit()
+
+    calls = []
+
+    def get_allowed_scope(scope):
+        calls.append(scope)
+        if not scope:
+            return "openid profile"
+        return scope
+
+    monkeypatch.setattr(client, "get_allowed_scope", get_allowed_scope)
+
+    headers = create_basic_header("client-id", "client-secret")
+    rv = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": "r1",
+        },
+        headers=headers,
+    )
+    resp = json.loads(rv.data)
+    assert "access_token" in resp
+    assert "scope" not in resp
+    assert calls == []

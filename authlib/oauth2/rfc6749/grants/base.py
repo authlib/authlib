@@ -125,6 +125,18 @@ class BaseGrant(Hookable):
         scope = self.request.payload.scope
         return self.server.validate_requested_scope(scope)
 
+    def resolve_scope(self, scope):
+        """Resolve ``scope`` with ``client.get_allowed_scope()``.
+
+        Per :rfc:`6749#section-3.3`, when ``client.get_allowed_scope()``
+        returns ``None``, the request is rejected with
+        :class:`InvalidScopeError`.
+        """
+        allowed = self.request.client.get_allowed_scope(scope)
+        if allowed is None:
+            raise InvalidScopeError()
+        return allowed
+
 
 class TokenEndpointMixin(Hookable):
     #: Allowed HTTP methods of this token endpoint
@@ -256,10 +268,7 @@ class AuthorizationEndpointMixin(Hookable):
     def validate_authorization_request_payload(self, redirect_uri):
         """Validate the requested scope of an authorization request."""
         self.validate_requested_scope()
-        scope = self.request.client.get_allowed_scope(self.request.payload.scope)
-        if scope is None:
-            raise InvalidScopeError()
-        self.request.scope = scope
+        self.request.scope = self.resolve_scope(self.request.payload.scope)
 
     def validate_consent_request(self):
         redirect_uri = self.validate_authorization_request()

@@ -3,6 +3,7 @@ import string
 from authlib.common.security import generate_token
 from authlib.common.urls import add_params_to_uri
 
+from ..rfc6749 import InvalidScopeError
 from ..rfc6749 import JsonResponse
 
 
@@ -100,6 +101,10 @@ class DeviceAuthorizationEndpoint:
 
         self.authenticate_client(request)
         self.server.validate_requested_scope(request.payload.scope)
+        scope = request.client.get_allowed_scope(request.payload.scope)
+        if scope is None:
+            raise InvalidScopeError()
+        request.scope = scope
 
         device_code = self.generate_device_code()
         user_code = self.generate_user_code()
@@ -117,9 +122,7 @@ class DeviceAuthorizationEndpoint:
             "interval": self.INTERVAL,
         }
 
-        self.save_device_credential(
-            request.client.get_client_id(), request.payload.scope, data
-        )
+        self.save_device_credential(request.client.get_client_id(), scope, data)
         return JsonResponse(data)
 
     def generate_user_code(self):

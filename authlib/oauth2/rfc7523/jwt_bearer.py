@@ -167,6 +167,7 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
 
         self.request.client = client
         self.validate_requested_scope()
+        self.request.scope = self.resolve_scope(self.request.payload.scope)
 
         subject = claims.get("sub")
         if subject:
@@ -186,7 +187,7 @@ class JWTBearerGrant(BaseGrant, TokenEndpointMixin):
         token.
         """
         token = self.generate_token(
-            scope=self.request.payload.scope,
+            scope=self.request.scope,
             user=self.request.user,
             include_refresh_token=False,
         )

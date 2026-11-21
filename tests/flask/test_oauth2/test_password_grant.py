@@ -250,3 +250,54 @@ def test_id_token_extension(test_client, server):
     resp = json.loads(rv.data)
     assert "access_token" in resp
     assert "id_token" in resp
+
+
+def test_scope_resolved_once(test_client, server, client, monkeypatch):
+    """Password grant resolves scope once via get_allowed_scope()."""
+    register_password_grant(server)
+    calls = []
+
+    def get_allowed_scope(scope):
+        calls.append(scope)
+        if not scope:
+            return "openid profile"
+        return "" if scope == "disallowed" else scope
+
+    monkeypatch.setattr(client, "get_allowed_scope", get_allowed_scope)
+    headers = create_basic_header("client-id", "client-secret")
+
+    # Omitted scope gets the default scope
+    rv = test_client.post(
+        "/oauth/token",
+        data={"grant_type": "password", "username": "foo", "password": "ok"},
+        headers=headers,
+    )
+    resp = json.loads(rv.data)
+    assert resp["scope"] == "openid profile"
+    assert calls == [None]
+
+    # Disallowed scope resolves once to "" and is not expanded back to default
+    calls.clear()
+    rv = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": "password",
+            "username": "foo",
+            "password": "ok",
+            "scope": "disallowed",
+        },
+        headers=headers,
+    )
+    resp = json.loads(rv.data)
+    assert "access_token" in resp
+    assert "scope" not in resp
+    assert calls == ["disallowed"]
+
+    # Returning None rejects with invalid_scope
+    monkeypatch.setattr(client, "get_allowed_scope", lambda scope: None)
+    rv = test_client.post(
+        "/oauth/token",
+        data={"grant_type": "password", "username": "foo", "password": "ok"},
+        headers=headers,
+    )
+    assert json.loads(rv.data)["error"] == "invalid_scope"

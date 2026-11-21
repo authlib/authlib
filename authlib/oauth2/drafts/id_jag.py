@@ -291,22 +291,26 @@ class IDJAGGrant(BaseGrant, TokenEndpointMixin):
         """
         requested = self.request.payload.scope
         if "scope" not in claims:
-            return requested
+            return self.resolve_scope(requested)
 
         granted = claims["scope"]
         if not isinstance(granted, str):
             raise InvalidGrantError(description="Invalid 'scope' claim in assertion")
 
         if not requested:
-            return granted
+            scope = granted
+        else:
+            # RFC 7521 §4.1: "the requested scope MUST be equal to or less than
+            # the scope originally granted to the authorized accessor."
+            if not set(scope_to_list(requested)).issubset(scope_to_list(granted)):
+                raise InvalidScopeError(
+                    description="The requested scope exceeds the 'scope' claim in assertion"
+                )
+            scope = requested
 
-        # RFC 7521 §4.1: "the requested scope MUST be equal to or less than
-        # the scope originally granted to the authorized accessor."
-        if not set(scope_to_list(requested)).issubset(scope_to_list(granted)):
-            raise InvalidScopeError(
-                description="The requested scope exceeds the 'scope' claim in assertion"
-            )
-        return requested
+        if not scope_to_list(scope):
+            return ""
+        return self.resolve_scope(scope)
 
     def _extract_assertion(self, assertion: str):
         try:

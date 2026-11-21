@@ -1,7 +1,6 @@
 import logging
 
 from ..errors import AccessDeniedError
-from ..errors import InvalidScopeError
 from ..errors import OAuth2Error
 from ..errors import UnauthorizedClientError
 from ..responses import AuthorizationResponse
@@ -138,10 +137,7 @@ class ImplicitGrant(BaseGrant, AuthorizationEndpointMixin):
         try:
             self.request.client = client
             self.validate_requested_scope()
-            scope = client.get_allowed_scope(self.request.payload.scope)
-            if scope is None:
-                raise InvalidScopeError()
-            self.request.scope = scope
+            self.request.scope = self.resolve_scope(self.request.payload.scope)
         except OAuth2Error as error:
             error.redirect_uri = redirect_uri
             error.redirect_fragment = True

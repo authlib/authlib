@@ -329,3 +329,71 @@ def test_digital_user_code(test_client, monkeypatch):
     groups = resp["user_code"].split("-")
     assert len(groups) == 3
     assert all(len(group) == 3 and group.isdigit() for group in groups)
+
+
+def test_device_authorize_resolves_scope(test_client, client, monkeypatch):
+    """DeviceAuthorizationEndpoint resolves the scope via get_allowed_scope()."""
+    saved_credentials.clear()
+
+    def get_allowed_scope(scope):
+        if not scope:
+            return "openid profile"
+        return "profile" if "profile" in scope.split() else ""
+
+    monkeypatch.setattr(client, "get_allowed_scope", get_allowed_scope)
+
+    rv = test_client.post("/device_authorize", data={"client_id": "client-id"})
+    assert rv.status_code == 200
+    assert saved_credentials[-1]["scope"] == "openid profile"
+
+    rv = test_client.post(
+        "/device_authorize",
+        data={"client_id": "client-id", "scope": "profile admin"},
+    )
+    assert rv.status_code == 200
+    assert saved_credentials[-1]["scope"] == "profile"
+
+    monkeypatch.setattr(client, "get_allowed_scope", lambda scope: None)
+    rv = test_client.post("/device_authorize", data={"client_id": "client-id"})
+    assert rv.status_code == 400
+    assert json.loads(rv.data)["error"] == "invalid_scope"
+
+
+def test_device_code_grant_does_not_re_resolve_empty_scope(
+    test_client, client, monkeypatch
+):
+    """DeviceCodeGrant must not call get_allowed_scope() again on an empty scope."""
+    calls = []
+
+    def get_allowed_scope(scope):
+        calls.append(scope)
+        if not scope:
+            return "openid profile"
+        return scope
+
+    monkeypatch.setattr(client, "get_allowed_scope", get_allowed_scope)
+
+    original = DeviceCodeGrant.query_device_credential
+
+    def empty_scope_credential(self, device_code):
+        cred = original(self, device_code)
+        if cred is not None:
+            cred["scope"] = ""
+        return cred
+
+    monkeypatch.setattr(
+        DeviceCodeGrant, "query_device_credential", empty_scope_credential
+    )
+
+    rv = test_client.post(
+        "/oauth/token",
+        data={
+            "grant_type": DeviceCodeGrant.GRANT_TYPE,
+            "device_code": "grant-code",
+            "client_id": "client-id",
+        },
+    )
+    resp = json.loads(rv.data)
+    assert "access_token" in resp
+    assert "scope" not in resp
+    assert calls == []

@@ -162,3 +162,22 @@ def test_missing_scope_rejected(test_client, client, monkeypatch):
 
     rv = test_client.post(authorize_url, data={"user_id": "1"})
     assert "#error=invalid_scope" in rv.location
+
+
+def test_scope_resolved_once_with_empty_default(test_client, client, monkeypatch):
+    """An implicit request whose scope resolves to empty must not be resolved
+    a second time into the default scope."""
+    calls = []
+
+    def get_allowed_scope(scope):
+        calls.append(scope)
+        if not scope:
+            return "openid profile"
+        return "" if scope == "disallowed" else scope
+
+    monkeypatch.setattr(client, "get_allowed_scope", get_allowed_scope)
+
+    rv = test_client.post(authorize_url + "&scope=disallowed", data={"user_id": "1"})
+    assert "access_token=" in rv.location
+    assert "scope=" not in rv.location
+    assert calls and all(c == "disallowed" for c in calls)

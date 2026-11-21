@@ -42,6 +42,9 @@ class _FakeClient:
     def check_grant_type(self, grant_type):
         return grant_type in self._grant_types
 
+    def get_allowed_scope(self, scope):
+        return scope or ""
+
 
 class _FakeUser:
     def __init__(self, sub):

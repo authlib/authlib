@@ -161,3 +161,28 @@ def test_revoke_old_token(factory, server, token):
 
     resp = server.create_token_response(request)
     assert resp.status_code == 400
+
+
+def test_refresh_empty_scope_not_re_resolved(
+    factory, server, client, token, monkeypatch
+):
+    """Refreshing a token with an empty scope must not expand it to a default scope."""
+    token.scope = ""
+    token.save()
+
+    monkeypatch.setattr(
+        type(client),
+        "get_allowed_scope",
+        lambda self, scope: "openid profile" if not scope else scope,
+    )
+
+    request = factory.post(
+        "/oauth/token",
+        data={"grant_type": "refresh_token", "refresh_token": "r1"},
+        HTTP_AUTHORIZATION=create_basic_auth("client-id", "client-secret"),
+    )
+    resp = server.create_token_response(request)
+    assert resp.status_code == 200
+    data = json.loads(resp.content)
+    assert "access_token" in data
+    assert "scope" not in data

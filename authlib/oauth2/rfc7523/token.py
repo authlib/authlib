@@ -61,7 +61,6 @@ class JWTBearerTokenGenerator:
         return str(user.get_user_id())
 
     def get_token_data(self, grant_type, client, expires_in, user=None, scope=None):
-        scope = self.get_allowed_scope(client, scope)
         issued_at = int(time.time())
         data = {
             "scope": scope,
