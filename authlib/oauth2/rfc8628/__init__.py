@@ -7,8 +7,9 @@ OAuth 2.0 Device Authorization Grant.
 :rfc:`8628`
 """
 
-from .device_code import DEVICE_CODE_GRANT_TYPE
 from .device_code import DeviceCodeGrant
+from .device_flow import DEVICE_CODE_GRANT_TYPE
+from .device_flow import prepare_device_authorization_request
 from .endpoint import DeviceAuthorizationEndpoint
 from .errors import AuthorizationPendingError
 from .errors import ExpiredTokenError
@@ -20,6 +21,7 @@ __all__ = [
     "DeviceAuthorizationEndpoint",
     "DeviceCodeGrant",
     "DEVICE_CODE_GRANT_TYPE",
+    "prepare_device_authorization_request",
     "DeviceCredentialMixin",
     "DeviceCredentialDict",
     "AuthorizationPendingError",

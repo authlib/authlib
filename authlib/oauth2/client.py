@@ -1,4 +1,7 @@
+import time
+
 from authlib.common.encoding import to_unicode
+from authlib.common.errors import AuthlibBaseError
 from authlib.common.security import generate_token
 from authlib.common.urls import url_decode
 
@@ -11,6 +14,10 @@ from .rfc6749.parameters import prepare_grant_uri
 from .rfc6749.parameters import prepare_token_request
 from .rfc7009 import prepare_revoke_token_request
 from .rfc7636 import create_s256_code_challenge
+from .rfc8628 import DEVICE_CODE_GRANT_TYPE
+from .rfc8628 import prepare_device_authorization_request
+from .rfc8628.errors import AuthorizationPendingError
+from .rfc8628.errors import SlowDownError
 
 # Per RFC 7636 §4.2, with "plain" the code_challenge is the code_verifier.
 _CODE_CHALLENGE_METHODS = {
@@ -338,6 +345,99 @@ class OAuth2Client:
             )
         self.token = token
         return token
+
+    def fetch_device_authorization(
+        self, url=None, scope=None, body="", auth=None, headers=None, **kwargs
+    ):
+        """Send a device authorization request, per :rfc:`8628#section-3.1`.
+
+        :param url: Device authorization endpoint URL. If omitted, the
+                    ``device_authorization_endpoint`` value from the client
+                    metadata is used.
+        :param scope: The scope of the access request, as a string or a list.
+                      Defaults to the scope of the client.
+        :param body: Optional application/x-www-form-urlencoded body to extend.
+        :param auth: An auth tuple or method as accepted by the session.
+        :param headers: Dict of default request headers.
+        :param kwargs: Extra parameters for the device authorization request.
+        :return: The device authorization response as a dict, containing
+                 ``device_code``, ``user_code``, ``verification_uri`` and
+                 optionally ``verification_uri_complete``, ``expires_in``
+                 and ``interval``.
+        """
+        if url is None:
+            url = self.metadata.get("device_authorization_endpoint")
+        if not url:
+            raise ValueError("Missing device authorization endpoint URL.")
+
+        session_kwargs = self._extract_session_request_params(kwargs)
+        if scope is None:
+            scope = self.scope
+        body = prepare_device_authorization_request(scope=scope, body=body, **kwargs)
+
+        if auth is None:
+            auth = self.client_auth(self.token_endpoint_auth_method)
+        if headers is None:
+            headers = DEFAULT_HEADERS
+
+        resp = self._http_post(
+            to_unicode(url), body=body, auth=auth, headers=headers, **session_kwargs
+        )
+        data = _load_token_response(resp)
+        if "error" in data:
+            raise self.oauth_error_class(
+                error=data["error"], description=data.get("error_description")
+            )
+        return data
+
+    def poll_device_token(
+        self, device_code, url=None, interval=5, timeout=None, **kwargs
+    ):
+        """Poll the token endpoint until the user completes or declines the
+        device authorization, per :rfc:`8628#section-3.5`.
+
+        The ``authorization_pending`` error is answered with another poll
+        after ``interval`` seconds; on ``slow_down`` the interval is
+        increased by 5 seconds, as the specification requires. The
+        ``expired_token`` and ``access_denied`` errors, and any other
+        error, are raised to the caller.
+
+        :param device_code: The device verification code returned by
+                            :meth:`fetch_device_authorization`.
+        :param url: Token endpoint URL. If omitted, the ``token_endpoint``
+                    value from the client metadata is used.
+        :param interval: Seconds to wait between polls; use the ``interval``
+                         value from the device authorization response.
+                         Defaults to 5.
+        :param timeout: Maximum seconds to poll before raising
+                        ``TimeoutError``. Unlimited by default: the server
+                        ends the session with an ``expired_token`` error
+                        once the device code expires.
+        :param kwargs: Extra parameters for the token request.
+        :return: A :class:`OAuth2Token` object (a dict too).
+        """
+        if url is None:
+            url = self.metadata.get("token_endpoint")
+        if not url:
+            raise ValueError("Missing token endpoint URL.")
+
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while True:
+            try:
+                return self.fetch_token(
+                    url,
+                    grant_type=DEVICE_CODE_GRANT_TYPE,
+                    device_code=device_code,
+                    **kwargs,
+                )
+            except AuthlibBaseError as error:
+                if error.error == SlowDownError.error:
+                    interval += 5
+                elif error.error != AuthorizationPendingError.error:
+                    raise
+            if deadline is not None and time.monotonic() >= deadline:
+                raise TimeoutError("Device authorization timed out.")
+            time.sleep(interval)
 
     def refresh_token(
         self, url=None, refresh_token=None, body="", auth=None, headers=None, **kwargs

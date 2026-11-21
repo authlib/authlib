@@ -669,3 +669,156 @@ def test_repeated_body_parameters():
         assert [value for key, value in params if key == "audience"] == ["c", "d"]
         keys = [key for key, _ in params]
         assert len(set(keys)) == len(keys) - 2
+
+
+default_device_authorization = {
+    "device_code": "GmRhmhcxhwAzkoEqiMEg_DnyEysNkuNhszIySk9eS",
+    "user_code": "WDJB-MJHT",
+    "verification_uri": "https://provider.test/device",
+    "verification_uri_complete": "https://provider.test/device?user_code=WDJB-MJHT",
+    "expires_in": 1800,
+    "interval": 5,
+}
+
+
+def test_fetch_device_authorization():
+    url = "https://provider.test/device_authorization"
+
+    def assert_func(request):
+        content = request.form
+        assert content.get("client_id") == "foo"
+        assert content.get("scope") == "read write"
+
+    transport = WSGITransport(
+        MockDispatch(default_device_authorization, assert_func=assert_func)
+    )
+    with OAuth2Client("foo", scope="read write", transport=transport) as client:
+        data = client.fetch_device_authorization(url)
+        assert data == default_device_authorization
+
+
+def test_fetch_device_authorization_from_metadata():
+    url = "https://provider.test/device_authorization"
+    transport = WSGITransport(MockDispatch(default_device_authorization))
+    with OAuth2Client(
+        "foo", device_authorization_endpoint=url, transport=transport
+    ) as client:
+        data = client.fetch_device_authorization()
+        assert data["device_code"] == default_device_authorization["device_code"]
+
+
+def test_fetch_device_authorization_missing_endpoint():
+    with OAuth2Client("foo") as client:
+        with pytest.raises(ValueError, match="device authorization endpoint"):
+            client.fetch_device_authorization()
+
+
+def test_fetch_device_authorization_error():
+    url = "https://provider.test/device_authorization"
+    transport = WSGITransport(
+        MockDispatch(
+            {"error": "invalid_request", "error_description": "missing scope"},
+            status_code=400,
+        )
+    )
+    with OAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(OAuthError, match="invalid_request"):
+            client.fetch_device_authorization(url)
+
+
+def test_poll_device_token_sends_device_code_grant():
+    url = "https://provider.test/token"
+
+    def assert_func(request):
+        content = request.form
+        assert (
+            content.get("grant_type") == "urn:ietf:params:oauth:grant-type:device_code"
+        )
+        assert content.get("device_code") == "dev-code"
+
+    transport = WSGITransport(MockDispatch(default_token, assert_func=assert_func))
+    with OAuth2Client("foo", transport=transport) as client:
+        token = client.poll_device_token("dev-code", url, interval=0.01)
+        assert token == default_token
+
+
+def test_poll_device_token_slow_down_and_pending(monkeypatch):
+    import json
+
+    url = "https://provider.test/token"
+    dispatch = MockDispatch({"error": "slow_down"}, status_code=400)
+    sleeps = []
+
+    def fake_sleep(seconds):
+        sleeps.append(seconds)
+        if len(sleeps) == 1:
+            dispatch.body = json.dumps({"error": "authorization_pending"}).encode()
+        else:
+            dispatch.body = json.dumps(default_token).encode()
+            dispatch.status_code = 200
+
+    monkeypatch.setattr(time, "sleep", fake_sleep)
+    transport = WSGITransport(dispatch)
+    with OAuth2Client("foo", transport=transport) as client:
+        token = client.poll_device_token("dev-code", url, interval=5)
+    assert token == default_token
+    # slow_down adds 5 seconds to the interval for this and all subsequent polls
+    assert sleeps == [10, 10]
+
+
+def test_poll_device_token_access_denied():
+    transport = WSGITransport(MockDispatch({"error": "access_denied"}, status_code=400))
+    with OAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(OAuthError, match="access_denied"):
+            client.poll_device_token(
+                "dev-code", "https://provider.test/token", interval=0.01
+            )
+
+
+def test_poll_device_token_expired_token():
+    transport = WSGITransport(MockDispatch({"error": "expired_token"}, status_code=400))
+    with OAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(OAuthError, match="expired_token"):
+            client.poll_device_token(
+                "dev-code", "https://provider.test/token", interval=0.01
+            )
+
+
+def test_poll_device_token_timeout():
+    transport = WSGITransport(
+        MockDispatch({"error": "authorization_pending"}, status_code=400)
+    )
+    with OAuth2Client("foo", transport=transport) as client:
+        with pytest.raises(TimeoutError):
+            client.poll_device_token(
+                "dev-code", "https://provider.test/token", interval=0.01, timeout=0.05
+            )
+
+
+def test_fetch_device_authorization_extra_parameters():
+    url = "https://provider.test/device_authorization"
+
+    def assert_func(request):
+        content = request.form
+        assert content.get("acr_values") == "urn:example"
+
+    transport = WSGITransport(
+        MockDispatch(default_device_authorization, assert_func=assert_func)
+    )
+    with OAuth2Client("foo", transport=transport) as client:
+        data = client.fetch_device_authorization(url, acr_values="urn:example")
+        assert data == default_device_authorization
+
+
+def test_poll_device_token_from_metadata():
+    url = "https://provider.test/token"
+    transport = WSGITransport(MockDispatch(default_token))
+    with OAuth2Client("foo", token_endpoint=url, transport=transport) as client:
+        token = client.poll_device_token("dev-code", interval=0.01)
+        assert token == default_token
+
+
+def test_poll_device_token_missing_endpoint():
+    with OAuth2Client("foo") as client:
+        with pytest.raises(ValueError, match="token endpoint"):
+            client.poll_device_token("dev-code", interval=0.01)
