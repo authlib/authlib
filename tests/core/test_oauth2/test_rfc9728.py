@@ -700,7 +700,7 @@ def test_resource_metadata_extension_skips_non_auth_errors():
 
 
 def test_resource_metadata_extension_insufficient_scope():
-    """ResourceMetadataExtension injects a WWW-Authenticate on 403 even when absent."""
+    """ResourceMetadataExtension adds resource_metadata to the WWW-Authenticate on 403."""
 
     class FakeRequest:
         headers = {"Authorization": "Bearer token"}
@@ -723,7 +723,8 @@ def test_resource_metadata_extension_insufficient_scope():
 
     headers = dict(exc_info.value.get_headers())
     assert f'resource_metadata="{RESOURCE_METADATA_URL}"' in headers["WWW-Authenticate"]
-    assert headers["WWW-Authenticate"].startswith("bearer ")
+    assert headers["WWW-Authenticate"].startswith("Bearer ")
+    assert 'error="insufficient_scope"' in headers["WWW-Authenticate"]
 
 
 def test_sign_metadata_skips_existing_signed_metadata():
