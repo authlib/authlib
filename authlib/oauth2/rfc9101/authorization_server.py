@@ -9,9 +9,11 @@ from joserfc.jws import JWSRegistry
 from authlib._joserfc_helpers import audience_matches
 from authlib._joserfc_helpers import import_any_key
 
+from ..rfc6749 import AuthorizationEndpointMixin
 from ..rfc6749 import AuthorizationServer
 from ..rfc6749 import ClientMixin
 from ..rfc6749 import InvalidRequestError
+from ..rfc6749 import OAuth2Error
 from ..rfc6749.authenticate_client import _validate_client
 from ..rfc6749.requests import BasicOAuth2Payload
 from ..rfc6749.requests import OAuth2Request
@@ -109,18 +111,25 @@ class JWTAuthenticationRequest:
             authorization_server.query_client, request.payload.client_id
         )
 
-        if not self._shoud_proceed_with_request_object(request, client):
-            return
+        try:
+            if not self._shoud_proceed_with_request_object(request, client):
+                return
 
-        raw_request_object = self._get_raw_request_object(request, client)
-        request_object = self._decode_request_object(
-            request, client, raw_request_object
-        )
-        _validate_parameter_types(
-            request_object.claims,
-            authorization_server.authorization_parameters,
-            request.payload.state,
-        )
+            raw_request_object = self._get_raw_request_object(request, client)
+            request_object = self._decode_request_object(
+                request, client, raw_request_object
+            )
+            _validate_parameter_types(
+                request_object.claims,
+                authorization_server.authorization_parameters,
+                request.payload.state,
+            )
+        except OAuth2Error as error:
+            # The request object is not trusted yet, so the redirect URI comes
+            # from the query parameters, and it is validated against the client.
+            error.redirect_uri = _get_error_redirect_uri(request, client)
+            raise
+
         request.payload = _RequestObjectPayload(request_object.claims)
 
     def validate_grant_parameter_types(self, authorization_server, grant):
@@ -438,6 +447,18 @@ class JWTAuthenticationRequest:
         If not implemented, the value is considered as :data:`False`.
         """
         return False  # pragma: no cover
+
+
+def _get_error_redirect_uri(request: OAuth2Request, client: ClientMixin):
+    """Return the redirect URI of the client for the errors, or ``None`` when
+    the redirect URI is invalid. Per RFC 6749 §4.1.2.1, the error is then not
+    redirected."""
+    try:
+        return AuthorizationEndpointMixin.validate_authorization_redirect_uri(
+            request, client
+        )
+    except InvalidRequestError:
+        return None
 
 
 def _validate_parameter_types(claims, parameters, state):
