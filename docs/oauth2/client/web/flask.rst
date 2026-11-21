@@ -221,6 +221,29 @@ uses another algorithm and does not publish this metadata, set it when you
 register the client. For ``HS256``, also add the client secret as an ``oct``
 key in ``jwks``.
 
+Refreshed ID Tokens
+~~~~~~~~~~~~~~~~~~~
+
+A refresh token response may contain a new ID Token. Authlib does not validate
+it automatically. Pass the claims of the original ID Token, the ``userinfo`` of
+the stored token, as ``original``. The ``iss``, ``sub`` and ``aud`` claims must
+be the same, and ``auth_time`` too when the new ID Token has one (`OpenID Connect
+Core 12.2`_). A mismatch raises ``InvalidClaimError``. No nonce is sent in a
+refresh request, so pass ``nonce=None``:
+
+.. skip: next "fragment of the application code"
+
+.. code-block:: python
+
+    new_token = oauth.google.fetch_access_token(
+        grant_type='refresh_token', refresh_token=token['refresh_token']
+    )
+    new_token['userinfo'] = oauth.google.parse_id_token(
+        new_token, nonce=None, original=token['userinfo']
+    )
+
+.. _OpenID Connect Core 12.2: https://openid.net/specs/openid-connect-core-1_0.html#RefreshTokenResponse
+
 RP-Initiated Logout
 -------------------
 

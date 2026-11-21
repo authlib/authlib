@@ -90,6 +90,52 @@ def test_parse_id_token():
             client.parse_id_token(token, "n", claims_options)
 
 
+@pytest.mark.parametrize(
+    ("new", "ok"),
+    [
+        ({}, True),
+        ({"aud": ["dev"]}, True),
+        ({"auth_time": 1000}, True),
+        ({"auth_time": None}, True),
+        ({"sub": "456"}, False),
+        ({"iss": "https://other.test"}, False),
+        ({"aud": ["dev", "other"], "azp": "dev"}, False),
+        ({"auth_time": 2000}, False),
+    ],
+)
+def test_parse_id_token_original(new, ok):
+    original = {
+        "sub": "123",
+        "iss": "https://provider.test",
+        "aud": "dev",
+        "auth_time": 1000,
+    }
+    now = int(time.time())
+    claims = {**original, "iat": now, "exp": now + 3600, **new}
+    claims = {k: v for k, v in claims.items() if v is not None}
+    id_token = jwt.encode({"alg": "HS256"}, claims, secret_key)
+    token = {"access_token": "at", "id_token": id_token}
+
+    app = Flask(__name__)
+    app.secret_key = "!"
+    oauth = OAuth(app)
+    client = oauth.register(
+        "dev",
+        client_id="dev",
+        client_secret="dev",
+        jwks={"keys": [secret_key.as_dict()]},
+        issuer="https://provider.test",
+        id_token_signing_alg_values_supported=["HS256"],
+    )
+    with app.test_request_context():
+        if ok:
+            user = client.parse_id_token(token, nonce=None, original=original)
+            assert user.sub == claims["sub"]
+        else:
+            with pytest.raises(InvalidClaimError):
+                client.parse_id_token(token, nonce=None, original=original)
+
+
 @pytest.mark.parametrize("token_nonce", [None, "wrong", "n"])
 def test_parse_id_token_nonce_supported(token_nonce):
     token = get_bearer_token()
