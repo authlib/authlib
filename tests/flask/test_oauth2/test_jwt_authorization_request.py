@@ -540,6 +540,175 @@ def test_request_param_in_request_object(test_client, server):
     )
 
 
+def _signed_request_object(**claims):
+    payload = {"response_type": "code", "client_id": "client-id", **claims}
+    return jwt.encode(
+        {"alg": "RS256"}, payload, jwk.import_key(read_file_path("jwk_private.json"))
+    )
+
+
+def _error_request_params(name):
+    """Return the query parameters of an authorization request that triggers
+    the error of the same name, and the extension to register."""
+    if name == "request_not_supported":
+        return {"request": _signed_request_object()}, {"support_request": False}
+    if name == "request_uri_not_supported":
+        return (
+            {"request_uri": "https://client.test/request_object"},
+            {"support_request_uri": False},
+        )
+    if name == "invalid_request_uri":
+        return {"request_uri": "https://client.test/other"}, {}
+    if name == "invalid_request_object":
+        return {"request": "invalid"}, {}
+    if name == "invalid_request":
+        return {
+            "request": _signed_request_object(),
+            "request_uri": "https://client.test/request_object",
+        }, {}
+    raise ValueError(name)
+
+
+ERROR_NAMES = [
+    "request_not_supported",
+    "request_uri_not_supported",
+    "invalid_request_uri",
+    "invalid_request_object",
+    "invalid_request",
+]
+
+
+@pytest.mark.parametrize("error", ERROR_NAMES)
+def test_error_redirected_with_state_without_redirect_uri(test_client, server, error):
+    """The error goes to the registered redirect URI of the client with the
+    state, when the request has no redirect_uri parameter."""
+    params, extension_kwargs = _error_request_params(error)
+    register_request_object_extension(server, **extension_kwargs)
+    url = add_params_to_uri(
+        authorize_url,
+        {"client_id": "client-id", "state": "foo", "user_id": "1", **params},
+    )
+    rv = test_client.get(url)
+    assert rv.status_code == 303
+    location = urlparse.urlparse(rv.location)
+    assert f"{location.scheme}://{location.netloc}{location.path}" == (
+        "https://client.test"
+    )
+    query = dict(url_decode(location.query))
+    assert query["error"] == error
+    assert query["state"] == "foo"
+
+
+@pytest.mark.parametrize("error", ERROR_NAMES)
+def test_error_redirected_to_registered_redirect_uri(test_client, server, error):
+    """The redirect_uri parameter is used when the client registered it."""
+    params, extension_kwargs = _error_request_params(error)
+    register_request_object_extension(server, **extension_kwargs)
+    url = add_params_to_uri(
+        authorize_url,
+        {
+            "client_id": "client-id",
+            "redirect_uri": "https://client.test",
+            "state": "foo",
+            "user_id": "1",
+            **params,
+        },
+    )
+    rv = test_client.get(url)
+    assert rv.status_code == 303
+    query = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert query["error"] == error
+    assert query["state"] == "foo"
+
+
+def test_error_after_request_object_decoding_redirected(test_client, server):
+    """Errors about the content of the request object are redirected too."""
+    register_request_object_extension(server)
+    url = add_params_to_uri(
+        authorize_url,
+        {
+            "client_id": "client-id",
+            "request": _signed_request_object(client_id="other-code-client"),
+            "state": "foo",
+            "user_id": "1",
+        },
+    )
+    rv = test_client.get(url)
+    assert rv.status_code == 303
+    query = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert query["error"] == "invalid_request"
+    assert query["state"] == "foo"
+
+
+def test_error_redirected_for_anonymous_user_without_deferral(test_client, server):
+    """Without deferral of the errors of anonymous users, they are redirected."""
+    server.defer_anonymous_errors = False
+    register_request_object_extension(server, support_request=False)
+    url = add_params_to_uri(
+        authorize_url,
+        {"client_id": "client-id", "request": "x", "state": "foo"},
+    )
+    rv = test_client.get(url)
+    assert rv.status_code == 303
+    query = dict(url_decode(urlparse.urlparse(rv.location).query))
+    assert query["error"] == "request_not_supported"
+    assert query["state"] == "foo"
+
+
+@pytest.mark.parametrize("error", ERROR_NAMES)
+def test_error_not_redirected_to_unregistered_redirect_uri(test_client, server, error):
+    """The error is not redirected to a redirect URI that the client did not
+    register."""
+    params, extension_kwargs = _error_request_params(error)
+    register_request_object_extension(server, **extension_kwargs)
+    url = add_params_to_uri(
+        authorize_url,
+        {
+            "client_id": "client-id",
+            "redirect_uri": "https://attacker.test/callback",
+            "state": "foo",
+            "user_id": "1",
+            **params,
+        },
+    )
+    rv = test_client.get(url)
+    assert rv.status_code == 400
+    assert "Location" not in rv.headers
+    assert rv.json["error"] == error
+    assert rv.json["state"] == "foo"
+
+
+def test_error_not_redirected_without_default_redirect_uri(
+    test_client, server, client, db
+):
+    """The error is not redirected when the client has no redirect URI."""
+    client.set_client_metadata({**client.client_metadata, "redirect_uris": []})
+    db.session.add(client)
+    db.session.commit()
+    register_request_object_extension(server, support_request=False)
+    url = add_params_to_uri(
+        authorize_url,
+        {"client_id": "client-id", "request": "x", "state": "foo", "user_id": "1"},
+    )
+    rv = test_client.get(url)
+    assert rv.status_code == 400
+    assert "Location" not in rv.headers
+    assert rv.json["error"] == "request_not_supported"
+
+
+@pytest.mark.parametrize("redirect_uri", [None, "https://client.test"])
+def test_invalid_client_not_redirected(test_client, server, redirect_uri):
+    """The error of an unknown client is never redirected."""
+    register_request_object_extension(server, support_request=False)
+    params = {"client_id": "invalid", "request": "x", "state": "foo", "user_id": "1"}
+    if redirect_uri:
+        params["redirect_uri"] = redirect_uri
+    rv = test_client.get(add_params_to_uri(authorize_url, params))
+    assert rv.status_code == 400
+    assert "Location" not in rv.headers
+    assert rv.json["error"] == "invalid_client"
+
+
 def test_registration(test_client, server):
     """The 'require_signed_request_object' parameter should be available for client registration."""
     register_request_object_extension(server)

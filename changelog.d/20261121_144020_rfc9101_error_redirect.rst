@@ -1,0 +1,10 @@
+Fixed
+~~~~~
+
+- The errors about a JWT secured authorization request (:rfc:`9101`) are
+  redirected to the redirect URI of the client, with ``state``, per
+  :rfc:`6749#section-4.1.2.1` and :rfc:`9101#section-7`. They were returned as
+  a JSON response with HTTP 400 when the request had no ``redirect_uri``
+  parameter. The redirect URI must be registered by the client, or be its
+  default. The errors of an unknown client, or with an invalid redirect URI,
+  are still not redirected. :issue:`1072`
