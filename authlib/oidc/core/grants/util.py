@@ -474,8 +474,8 @@ def set_id_token_hint_sub(
     ``id_token_hint`` parameter, or to ``None``.
 
     Per OIDC Core §3.1.2.1, the hint is an ID token that the server issued
-    before. Its signature is checked with the key and the algorithm of the ID
-    tokens of the client. When these ID tokens are not signed, the ``sub`` is
+    before. Its signature is checked with the verification keys and the algorithm of
+    the ID tokens of the client. When these ID tokens are not signed, the ``sub`` is
     read without a check. Its expiration time is not checked.
 
     :param request: the authorization request
@@ -506,7 +506,7 @@ def _decode_id_token_hint(hint, generator, client):
     alg = generator.get_client_algorithm(client)
     key = None
     if alg != "none":
-        key = import_any_key(generator.resolve_client_private_key(client))
+        key = import_any_key(generator.resolve_client_verification_keys(client))
 
     try:
         if key is None:

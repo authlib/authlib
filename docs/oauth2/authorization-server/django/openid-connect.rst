@@ -328,6 +328,22 @@ All OpenID Connect flows require ``exists_nonce``, ``resolve_client_private_key`
 functions for ``resolve_client_private_key``, ``get_client_claims`` and
 ``generate_user_info``.
 
+Key rotation
+~~~~~~~~~~~~
+
+``resolve_client_private_key`` signs the ID tokens, so it returns the active
+key only. The ``id_token_hint`` of an authorization request can be an ID token
+issued before a rotation. Override ``resolve_client_verification_keys`` to
+return every key that signed ID tokens, retired ones included. It defaults to
+``resolve_client_private_key``::
+
+    class OpenIDCode(grants.OpenIDCode):
+        def resolve_client_private_key(self, client):
+            return active_key
+
+        def resolve_client_verification_keys(self, client):
+            return KeySet([active_key, retired_key])
+
 .. _django_oidc_claims_parameter:
 
 Claims Parameter

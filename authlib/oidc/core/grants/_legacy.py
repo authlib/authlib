@@ -21,6 +21,18 @@ class LegacyMixin:
         """
         raise NotImplementedError()
 
+    def resolve_client_verification_keys(self, client):
+        """Resolve the keys that verify the ``id_token_hint`` of an
+        authorization request. The hint can be an ID token issued before a key
+        rotation, so return every key that signed ID tokens, including the
+        retired ones, as a key or a key set. By default, this is the key of
+        :meth:`resolve_client_private_key`, e.g.::
+
+            def resolve_client_verification_keys(self, client):
+                return KeySet([active_key, retired_key])
+        """
+        return self.resolve_client_private_key(client)
+
     def get_client_algorithm(self, client):
         """Return the algorithm for encoding ``id_token``.
 

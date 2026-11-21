@@ -1574,6 +1574,45 @@ def create_id_token_hint(sub="1", key=None, **claims):
     return jwt.encode({"alg": "HS256"}, claims, key)
 
 
+def test_id_token_hint_signed_with_retired_key(test_client, server):
+    """A hint signed with a retired key is accepted when the verification keys
+    include it, and new ID tokens are signed with the active key only."""
+    retired = OctKey.import_key(b"retired-secret-" * 3, {"kid": "retired"})
+    active = current_app.config["OAUTH2_JWT_KEY"]
+
+    class RotatingOpenIDCode(OpenIDCode):
+        def resolve_client_verification_keys(self, client):
+            return KeySet([active, retired])
+
+    server.register_grant(AuthorizationCodeGrant, [RotatingOpenIDCode()])
+    hint = jwt.encode(
+        {"alg": "HS256", "kid": "retired"},
+        {"iss": "Authlib", "aud": "client-id", "sub": "1"},
+        retired,
+    )
+    rv = authorize_with_hint(test_client, hint, method="get")
+    assert rv.data == b"ok"
+
+    other = jwt.encode(
+        {"alg": "HS256"},
+        {"iss": "Authlib", "aud": "client-id", "sub": "1"},
+        OctKey.import_key(b"unknown-secret-" * 3),
+    )
+    rv = authorize_with_hint(test_client, other)
+    assert "error=invalid_request" in rv.location
+
+    claims = exchange_code_for_id_token(test_client)
+    assert claims["sub"] == "1"
+
+
+def test_id_token_hint_retired_key_rejected_by_default(test_client, server):
+    """Without the new method, only the signing key verifies the hint."""
+    register_oidc_code_grant(server)
+    retired = OctKey.import_key(b"retired-secret-" * 3)
+    rv = authorize_with_hint(test_client, create_id_token_hint(key=retired))
+    assert "error=invalid_request" in rv.location
+
+
 def create_unsigned_jwt(payload):
     """Return an unsigned JWT with the given payload."""
     parts = ({"alg": "none"}, payload)
