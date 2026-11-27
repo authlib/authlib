@@ -97,6 +97,9 @@ docs = [
 [tool.setuptools.dynamic]
 version = {attr = "authlib.__version__"}
 
+[tool.setuptools.package-data]
+authlib = ["py.typed"]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["authlib", "authlib.*"]
